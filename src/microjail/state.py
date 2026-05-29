@@ -1,0 +1,83 @@
+"""Environment state persistence.
+
+Writes and reads ``.microjail/state.json`` in the workspace directory so
+downstream commands (``run``, ``unlock``) can locate the environment and
+its configuration without the user re-specifying flags.
+"""
+
+import json
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+STATE_DIR = ".microjail"
+STATE_FILE = "state.json"
+
+
+@dataclass
+class EnvironmentState:
+    """Persisted record of a created microjail environment."""
+
+    name: str
+    """Workshop environment name."""
+
+    base_image: str
+    """LXD base image, e.g. ``ubuntu@26.04``."""
+
+    inference: str | None
+    """Inference backend (e.g. ``"llama-cpp"``), or ``None``."""
+
+    agent: str | None
+    """Agent harness (e.g. ``"opencode"``), or ``None``."""
+
+    socket_url: str | None
+    """Inference endpoint URL, or ``None`` if no inference backend configured."""
+
+    created_at: datetime
+    """UTC timestamp of environment creation."""
+
+    def to_json(self, workspace: Path) -> None:
+        """Write state to ``<workspace>/.microjail/state.json``.
+
+        Creates the ``.microjail/`` directory if it does not exist.
+        Raises :exc:`OSError` if the directory cannot be created or the file
+        cannot be written — the caller is responsible for handling this.
+        """
+        state_dir = workspace / STATE_DIR
+        state_dir.mkdir(parents=True, exist_ok=True)
+        state_path = state_dir / STATE_FILE
+        payload = asdict(self)
+        payload["created_at"] = self.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+        state_path.write_text(json.dumps(payload, indent=4))
+
+    @classmethod
+    def from_json(cls, workspace: Path) -> EnvironmentState:
+        """Read state from ``<workspace>/.microjail/state.json``.
+
+        Raises :exc:`FileNotFoundError` if the state file does not exist.
+        Raises :exc:`ValueError` if the file cannot be parsed.
+        """
+        state_path = workspace / STATE_DIR / STATE_FILE
+        try:
+            raw = json.loads(state_path.read_text())
+        except json.JSONDecodeError as exc:
+            msg = f"State file at {state_path} is not valid JSON: {exc}"
+            raise ValueError(msg) from exc
+        try:
+            created_at = datetime.strptime(
+                raw["created_at"], "%Y-%m-%dT%H:%M:%SZ"
+            ).replace(tzinfo=UTC)
+        except (KeyError, ValueError) as exc:
+            msg = f"State file at {state_path} has invalid 'created_at' field: {exc}"
+            raise ValueError(msg) from exc
+        return cls(
+            name=raw["name"],
+            base_image=raw["base_image"],
+            inference=raw.get("inference"),
+            agent=raw.get("agent"),
+            socket_url=raw.get("socket_url"),
+            created_at=created_at,
+        )

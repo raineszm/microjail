@@ -10,8 +10,8 @@ license = "GPL-3.0-only"
 requires-python = ">=3.14"
 dependencies = [
     "anyio>=4.13.0",
-    "pylxd>=2.4.1",
     "rich>=14.2.0",
+    "ruamel-yaml>=0.19.1",
     "typer>=0.25.0",
 ]
 
@@ -38,6 +38,7 @@ exclude = ["stubs"]
 preview = true
 select = ["ALL"]
 ignore = [
+    "FBT002", # boolean default in typer CLI definitions is idiomatic
     "E501",   # line too long; formatter handles wrapping
     "COM812", # missing trailing comma; conflicts with ruff formatter
     "CPY",    # copyright headers are not required here
@@ -45,6 +46,7 @@ ignore = [
     "D203",   # conflicts with D211
     "D213",   # conflicts with D212
     "S404",   # subprocess is expected for CLI/workload orchestration
+    "S603",   # subprocess inputs in this project are hardcoded CLI commands
     "S607",   # standard executable lookup is acceptable for CLI wrappers
     "S108",   # temporary paths are expected during sandbox/container setup
     "TID252", # relative imports are idiomatic within the package
