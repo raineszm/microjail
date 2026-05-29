@@ -1,0 +1,95 @@
+[project]
+name = "microjail"
+version = "0.1.0"
+description = "Ephemeral, network-sealed environments for running workloads you don't fully trust."
+readme = "README.md"
+authors = [
+    { name = "Zachary Raines", email = "zachary.raines@canonical.com" }
+]
+license = "GPL-3.0-only"
+requires-python = ">=3.14"
+dependencies = [
+    "anyio>=4.13.0",
+    "pylxd>=2.4.1",
+    "rich>=14.2.0",
+    "typer>=0.25.0",
+]
+
+[project.scripts]
+microjail = "microjail.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pyupgrade>=3.21.2",
+    "ruff>=0.15.15",
+    "ty>=0.0.40",
+]
+
+[tool.ruff]
+target-version = "py314"
+exclude = ["stubs"]
+
+[tool.ruff.lint]
+preview = true
+select = ["ALL"]
+ignore = [
+    "E501",   # line too long; formatter handles wrapping
+    "COM812", # missing trailing comma; conflicts with ruff formatter
+    "CPY",    # copyright headers are not required here
+    "DOC",    # pydoclint docstring-content rules are too strict for this project
+    "D203",   # conflicts with D211
+    "D213",   # conflicts with D212
+    "S404",   # subprocess is expected for CLI/workload orchestration
+    "S607",   # standard executable lookup is acceptable for CLI wrappers
+    "S108",   # temporary paths are expected during sandbox/container setup
+    "TID252", # relative imports are idiomatic within the package
+    "TRY003", # inline exception messages are readable for this project
+    "EM",     # overly verbose for small CLI exception paths
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test_*.py" = [
+    "S101",    # assert statements are expected in tests
+    "ARG",     # fixtures may be used implicitly
+    "FBT",     # common in pytest.mark.parametrize
+    "PLR2004", # acceptable in test assertions
+    "S311",    # cryptographic strength is not needed in tests
+    "S603",    # test helpers use controlled subprocess inputs
+    "D103",    # test names are self-documenting
+    "ANN",     # test annotations are optional
+]
+"tests/**/*.py" = [
+    "S101",    # assert statements are expected in tests
+    "ARG",     # fixtures may be used implicitly
+    "FBT",     # common in pytest.mark.parametrize
+    "PLR2004", # acceptable in test assertions
+    "S311",    # cryptographic strength is not needed in tests
+    "S603",    # test helpers use controlled subprocess inputs
+    "D103",    # test names are self-documenting
+    "ANN",     # test annotations are optional
+]
+"conftest.py" = [
+    "ANN",    # annotations are optional in test infrastructure
+    "D103",   # pytest hooks/fixtures are self-describing
+    "SLF001", # test teardown may intentionally reset internals
+]
+"tests/conftest.py" = [
+    "ANN",    # annotations are optional in test infrastructure
+    "D103",   # pytest hooks/fixtures are self-describing
+    "SLF001", # test teardown may intentionally reset internals
+]
+
+[tool.ty.environment]
+python-version = "3.14"
+extra-paths = ["stubs"]
+
+[tool.pytest.ini_options]
+anyio_mode = "auto"
+markers = [
+    "lxd: mark test as requiring LXD daemon or Workshop environment",
+]
