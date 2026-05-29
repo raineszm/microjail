@@ -1,0 +1,9 @@
+{
+  "ai": "opencode",
+  "branch_numbering": "timestamp",
+  "context_file": "AGENTS.md",
+  "here": true,
+  "integration": "opencode",
+  "script": "sh",
+  "speckit_version": "0.8.12"
+}
