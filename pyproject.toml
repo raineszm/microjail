@@ -91,6 +91,7 @@ extra-paths = ["stubs"]
 
 [tool.pytest.ini_options]
 anyio_mode = "auto"
+addopts = "-m 'not lxd'"
 markers = [
     "lxd: mark test as requiring LXD daemon or Workshop environment",
 ]
