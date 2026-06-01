@@ -188,7 +188,6 @@ These invariants MUST hold after any successful `microjail init` invocation:
 2. `.workshop/<NAME>.yaml` exists in the working directory and is valid YAML with the correct schema.
 3. If `--agent opencode` was passed, `opencode.jsonc` exists and contains no enabled remote
    provider entries.
-   provider entries.
 4. `.microjail/state.json` exists, is valid JSON, and `state.name == NAME`.
 5. The command exited with code 0.
 

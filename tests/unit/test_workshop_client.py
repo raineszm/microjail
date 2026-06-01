@@ -99,3 +99,13 @@ def test_refresh_raises_on_failure() -> None:
         mock_run.return_value = MagicMock(returncode=1, stderr=b"not Ready")
         with pytest.raises(RuntimeError, match="refresh failed"):
             client.refresh("myenv", FAKE_PROJECT)
+
+
+def test_check_prerequisites_missing_lxc(monkeypatch: pytest.MonkeyPatch) -> None:
+    """check_prerequisites raises RuntimeError naming 'lxc' when absent."""
+    monkeypatch.setattr(
+        "shutil.which",
+        lambda exe: "/usr/bin/workshop" if exe == "workshop" else None,
+    )
+    with pytest.raises(RuntimeError, match="'lxc' not found"):
+        client.check_prerequisites()

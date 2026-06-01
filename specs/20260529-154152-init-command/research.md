@@ -7,9 +7,9 @@
 
 ### Decision
 Invoke Workshop via `subprocess` using the `workshop` CLI binary. Do not attempt to use a
-Workshop Python SDK (none is published). Use `lxc` subprocess calls for post-creation
-verification — consistent with the subprocess-only approach throughout this command.
-
+Workshop Python SDK (none is published). Verify post-creation state via
+`workshop info <name> --project <workspace>` to ensure the environment exists in Workshop’s
+LXD project.
 ### Rationale
 Workshop is a Canonical CLI tool. Its public interface is the `workshop` binary. Using
 subprocess keeps the coupling loose: microjail delegates environment lifecycle to Workshop
@@ -20,12 +20,11 @@ and doesn't replicate its logic. Since we already shell out to `workshop`, shell
 
 | Operation | Command |
 |-----------|---------|
-| Create environment | `workshop create <yaml-file>` |
-| List environments | `workshop list` |
-| Check if installed | `workshop --version` (exit 0 = present) |
+| Create environment | `workshop launch <name> --project <project_dir>` |
+| Check environment exists | `workshop info <name> --project <project_dir>` |
+| Remove environment | `workshop remove <name> --project <project_dir>` |
 
-`workshop create` reads a YAML descriptor file. The canonical convention is to write
-`workshop.yaml` to the workspace root and pass its path to `workshop create`.
+Workshop stores environment definitions at `<project_dir>/.workshop/<name>.yaml`.
 
 ### Post-creation verification
 After `workshop create`, verify the environment exists using the LXD client binary:

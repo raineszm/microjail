@@ -69,11 +69,12 @@ def us1_env(workspace: Path) -> Generator[str]:
     regardless of whether the test passed or failed.
     """
     name = _unique_name("mj-us1")
-    runner.invoke(
+    result = runner.invoke(
         app,
         ["init", name, "--inference", "llama-cpp", "--agent", "opencode"],
         catch_exceptions=False,
     )
+    assert result.exit_code == 0, f"Fixture init failed:\n{result.output}"
     yield name
     subprocess.run(
         ["workshop", "remove", name, "--project", str(workspace)],
@@ -89,8 +90,8 @@ def us2_env(workspace: Path) -> Generator[str]:
     Yields the environment name. Removes the environment on teardown.
     """
     name = _unique_name("mj-us2")
-    runner.invoke(app, ["init", name], catch_exceptions=False)
-    yield name
+    result = runner.invoke(app, ["init", name], catch_exceptions=False)
+    assert result.exit_code == 0, f"Fixture init failed:\n{result.output}"
     subprocess.run(
         ["workshop", "remove", name, "--project", str(workspace)],
         capture_output=True,

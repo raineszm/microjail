@@ -115,7 +115,7 @@ exists and `workshop.yaml` is written. Verify `opencode.jsonc` is NOT written (n
   `llama-cpp`. Passing an unsupported value MUST produce a non-zero exit and a clear message.
 - **FR-003**: The command MUST accept an `--agent` option; the only supported value for P1 is
   `opencode`. Passing an unsupported value MUST produce a non-zero exit and a clear message.
-- **FR-004**: The command MUST always write `workshop.yaml` to the workspace root declaring the
+- **FR-004**: The command MUST always write `.workshop/<NAME>.yaml` in the workspace declaring the
   environment name and base image. The `sdks` list is populated based on intent flags: when
   `--inference llama-cpp` and/or `--agent opencode` are specified, the relevant SDKs are
   included; when no intent flags are given, `sdks` is an empty list. No TCP tunnel or `system`
@@ -131,8 +131,8 @@ exists and `workshop.yaml` is written. Verify `opencode.jsonc` is NOT written (n
 - **FR-006**: The command MUST create a Workshop environment using the declared name and base
   image (`ubuntu@26.04` for P1).
 - **FR-007**: The command MUST verify the Workshop environment was successfully created by running
-  `lxc info <name>` as a subprocess and confirming exit code 0. It MUST NOT assume success from
-  the absence of an error on the `workshop create` call alone.
+  `workshop info <name> --project <workspace>` as a subprocess and confirming exit code 0. It MUST NOT assume success from
+  the absence of an error on the `workshop launch` call alone.
 - **FR-008**: If an environment with the given name already exists, the command MUST refuse and
   exit non-zero without modifying any files.
 - **FR-009**: If Workshop or LXD prerequisites are absent, the command MUST exit non-zero and

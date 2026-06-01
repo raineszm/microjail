@@ -154,17 +154,15 @@ def _launch_and_verify(name: str, workspace: Path, *, already_exists: bool) -> N
 
 def init(
     name: str = typer.Argument(..., help="Workshop environment name."),
-    inference: str | None = typer.Option(
+    inference: InferenceBackend | None = typer.Option(
         None,
         "--inference",
         help="Configure a local inference backend.",
-        metavar="BACKEND",
     ),
-    agent: str | None = typer.Option(
+    agent: AgentHarness | None = typer.Option(
         None,
         "--agent",
         help="Configure an AI agent harness.",
-        metavar="HARNESS",
     ),
     force: Annotated[
         bool,

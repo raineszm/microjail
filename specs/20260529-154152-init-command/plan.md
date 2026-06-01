@@ -7,11 +7,11 @@
 ## Summary
 
 Implement `microjail init <name> [--inference llama-cpp] [--agent opencode]` — the entry-point
-command that creates a Workshop/LXD environment, writes `workshop.yaml` and (optionally)
+command that creates a Workshop/LXD environment, writes `.workshop/<name>.yaml` and (optionally)
 `opencode.jsonc` to the workspace, and persists environment state to `.microjail/state.json`.
 All file writes happen before the Workshop environment is created to prevent partial state.
-The command verifies the environment actually exists after creation; it never assumes success
-from the absence of an error.
+The command verifies the environment actually exists after creation via `workshop info --project`
+and never assumes success from the absence of an error.
 
 ## Technical Context
 

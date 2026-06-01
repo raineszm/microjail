@@ -73,11 +73,15 @@ class EnvironmentState:
         except (KeyError, ValueError) as exc:
             msg = f"State file at {state_path} has invalid 'created_at' field: {exc}"
             raise ValueError(msg) from exc
-        return cls(
-            name=raw["name"],
-            base_image=raw["base_image"],
-            inference=raw.get("inference"),
-            agent=raw.get("agent"),
-            socket_url=raw.get("socket_url"),
-            created_at=created_at,
-        )
+        try:
+            return cls(
+                name=raw["name"],
+                base_image=raw["base_image"],
+                inference=raw.get("inference"),
+                agent=raw.get("agent"),
+                socket_url=raw.get("socket_url"),
+                created_at=created_at,
+            )
+        except KeyError as exc:
+            msg = f"State file at {state_path} is missing required field: {exc}"
+            raise ValueError(msg) from exc
