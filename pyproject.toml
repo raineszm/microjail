@@ -3,9 +3,7 @@ name = "microjail"
 version = "0.1.0"
 description = "Ephemeral, network-sealed environments for running workloads you don't fully trust."
 readme = "README.md"
-authors = [
-    { name = "Zachary Raines", email = "zachary.raines@canonical.com" }
-]
+authors = [{ name = "Zachary Raines", email = "zachary.raines@canonical.com" }]
 license = "GPL-3.0-only"
 requires-python = ">=3.14"
 dependencies = [
@@ -23,12 +21,7 @@ requires = ["uv_build>=0.11.16,<0.12.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-    "pyupgrade>=3.21.2",
-    "ruff>=0.15.15",
-    "ty>=0.0.40",
-]
+dev = ["pytest>=9.0.3", "pyupgrade>=3.21.2", "ruff>=0.15.15", "ty>=0.0.40"]
 
 [tool.ruff]
 target-version = "py314"
@@ -44,6 +37,7 @@ ignore = [
     "CPY",    # copyright headers are not required here
     "DOC",    # pydoclint docstring-content rules are too strict for this project
     "D203",   # conflicts with D211
+    "D213",   # conflicts with D212
     "S404",   # subprocess is expected for CLI/workload orchestration
     "S603",   # subprocess is invoked with argv lists (no shell); inputs are passed as separate args
     "S607",   # standard executable lookup is acceptable for CLI wrappers
@@ -92,6 +86,4 @@ extra-paths = ["stubs"]
 [tool.pytest.ini_options]
 anyio_mode = "auto"
 addopts = "-m 'not lxd'"
-markers = [
-    "lxd: mark test as requiring LXD daemon or Workshop environment",
-]
+markers = ["lxd: mark test as requiring LXD daemon or Workshop environment"]
