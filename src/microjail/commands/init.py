@@ -5,15 +5,15 @@ Orchestration order (FR-011):
 2. Pre-flight checks: prerequisites, workspace writability, existing env, existing files.
 3. Write ``<workspace>/.workshop/<name>.yaml`` (Workshop definition).
 4. Write ``<workspace>/opencode.jsonc`` (if ``--agent opencode``).
-5. Write ``.microjail/state.json``.  ← ALL writes complete before any Workshop call
-6. Run ``workshop launch <name>`` subprocess call.
-7. Verify via ``workshop info <name>``.
+5. Run ``workshop launch <name>`` subprocess call.
+6. Verify via ``workshop info <name>``.
+7. Write ``.microjail/state.json``.
 8. Print success summary.
 
-FR-011 compliance: all local file writes (steps 3-5) are completed before the
-Workshop environment creation call (step 6). A creation failure therefore leaves
-no partial state *inside* the remote environment; the local config files are
-present and the user may re-run with ``--force`` after diagnosing the problem.
+The generated config files are written before any Workshop call so they can be
+inspected and reused on retry. ``.microjail/state.json`` is written only after
+launch/verification succeeds so it remains a reliable record of an existing
+environment.
 """
 
 import os
@@ -199,9 +199,8 @@ def init(
 
     _write_config_files(name, workspace, config, agent, socket_url)
 
-    # Write state.json BEFORE the Workshop CLI call (FR-011): all local writes
-    # must succeed prior to environment creation so a creation failure leaves no
-    # partial state inside the remote environment.
+    _launch_and_verify(name, workspace, already_exists=already_exists)
+
     state = EnvironmentState(
         name=name,
         base_image=_BASE_IMAGE,
@@ -214,8 +213,6 @@ def init(
         state.to_json(workspace)
     except OSError as exc:
         _err(f"Cannot write state to current directory: {exc}", code=3)
-
-    _launch_and_verify(name, workspace, already_exists=already_exists)
 
     workshop_def_path = workspace / ".workshop" / f"{name}.yaml"
     state_path = workspace / ".microjail" / "state.json"

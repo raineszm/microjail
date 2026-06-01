@@ -7,9 +7,11 @@ is not writable, without making any Workshop subprocess calls.
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from microjail.cli import app
+from microjail.state import STATE_DIR, STATE_FILE
 
 runner = CliRunner()
 
@@ -169,3 +171,35 @@ def test_new_env_calls_launch_not_refresh(tmp_path: Path) -> None:
 
     mock_launch.assert_called_once()
     mock_refresh.assert_not_called()
+
+
+@pytest.mark.parametrize("failing_call", ["launch", "verify_exists"])
+def test_state_not_written_when_creation_fails(
+    tmp_path: Path, failing_call: str
+) -> None:
+    """state.json is only written after launch and verification succeed."""
+    patches = [
+        patch("microjail.commands.init.os.access", return_value=True),
+        patch("microjail.commands.init.client.check_prerequisites", return_value=None),
+        patch("microjail.commands.init.client.environment_exists", return_value=False),
+        patch("microjail.commands.init.Path.cwd", return_value=tmp_path),
+        patch("microjail.commands.init.client.launch", return_value=None),
+        patch("microjail.commands.init.client.verify_exists", return_value=None),
+    ]
+    with (
+        patches[0],
+        patches[1],
+        patches[2],
+        patches[3],
+        patches[4] as mock_launch,
+        patches[5] as mock_verify,
+    ):
+        if failing_call == "launch":
+            mock_launch.side_effect = RuntimeError("launch failed")
+        else:
+            mock_verify.side_effect = RuntimeError("verify failed")
+
+        result = runner.invoke(app, ["init", "testenv"], catch_exceptions=False)
+
+    assert result.exit_code == 3
+    assert not (tmp_path / STATE_DIR / STATE_FILE).exists()
