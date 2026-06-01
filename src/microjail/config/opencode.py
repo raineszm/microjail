@@ -17,14 +17,17 @@ DISABLED_PROVIDERS: tuple[str, ...] = (
 )
 
 
-def generate_opencode_config(socket_url: str) -> str:
+def generate_opencode_config(socket_url: str | None = None) -> str:
     """Return an opencode.jsonc string configured for local inference.
 
     Parameters
     ----------
     socket_url:
         The inference endpoint URL (e.g. ``http://127.0.0.1:8080/v1``).
-        Written to ``provider["llama.cpp"]["options"]["baseURL"]``.
+        When provided, a ``llama.cpp`` provider entry is added with
+        ``options["baseURL"]`` set to this value.
+        When ``None`` (no ``--inference llama-cpp``), the ``llama.cpp``
+        provider is omitted entirely.
 
     Rules (from data-model.md):
     - All providers in :data:`DISABLED_PROVIDERS` set ``enabled: false``.
@@ -35,11 +38,12 @@ def generate_opencode_config(socket_url: str) -> str:
     provider: dict[str, object] = {
         pid: {"enabled": False} for pid in DISABLED_PROVIDERS
     }
-    provider["llama.cpp"] = {
-        "name": "llama-server (local)",
-        "options": {"baseURL": socket_url},
-        "models": {},
-    }
+    if socket_url is not None:
+        provider["llama.cpp"] = {
+            "name": "llama-server (local)",
+            "options": {"baseURL": socket_url},
+            "models": {},
+        }
 
     doc: dict[str, object] = {
         "$schema": "https://opencode.ai/config.json",

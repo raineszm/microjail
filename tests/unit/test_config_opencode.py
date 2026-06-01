@@ -77,3 +77,28 @@ def test_output_is_valid_json() -> None:
     json_str = generate_opencode_config("http://127.0.0.1:8080/v1")
     doc = _parse(json_str)
     assert isinstance(doc, dict)
+
+
+def test_llama_cpp_absent_without_socket_url() -> None:
+    """llama.cpp provider is omitted when no socket_url is given."""
+    doc = _parse(generate_opencode_config())
+    assert "llama.cpp" not in doc["provider"]
+
+
+def test_all_remote_providers_disabled_without_socket_url() -> None:
+    """Every provider in DISABLED_PROVIDERS has enabled: false with no socket_url."""
+    doc = _parse(generate_opencode_config())
+    for provider_id in DISABLED_PROVIDERS:
+        assert provider_id in doc["provider"], (
+            f"Missing disabled provider: {provider_id}"
+        )
+        assert doc["provider"][provider_id].get("enabled") is False, (
+            f"Provider '{provider_id}' is not explicitly disabled"
+        )
+
+
+def test_plugins_present_without_socket_url() -> None:
+    """context-mode and cc-safety-net plugins are present with no socket_url."""
+    doc = _parse(generate_opencode_config())
+    assert "context-mode" in doc["plugin"]
+    assert "cc-safety-net" in doc["plugin"]

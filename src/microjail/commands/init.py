@@ -127,7 +127,7 @@ def _write_config_files(
     except OSError as exc:
         _err(f"Cannot write to current directory: {exc}", code=3)
 
-    if agent == "opencode" and socket_url is not None:
+    if agent == "opencode":
         try:
             (workspace / "opencode.jsonc").write_text(
                 generate_opencode_config(socket_url)
@@ -153,17 +153,15 @@ def _launch_and_verify(name: str, workspace: Path, *, already_exists: bool) -> N
 
 
 def init(
-    name: str = typer.Argument(..., help="Workshop environment name."),
-    inference: InferenceBackend | None = typer.Option(
-        None,
-        "--inference",
-        help="Configure a local inference backend.",
-    ),
-    agent: AgentHarness | None = typer.Option(
-        None,
-        "--agent",
-        help="Configure an AI agent harness.",
-    ),
+    name: Annotated[str, typer.Argument(help="Workshop environment name.")],
+    inference: Annotated[
+        InferenceBackend | None,
+        typer.Option("--inference", help="Configure a local inference backend."),
+    ] = None,
+    agent: Annotated[
+        AgentHarness | None,
+        typer.Option("--agent", help="Configure an AI agent harness."),
+    ] = None,
     force: Annotated[
         bool,
         typer.Option(
@@ -187,7 +185,7 @@ def init(
     workspace = Path.cwd()
     already_exists = _preflight(name, workspace, agent, force=force)
 
-    socket_url: str | None = _SOCKET_URL if agent == "opencode" else None
+    socket_url: str | None = _SOCKET_URL if inference == "llama-cpp" else None
     config = EnvironmentConfig(
         name=name,
         base_image=_BASE_IMAGE,
