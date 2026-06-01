@@ -23,7 +23,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.11"
+rev = "v0.15.15"
 hooks = [
   {
     id = "ruff-check",
@@ -41,4 +41,11 @@ hooks = [
       "pyi"
     ]
   }
+]
+
+[[repos]]
+repo = "https://github.com/executablebooks/mdformat"
+rev = "1.0.0"
+hooks = [
+  { id = "mdformat", files = "^README\\.md$" }
 ]
