@@ -3,15 +3,13 @@ name = "microjail"
 version = "0.1.0"
 description = "Ephemeral, network-sealed environments for running workloads you don't fully trust."
 readme = "README.md"
-authors = [
-    { name = "Zachary Raines", email = "zachary.raines@canonical.com" }
-]
+authors = [{ name = "Zachary Raines", email = "zachary.raines@canonical.com" }]
 license = "GPL-3.0-only"
 requires-python = ">=3.14"
 dependencies = [
     "anyio>=4.13.0",
-    "pylxd>=2.4.1",
     "rich>=14.2.0",
+    "ruamel-yaml>=0.19.1",
     "typer>=0.25.0",
 ]
 
@@ -23,21 +21,16 @@ requires = ["uv_build>=0.11.16,<0.12.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-    "pyupgrade>=3.21.2",
-    "ruff>=0.15.15",
-    "ty>=0.0.40",
-]
+dev = ["pytest>=9.0.3", "pyupgrade>=3.21.2", "ruff>=0.15.15", "ty>=0.0.40"]
 
 [tool.ruff]
 target-version = "py314"
-exclude = ["stubs"]
 
 [tool.ruff.lint]
 preview = true
 select = ["ALL"]
 ignore = [
+    "FBT002", # boolean default in typer CLI definitions is idiomatic
     "E501",   # line too long; formatter handles wrapping
     "COM812", # missing trailing comma; conflicts with ruff formatter
     "CPY",    # copyright headers are not required here
@@ -45,6 +38,7 @@ ignore = [
     "D203",   # conflicts with D211
     "D213",   # conflicts with D212
     "S404",   # subprocess is expected for CLI/workload orchestration
+    "S603",   # subprocess is invoked with argv lists (no shell); inputs are passed as separate args
     "S607",   # standard executable lookup is acceptable for CLI wrappers
     "S108",   # temporary paths are expected during sandbox/container setup
     "TID252", # relative imports are idiomatic within the package
@@ -86,10 +80,8 @@ ignore = [
 
 [tool.ty.environment]
 python-version = "3.14"
-extra-paths = ["stubs"]
 
 [tool.pytest.ini_options]
 anyio_mode = "auto"
-markers = [
-    "lxd: mark test as requiring LXD daemon or Workshop environment",
-]
+addopts = "-m 'not lxd'"
+markers = ["lxd: mark test as requiring LXD daemon or Workshop environment"]

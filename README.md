@@ -24,8 +24,6 @@ Workshop does the actual containment: each environment runs in an unprivileged [
 
 ## Usage
 
-> Commands below are illustrative; the CLI is still settling.
-
 ```bash
 # 1. Create an environment, declaring intent
 microjail init myproject --inference llama-cpp --agent opencode
@@ -40,6 +38,33 @@ microjail run -- opencode run "refactor the parser module"
 # 4. Unlock when you're done
 microjail unlock
 ```
+
+### `microjail init` flags
+
+```
+Usage: microjail init [OPTIONS] NAME
+
+  Create a Workshop environment and write configuration files for a jailed
+  workload session.
+
+  NAME is the environment name; it must start with a letter and contain only
+  letters, digits, and hyphens (max 63 characters).
+
+Options:
+  --inference [llama-cpp]   Configure a local inference backend.
+  --agent [opencode]        Configure an AI agent harness.
+  --force                   Overwrite existing definition and opencode.jsonc.
+  --help                    Show this message and exit.
+
+Examples:
+  microjail init myproject
+  microjail init myproject --inference llama-cpp --agent opencode
+```
+
+**Prerequisites:** Workshop and a recent LXD must be installed before running
+`microjail init`. See the
+[Workshop announcement](https://canonical.com/blog/introducing-workshop-sandboxed-development-environments)
+to get set up.
 
 ### Lock gates
 
