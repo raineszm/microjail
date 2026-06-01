@@ -103,6 +103,14 @@ def _preflight(
                 f".workshop/{name}.yaml already exists. Use --force to overwrite.",
                 code=2,
             )
+
+        state_path = workspace / ".microjail" / "state.json"
+        if state_path.exists():
+            _err(
+                ".microjail/state.json already exists in this directory. Use --force to overwrite.",
+                code=2,
+            )
+
         if agent == "opencode" and (workspace / "opencode.jsonc").exists():
             _err(
                 "opencode.jsonc already exists in this directory. Use --force to overwrite.",
