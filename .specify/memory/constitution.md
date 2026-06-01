@@ -1,22 +1,16 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: (unversioned template) → 1.0.0
+Version change: 1.0.0 → 1.0.1
 
 Modified principles:
-  - [PRINCIPLE_1_NAME] → I. Safety First
-  - [PRINCIPLE_2_NAME] → II. Correctness Over Confidence
-  - [PRINCIPLE_3_NAME] → III. Human Readability & Auditability
-  - [PRINCIPLE_4_NAME] → IV. Idiomatic Python
-  - [PRINCIPLE_5_NAME] → V. Fail Loudly, Fail Clearly
+  - IV. Idiomatic Python — added explicit prohibition on `# noqa` suppressions
 
 Sections added:
-  - Security & Isolation Constraints
-  - Development Workflow
+  - None
 
 Sections removed:
-  - [SECTION_2_NAME] (placeholder replaced)
-  - [SECTION_3_NAME] (placeholder replaced)
+  - None
 
 Templates requiring updates:
   - ✅ .specify/templates/plan-template.md — Constitution Check section is generic; aligns with updated principles.
@@ -84,6 +78,10 @@ Use the language the way the language is meant to be used. Non-idiomatic pattern
 cognitive load for reviewers familiar with the ecosystem.
 
 - Follow PEP 8 and project linting/formatting rules (ruff); no exceptions without comment.
+- Linter warnings MUST be fixed at the source. Suppression via `# noqa` comments is
+  forbidden. If a linter rule is wrong for the project, disable it in the ruff configuration
+  file so the decision is explicit, reviewed, and applies consistently — not silently
+  overridden line by line.
 - Use standard library primitives before reaching for third-party dependencies.
 - Prefer `dataclasses`, `NamedTuple`, or `TypedDict` for structured data over ad-hoc dicts.
 - Use type annotations throughout. Untyped public functions are not acceptable.
@@ -151,4 +149,4 @@ or tool default that conflicts with these principles yields to the constitution.
 **Compliance review**: Every plan's Constitution Check section MUST be filled before
 implementation begins. The review MUST be re-run after Phase 1 design is complete.
 
-**Version**: 1.0.0 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date unknown — set when first committed | **Last Amended**: 2026-05-29
+**Version**: 1.0.1 | **Ratified**: TODO(RATIFICATION_DATE): original adoption date unknown — set when first committed | **Last Amended**: 2026-06-01
