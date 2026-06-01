@@ -79,3 +79,23 @@ def test_launch_passes_project_flag() -> None:
             capture_output=True,
             check=False,
         )
+
+
+def test_refresh_passes_project_flag() -> None:
+    """Refresh invokes workshop refresh with --project <project_dir>."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        client.refresh("myenv", FAKE_PROJECT)
+        mock_run.assert_called_once_with(
+            ["workshop", "refresh", "myenv", "--project", str(FAKE_PROJECT)],
+            capture_output=True,
+            check=False,
+        )
+
+
+def test_refresh_raises_on_failure() -> None:
+    """Refresh raises RuntimeError with workshop stderr on non-zero exit."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1, stderr=b"not Ready")
+        with pytest.raises(RuntimeError, match="refresh failed"):
+            client.refresh("myenv", FAKE_PROJECT)

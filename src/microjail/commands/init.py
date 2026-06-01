@@ -71,8 +71,12 @@ def _preflight(
     agent: str | None,
     *,
     force: bool,
-) -> None:
-    """Run pre-flight checks; raise typer.Exit(2) on failure."""
+) -> bool:
+    """Run pre-flight checks; raise typer.Exit(2) on failure.
+
+    Returns ``True`` if the environment already exists (relevant when
+    ``force=True`` so the caller can choose ``refresh`` over ``launch``).
+    """
     try:
         client.check_prerequisites()
     except RuntimeError as exc:
@@ -85,7 +89,8 @@ def _preflight(
             code=2,
         )
 
-    if client.environment_exists(name, workspace):
+    already_exists = client.environment_exists(name, workspace)
+    if not force and already_exists:
         _err(
             f"Environment '{name}' already exists. Use --force to reinitialise.",
             code=2,
@@ -103,6 +108,8 @@ def _preflight(
                 "opencode.jsonc already exists in this directory. Use --force to overwrite.",
                 code=2,
             )
+
+    return already_exists
 
 
 def _write_config_files(
@@ -129,10 +136,13 @@ def _write_config_files(
             _err(f"Cannot write to current directory: {exc}", code=3)
 
 
-def _launch_and_verify(name: str, workspace: Path) -> None:
-    """Launch the workshop environment and verify it exists."""
+def _launch_and_verify(name: str, workspace: Path, *, already_exists: bool) -> None:
+    """Launch or refresh the workshop environment, then verify it exists."""
     try:
-        client.launch(name, workspace)
+        if already_exists:
+            client.refresh(name, workspace)
+        else:
+            client.launch(name, workspace)
     except RuntimeError as exc:
         _err(str(exc), code=3)
 
@@ -177,7 +187,7 @@ def init(
     _validate_inputs(name, inference, agent)
 
     workspace = Path.cwd()
-    _preflight(name, workspace, agent, force=force)
+    already_exists = _preflight(name, workspace, agent, force=force)
 
     socket_url: str | None = _SOCKET_URL if agent == "opencode" else None
     config = EnvironmentConfig(
@@ -205,7 +215,7 @@ def init(
     except OSError as exc:
         _err(f"Cannot write state to current directory: {exc}", code=3)
 
-    _launch_and_verify(name, workspace)
+    _launch_and_verify(name, workspace, already_exists=already_exists)
 
     workshop_def_path = workspace / ".workshop" / f"{name}.yaml"
     state_path = workspace / ".microjail" / "state.json"

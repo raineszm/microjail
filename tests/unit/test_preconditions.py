@@ -96,3 +96,76 @@ def test_writable_workspace_proceeds(tmp_path: Path) -> None:
     # Should fail with "already exists", not a writability error
     assert "writable" not in result.output
     assert "already exists" in result.output
+
+
+def test_force_bypasses_environment_exists_check(tmp_path: Path) -> None:
+    """--force allows reinitialisation when the environment already exists."""
+    with (
+        patch("microjail.commands.init.os.access", return_value=True),
+        patch(
+            "microjail.commands.init.client.check_prerequisites",
+            return_value=None,
+        ),
+        patch(
+            "microjail.commands.init.client.environment_exists",
+            return_value=True,  # environment already exists
+        ),
+        patch("microjail.commands.init.Path.cwd", return_value=tmp_path),
+        patch(
+            "microjail.commands.init.client.refresh",
+            return_value=None,
+        ),
+        patch(
+            "microjail.commands.init.client.verify_exists",
+            return_value=None,
+        ),
+    ):
+        result = runner.invoke(
+            app, ["init", "testenv", "--force"], catch_exceptions=False
+        )
+
+    # --force must not be blocked by the "already exists" guard
+    assert "already exists" not in result.output
+    assert result.exit_code == 0
+
+
+def test_force_calls_refresh_not_launch_when_env_exists(tmp_path: Path) -> None:
+    """When environment already exists, --force triggers refresh, not launch."""
+    with (
+        patch("microjail.commands.init.os.access", return_value=True),
+        patch("microjail.commands.init.client.check_prerequisites", return_value=None),
+        patch("microjail.commands.init.client.environment_exists", return_value=True),
+        patch("microjail.commands.init.Path.cwd", return_value=tmp_path),
+        patch(
+            "microjail.commands.init.client.refresh", return_value=None
+        ) as mock_refresh,
+        patch(
+            "microjail.commands.init.client.launch", return_value=None
+        ) as mock_launch,
+        patch("microjail.commands.init.client.verify_exists", return_value=None),
+    ):
+        runner.invoke(app, ["init", "testenv", "--force"], catch_exceptions=False)
+
+    mock_refresh.assert_called_once()
+    mock_launch.assert_not_called()
+
+
+def test_new_env_calls_launch_not_refresh(tmp_path: Path) -> None:
+    """When no environment exists, init calls launch, not refresh."""
+    with (
+        patch("microjail.commands.init.os.access", return_value=True),
+        patch("microjail.commands.init.client.check_prerequisites", return_value=None),
+        patch("microjail.commands.init.client.environment_exists", return_value=False),
+        patch("microjail.commands.init.Path.cwd", return_value=tmp_path),
+        patch(
+            "microjail.commands.init.client.refresh", return_value=None
+        ) as mock_refresh,
+        patch(
+            "microjail.commands.init.client.launch", return_value=None
+        ) as mock_launch,
+        patch("microjail.commands.init.client.verify_exists", return_value=None),
+    ):
+        runner.invoke(app, ["init", "testenv"], catch_exceptions=False)
+
+    mock_launch.assert_called_once()
+    mock_refresh.assert_not_called()

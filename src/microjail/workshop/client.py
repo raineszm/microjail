@@ -100,6 +100,26 @@ def environment_exists(name: str, project_dir: Path) -> bool:
     return result.returncode == 0
 
 
+def refresh(name: str, project_dir: Path) -> None:
+    """Run ``workshop refresh <name>`` in *project_dir*.
+
+    Applies the updated definition (base image, SDKs, connections) to an
+    environment that already exists.  Used by ``microjail init --force`` when
+    the named environment is present.
+
+    Raises :exc:`RuntimeError` with Workshop's stderr if the command fails.
+    """
+    result = subprocess.run(
+        ["workshop", "refresh", name, "--project", str(project_dir)],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Workshop environment refresh failed: {result.stderr.decode().strip()}"
+        )
+
+
 def remove(name: str, project_dir: Path) -> None:
     """Run ``workshop remove <name>`` in *project_dir*.
 
