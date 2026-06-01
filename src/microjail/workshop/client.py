@@ -30,6 +30,10 @@ def check_prerequisites() -> None:
             "'workshop' not found on PATH. "
             "Install Workshop: https://canonical.com/blog/introducing-workshop-sandboxed-development-environments"
         )
+    if shutil.which("lxc") is None:
+        raise RuntimeError(
+            "'lxc' not found on PATH. Install LXD: https://canonical.com/lxd"
+        )
     result = subprocess.run(
         ["lxc", "version"],
         capture_output=True,
