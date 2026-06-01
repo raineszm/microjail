@@ -90,14 +90,16 @@ def us2_env(workspace: Path) -> Generator[str]:
     Yields the environment name. Removes the environment on teardown.
     """
     name = _unique_name("mj-us2")
-    result = runner.invoke(app, ["init", name], catch_exceptions=False)
-    assert result.exit_code == 0, f"Fixture init failed:\n{result.output}"
-    yield name
-    subprocess.run(
-        ["workshop", "remove", name, "--project", str(workspace)],
-        capture_output=True,
-        check=False,
-    )
+    try:
+        result = runner.invoke(app, ["init", name], catch_exceptions=False)
+        assert result.exit_code == 0, f"Fixture init failed:\n{result.output}"
+        yield name
+    finally:
+        subprocess.run(
+            ["workshop", "remove", name, "--project", str(workspace)],
+            capture_output=True,
+            check=False,
+        )
 
 
 # ---------------------------------------------------------------------------
