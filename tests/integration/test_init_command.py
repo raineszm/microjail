@@ -69,18 +69,20 @@ def us1_env(workspace: Path) -> Generator[str]:
     regardless of whether the test passed or failed.
     """
     name = _unique_name("mj-us1")
-    result = runner.invoke(
-        app,
-        ["init", name, "--inference", "llama-cpp", "--agent", "opencode"],
-        catch_exceptions=False,
-    )
-    assert result.exit_code == 0, f"Fixture init failed:\n{result.output}"
-    yield name
-    subprocess.run(
-        ["workshop", "remove", name, "--project", str(workspace)],
-        capture_output=True,
-        check=False,
-    )
+    try:
+        result = runner.invoke(
+            app,
+            ["init", name, "--inference", "llama-cpp", "--agent", "opencode"],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0, f"Fixture init failed:\n{result.output}"
+        yield name
+    finally:
+        subprocess.run(
+            ["workshop", "remove", name, "--project", str(workspace)],
+            capture_output=True,
+            check=False,
+        )
 
 
 @pytest.fixture
