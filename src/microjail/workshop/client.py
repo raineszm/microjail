@@ -99,8 +99,7 @@ def environment_exists(name: str, project_dir: Path) -> bool:
 def remove(name: str, project_dir: Path) -> None:
     """Run ``workshop remove <name>`` in *project_dir*.
 
-    Used by integration test teardown. Suppresses errors -- callers that need
-    hard failure should check the return value themselves.
+    Used by integration test teardown.
 
     Raises :exc:`RuntimeError` if removal fails (non-zero exit).
     """

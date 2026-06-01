@@ -31,23 +31,23 @@ microjail init myproject --inference llama-cpp --agent opencode
 ```
 
 **Expected output**:
-```
+~~~
 Environment 'myproject' created.
 
-  workshop.yaml   → /home/<user>/myproject/workshop.yaml
+  definition      -> /home/<user>/myproject/.workshop/myproject.yaml
   opencode.jsonc  → /home/<user>/myproject/opencode.jsonc
   state           → /home/<user>/myproject/.microjail/state.json
-```
+~~~
 
 **Verify files were written**:
-```bash
-ls workshop.yaml opencode.jsonc .microjail/state.json
-```
+~~~bash
+ls .workshop/myproject.yaml opencode.jsonc .microjail/state.json
+~~~
 
-**Verify workshop.yaml content** — must contain `se-llama` tunnel:
-```bash
-grep se-llama workshop.yaml
-```
+**Verify definition YAML was written**:
+~~~bash
+test -f .workshop/myproject.yaml
+~~~
 
 **Verify opencode.jsonc disables remote providers** — must show `false` for all known
 providers:

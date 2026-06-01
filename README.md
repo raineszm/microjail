@@ -53,7 +53,7 @@ Usage: microjail init [OPTIONS] NAME
 Options:
   --inference [llama-cpp]   Configure a local inference backend.
   --agent [opencode]        Configure an AI agent harness.
-  --force                   Overwrite existing workshop.yaml and opencode.jsonc.
+  --force                   Overwrite existing definition and opencode.jsonc.
   --help                    Show this message and exit.
 
 Examples:

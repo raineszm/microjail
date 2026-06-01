@@ -139,15 +139,15 @@ All errors go to stderr. Format: `Error: <message>\n`
 
 | File | Condition | Location |
 |------|-----------|----------|
-| `workshop.yaml` | Always | `<cwd>/workshop.yaml` |
+| `.workshop/<NAME>.yaml` | Always | `<cwd>/.workshop/<NAME>.yaml` |
 | `opencode.jsonc` | Only when `--agent opencode` | `<cwd>/opencode.jsonc` |
 | `.microjail/state.json` | Always (after successful creation) | `<cwd>/.microjail/state.json` |
 
 **Write order** (FR-011):
-1. `workshop.yaml`
+1. `.workshop/<NAME>.yaml`
 2. `opencode.jsonc` (if applicable)
-3. `workshop create <yaml>` subprocess call
-4. Post-creation verification via `lxc info <name>` subprocess (exit code 0 = success)
+3. `workshop launch <NAME>` subprocess call
+4. Post-creation verification via `workshop info <NAME> --project <cwd>` (exit code 0 = success)
 5. `.microjail/state.json`
 
 If step 3 or 4 fails and files were written in steps 1–2, those files are left in place
@@ -184,10 +184,10 @@ Examples:
 
 These invariants MUST hold after any successful `microjail init` invocation:
 
-1. A Workshop/LXD environment named `<NAME>` exists and is confirmed by `lxc info <NAME>`
-   returning exit code 0.
-2. `workshop.yaml` exists in the working directory and is valid YAML with the correct schema.
+1. A Workshop environment named `<NAME>` exists and is confirmed by `workshop info <NAME> --project <cwd>` returning exit code 0.
+2. `.workshop/<NAME>.yaml` exists in the working directory and is valid YAML with the correct schema.
 3. If `--agent opencode` was passed, `opencode.jsonc` exists and contains no enabled remote
+   provider entries.
    provider entries.
 4. `.microjail/state.json` exists, is valid JSON, and `state.name == NAME`.
 5. The command exited with code 0.

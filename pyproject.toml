@@ -44,9 +44,8 @@ ignore = [
     "CPY",    # copyright headers are not required here
     "DOC",    # pydoclint docstring-content rules are too strict for this project
     "D203",   # conflicts with D211
-    "D213",   # conflicts with D212
     "S404",   # subprocess is expected for CLI/workload orchestration
-    "S603",   # subprocess inputs in this project are hardcoded CLI commands
+    "S603",   # subprocess is invoked with argv lists (no shell); inputs are passed as separate args
     "S607",   # standard executable lookup is acceptable for CLI wrappers
     "S108",   # temporary paths are expected during sandbox/container setup
     "TID252", # relative imports are idiomatic within the package
