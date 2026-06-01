@@ -20,7 +20,7 @@ import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated
 
 import typer
 
@@ -189,8 +189,8 @@ def init(
     config = EnvironmentConfig(
         name=name,
         base_image=_BASE_IMAGE,
-        inference=cast("InferenceBackend | None", inference),
-        agent=cast("AgentHarness | None", agent),
+        inference=inference,
+        agent=agent,
     )
 
     _write_config_files(name, workspace, config, agent, socket_url)

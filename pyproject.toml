@@ -25,7 +25,6 @@ dev = ["pytest>=9.0.3", "pyupgrade>=3.21.2", "ruff>=0.15.15", "ty>=0.0.40"]
 
 [tool.ruff]
 target-version = "py314"
-exclude = ["stubs"]
 
 [tool.ruff.lint]
 preview = true
@@ -81,7 +80,6 @@ ignore = [
 
 [tool.ty.environment]
 python-version = "3.14"
-extra-paths = ["stubs"]
 
 [tool.pytest.ini_options]
 anyio_mode = "auto"
