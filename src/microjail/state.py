@@ -6,7 +6,7 @@ its configuration without the user re-specifying flags.
 """
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -38,6 +38,14 @@ class EnvironmentState:
 
     created_at: datetime
     """UTC timestamp of environment creation."""
+
+    locked: bool = field(default=False)
+    """Whether the environment's network egress is currently severed.
+
+    Set to ``True`` by ``microjail lock`` (and by ``microjail run`` via the
+    same locking logic). Set back to ``False`` by ``microjail unlock`` (and
+    by ``microjail run`` after the workload exits).
+    """
 
     def to_json(self, workspace: Path) -> None:
         """Write state to ``<workspace>/.microjail/state.json``.
@@ -81,6 +89,7 @@ class EnvironmentState:
                 agent=raw.get("agent"),
                 socket_url=raw.get("socket_url"),
                 created_at=created_at,
+                locked=bool(raw.get("locked", False)),
             )
         except KeyError as exc:
             msg = f"State file at {state_path} is missing required field: {exc}"

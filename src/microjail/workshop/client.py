@@ -136,3 +136,35 @@ def remove(name: str, project_dir: Path) -> None:
         raise RuntimeError(
             f"Workshop environment removal failed: {result.stderr.decode().strip()}"
         )
+
+
+def exec_in_env(
+    name: str,
+    cmd: list[str],
+    project_dir: Path,
+) -> subprocess.CompletedProcess[bytes]:
+    """Run *cmd* inside the Workshop environment *name*.
+
+    Uses ``workshop exec <name> -- <cmd>`` so the command executes in the
+    LXD container associated with the named environment.
+
+    Returns the :class:`subprocess.CompletedProcess` result so callers can
+    inspect ``returncode``, ``stdout``, and ``stderr`` themselves.
+
+    Does NOT raise on non-zero exit — the caller (``microjail run``) is
+    responsible for propagating the workload's exit code to the user.
+
+    Raises :exc:`RuntimeError` only if the ``workshop exec`` process itself
+    cannot be started (e.g. Workshop is not installed).
+    """
+    try:
+        return subprocess.run(
+            ["workshop", "exec", name, "--project", str(project_dir), "--", *cmd],
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        msg = (
+            "'workshop' not found on PATH. "
+            "Install Workshop: https://canonical.com/blog/introducing-workshop-sandboxed-development-environments"
+        )
+        raise RuntimeError(msg) from exc

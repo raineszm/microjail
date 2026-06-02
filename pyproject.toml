@@ -56,6 +56,12 @@ ignore = [
     "S603",    # test helpers use controlled subprocess inputs
     "D103",    # test names are self-documenting
     "ANN",     # test annotations are optional
+    "PLC0415", # local imports acceptable in test helpers
+    "PLC2701", # testing private implementation details is acceptable
+    "TC003",   # pathlib.Path used at runtime in test fixtures
+    "D205",    # single blank line between summary and description optional in tests
+    "PT011",   # broad pytest.raises is acceptable in tests
+    "E741",    # short variable names acceptable in tests
 ]
 "tests/**/*.py" = [
     "S101",    # assert statements are expected in tests
@@ -66,6 +72,12 @@ ignore = [
     "S603",    # test helpers use controlled subprocess inputs
     "D103",    # test names are self-documenting
     "ANN",     # test annotations are optional
+    "PLC0415", # local imports acceptable in test helpers
+    "PLC2701", # testing private implementation details is acceptable
+    "TC003",   # pathlib.Path used at runtime in test fixtures
+    "D205",    # single blank line between summary and description optional in tests
+    "PT011",   # broad pytest.raises is acceptable in tests
+    "E741",    # short variable names acceptable in tests
 ]
 "conftest.py" = [
     "ANN",    # annotations are optional in test infrastructure
@@ -76,6 +88,14 @@ ignore = [
     "ANN",    # annotations are optional in test infrastructure
     "D103",   # pytest hooks/fixtures are self-describing
     "SLF001", # test teardown may intentionally reset internals
+]
+"src/microjail/commands/run.py" = [
+    "PLR0913", # _write_run_log is a log helper; 6 args is justified
+    "PLR0917", # same as PLR0913
+]
+"src/microjail/gates/__init__.py" = [
+    "RUF067",  # GateResult and run_all_gates are intentionally defined here
+    "PLC0415", # gate submodule imports are local to avoid circular-import risk
 ]
 
 [tool.ty.environment]
