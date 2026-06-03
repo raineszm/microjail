@@ -94,6 +94,24 @@ def _container_name(env_name: str) -> str:
     return candidates[0]
 
 
+def _container_is_running(project: str, container: str) -> bool:
+    """Return whether *container* is currently running.
+
+    Queries ``lxc info`` for the container status.
+    """
+    result = subprocess.run(
+        ["lxc", "--project", project, "info", container],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False
+    for line in result.stdout.decode().splitlines():
+        if line.strip().startswith("Status:"):
+            return "RUNNING" in line.upper()
+    return False
+
+
 def lock_egress(env_name: str, workspace: Path) -> None:
     """Sever network egress for the Workshop environment *env_name*.
 
@@ -111,34 +129,37 @@ def lock_egress(env_name: str, workspace: Path) -> None:
     container = _container_name(env_name)
     state_json_host = str(workspace / ".microjail" / "state.json")
 
-    # Determine the NIC device name — Workshop typically uses "eth0" but we
-    # query to be safe.
-    nic_device = _nic_device(project, container)
+    # Determine all NIC device names — Workshop typically uses "eth0" but we
+    # query to be safe.  We enumerate every NIC so multi-interface containers
+    # have all egress severed.
+    nic_devices = _all_nic_devices(project, container)
 
     # Cut IPv4 and IPv6 routing by clearing the allowed-routes lists.
-    for key in ("ipv4.routes.external", "ipv6.routes.external"):
-        result = subprocess.run(
-            [
-                "lxc",
-                "--project",
-                project,
-                "config",
-                "device",
-                "set",
-                container,
-                nic_device,
-                key,
-                "",
-            ],
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            msg = (
-                f"Failed to cut egress ({key}) for container '{container}': "
-                f"{result.stderr.decode().strip()}"
+    for nic_device in nic_devices:
+        for key in ("ipv4.routes.external", "ipv6.routes.external"):
+            result = subprocess.run(
+                [
+                    "lxc",
+                    "--project",
+                    project,
+                    "config",
+                    "device",
+                    "set",
+                    container,
+                    nic_device,
+                    key,
+                    "",
+                ],
+                capture_output=True,
+                check=False,
             )
-            raise RuntimeError(msg)
+            if result.returncode != 0:
+                msg = (
+                    f"Failed to cut egress ({key}) for container '{container}'"
+                    f" on device '{nic_device}': "
+                    f"{result.stderr.decode().strip()}"
+                )
+                raise RuntimeError(msg)
 
     # Add the readonly bind-mount for state.json.
     # The container path matches the bind-mount path Workshop creates for the
@@ -177,7 +198,8 @@ def unlock_egress(env_name: str) -> None:
 
     Reverses ``lock_egress``:
     1. Removes the readonly state.json bind-mount device.
-    2. Re-enables IPv4 and IPv6 routing on the container NIC.
+    2. Re-enables IPv4 and IPv6 routing on all container NICs.
+    3. Re-attaches the container to the ``workshopbr0`` network if running.
 
     Raises :exc:`RuntimeError` with an actionable message on failure.
     Continues past individual failures where possible so partial unlock
@@ -185,7 +207,7 @@ def unlock_egress(env_name: str) -> None:
     """
     project = _workshop_project()
     container = _container_name(env_name)
-    nic_device = _nic_device(project, container)
+    nic_devices = _all_nic_devices(project, container)
 
     errors: list[str] = []
 
@@ -211,28 +233,51 @@ def unlock_egress(env_name: str) -> None:
             f"{result.stderr.decode().strip()}"
         )
 
-    # Restore NIC routing.  LXD uses empty string to mean "no restriction".
+    # Restore NIC routing on every NIC.  LXD uses empty string to mean "no restriction".
     # Setting a non-empty value would impose a restriction; restoring to the
     # default means removing the key entirely.
-    for key in ("ipv4.routes.external", "ipv6.routes.external"):
+    for nic_device in nic_devices:
+        for key in ("ipv4.routes.external", "ipv6.routes.external"):
+            result = subprocess.run(
+                [
+                    "lxc",
+                    "--project",
+                    project,
+                    "config",
+                    "device",
+                    "unset",
+                    container,
+                    nic_device,
+                    key,
+                ],
+                capture_output=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                errors.append(
+                    f"Failed to restore {key} for container '{container}'"
+                    f" on device '{nic_device}': "
+                    f"{result.stderr.decode().strip()}"
+                )
+
+    # Re-attach to workshopbr0 if the container is running.
+    if _container_is_running(project, container):
         result = subprocess.run(
             [
                 "lxc",
                 "--project",
                 project,
-                "config",
-                "device",
-                "unset",
+                "network",
+                "attach",
+                "workshopbr0",
                 container,
-                nic_device,
-                key,
             ],
             capture_output=True,
             check=False,
         )
         if result.returncode != 0:
             errors.append(
-                f"Failed to restore {key} for container '{container}': "
+                f"Failed to re-attach container '{container}' to workshopbr0: "
                 f"{result.stderr.decode().strip()}"
             )
 
@@ -242,8 +287,8 @@ def unlock_egress(env_name: str) -> None:
         raise RuntimeError(msg)
 
 
-def _nic_device(project: str, container: str) -> str:
-    """Return the name of the first NIC device for *container*.
+def _all_nic_devices(project: str, container: str) -> list[str]:
+    """Return the names of all NIC devices for *container*.
 
     Raises :exc:`RuntimeError` if no NIC device can be found.
     """
@@ -267,18 +312,21 @@ def _nic_device(project: str, container: str) -> str:
         )
         raise RuntimeError(msg)
     # The output is YAML: device name is the top-level key; type: nic identifies it.
+    nic_devices: list[str] = []
     current_device: str | None = None
     for line in result.stdout.decode().splitlines():
         stripped = line.rstrip()
         if stripped and not stripped.startswith(" ") and stripped.endswith(":"):
             current_device = stripped.rstrip(":")
         if "type: nic" in stripped and current_device:
-            return current_device
-    msg = (
-        f"No NIC device found for container '{container}'. "
-        "Ensure the Workshop environment has been started."
-    )
-    raise RuntimeError(msg)
+            nic_devices.append(current_device)
+    if not nic_devices:
+        msg = (
+            f"No NIC device found for container '{container}'. "
+            "Ensure the Workshop environment has been started."
+        )
+        raise RuntimeError(msg)
+    return nic_devices
 
 
 def _workspace_mount_path(project: str, container: str) -> str:

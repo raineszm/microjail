@@ -269,3 +269,90 @@ def test_force_reinit_state_updated(workspace: Path, us1_env: str) -> None:
     assert state_after["created_at"] >= state_before["created_at"], (
         "state.json created_at was not updated after --force reinit"
     )
+
+
+# ---------------------------------------------------------------------------
+# T015 — Tunnel YAML structure assertions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.lxd
+def test_us1_workshop_yaml_has_tunnel_slot(workspace: Path, us1_env: str) -> None:
+    """Workshop definition contains system SDK with tunnel slot when --inference is set."""
+    from ruamel.yaml import YAML
+
+    yaml_path = workspace / ".workshop" / f"{us1_env}.yaml"
+    doc = YAML().load(yaml_path.read_text())
+    system_sdk = next((s for s in doc["sdks"] if s["name"] == "system"), None)
+    assert system_sdk is not None, "system SDK missing"
+    assert system_sdk["slots"]["llama-cpp"]["interface"] == "tunnel"
+    assert system_sdk["slots"]["llama-cpp"]["endpoint"] == "localhost:8080"
+
+
+@pytest.mark.lxd
+def test_us1_workshop_yaml_has_tunnel_plug(workspace: Path, us1_env: str) -> None:
+    """Workshop definition contains project SDK with tunnel plug when --inference is set."""
+    from ruamel.yaml import YAML
+
+    yaml_path = workspace / ".workshop" / f"{us1_env}.yaml"
+    doc = YAML().load(yaml_path.read_text())
+    llama_sdk = next((s for s in doc["sdks"] if s["name"] == "llama-cpp"), None)
+    assert llama_sdk is not None, "llama-cpp SDK missing"
+    assert llama_sdk["plugs"]["llama-cpp"]["interface"] == "tunnel"
+
+
+@pytest.mark.lxd
+def test_us2_workshop_yaml_no_tunnel_entries(workspace: Path, us2_env: str) -> None:
+    """Workshop definition has no tunnel entries when --inference is not set."""
+    from ruamel.yaml import YAML
+
+    yaml_path = workspace / ".workshop" / f"{us2_env}.yaml"
+    yaml_str = yaml_path.read_text()
+    doc = YAML().load(yaml_str)
+    sdk_names = [s["name"] for s in doc.get("sdks", [])]
+    assert "system" not in sdk_names
+    assert "llama-cpp" not in sdk_names
+    for forbidden in ("tunnel", "plugs", "slots"):
+        assert forbidden not in yaml_str, f"Forbidden key '{forbidden}' found"
+
+
+# ---------------------------------------------------------------------------
+# T033 — State file assertions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.lxd
+def test_us1_state_json_has_http_socket_url(workspace: Path, us1_env: str) -> None:
+    """state.json contains HTTP URL for socket_url when --inference is set."""
+    state = json.loads((workspace / ".microjail" / "state.json").read_text())
+    assert state["socket_url"] == "http://127.0.0.1:8080/v1"
+
+
+@pytest.mark.lxd
+def test_us2_state_json_null_socket_url(workspace: Path, us2_env: str) -> None:
+    """state.json has null socket_url when --inference is not set."""
+    state = json.loads((workspace / ".microjail" / "state.json").read_text())
+    assert state["socket_url"] is None
+
+
+# ---------------------------------------------------------------------------
+# T017 — Force re-init refreshes tunnel config
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.lxd
+def test_force_reinit_preserves_tunnel_config(workspace: Path, us1_env: str) -> None:
+    """--force re-initialisation preserves tunnel config in workshop.yaml."""
+    from ruamel.yaml import YAML
+
+    result = runner.invoke(
+        app,
+        ["init", us1_env, "--inference", "llama-cpp", "--agent", "opencode", "--force"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, f"Non-zero exit:\n{result.output}"
+    yaml_path = workspace / ".workshop" / f"{us1_env}.yaml"
+    doc = YAML().load(yaml_path.read_text())
+    sdk_names = [s["name"] for s in doc["sdks"]]
+    assert "system" in sdk_names
+    assert "llama-cpp" in sdk_names

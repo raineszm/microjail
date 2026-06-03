@@ -55,16 +55,32 @@ def test_skills_sdk_present() -> None:
     assert "skills" in sdk_names
 
 
-def test_no_system_sdk() -> None:
-    """System SDK is never present (no TCP tunnel)."""
+def test_system_sdk_present_when_inference_set() -> None:
+    """System SDK is present when inference is configured."""
     doc = _parse(generate_workshop_yaml(_full_config()))
+    sdk_names = [s["name"] for s in doc.get("sdks", [])]
+    assert "system" in sdk_names
+
+
+def test_tunnel_keys_present_when_inference_set() -> None:
+    """Tunnel, plugs, and slots keys appear when inference is configured."""
+    yaml_str = generate_workshop_yaml(_full_config())
+    for required in ("tunnel", "plugs", "slots"):
+        assert required in yaml_str, (
+            f"Required key '{required}' missing in workshop.yaml"
+        )
+
+
+def test_no_system_sdk_when_inference_not_set() -> None:
+    """System SDK is absent when inference is not configured."""
+    doc = _parse(generate_workshop_yaml(_bare_config()))
     sdk_names = [s["name"] for s in doc.get("sdks", [])]
     assert "system" not in sdk_names
 
 
-def test_no_tunnel_keys() -> None:
-    """No tunnel, plugs, or slots keys appear anywhere in the output."""
-    yaml_str = generate_workshop_yaml(_full_config())
+def test_no_tunnel_keys_when_inference_not_set() -> None:
+    """No tunnel, plugs, or slots keys when inference is not configured."""
+    yaml_str = generate_workshop_yaml(_bare_config())
     for forbidden in ("tunnel", "plugs", "slots"):
         assert forbidden not in yaml_str, (
             f"Forbidden key '{forbidden}' found in workshop.yaml"
@@ -96,3 +112,38 @@ def test_output_is_valid_yaml() -> None:
     yaml_str = generate_workshop_yaml(_full_config())
     doc = _parse(yaml_str)
     assert isinstance(doc, dict)
+
+
+def test_inference_sdk_endpoint() -> None:
+    """System SDK slot has endpoint localhost:8080."""
+    doc = _parse(generate_workshop_yaml(_full_config()))
+    system_sdk = next(s for s in doc["sdks"] if s["name"] == "system")
+    assert system_sdk["slots"]["llama-cpp"]["endpoint"] == "localhost:8080"
+
+
+def test_inference_sdk_plugs() -> None:
+    """Project SDK has plugs with tunnel interface."""
+    doc = _parse(generate_workshop_yaml(_full_config()))
+    llama_sdk = next(s for s in doc["sdks"] if s["name"] == "llama-cpp")
+    assert llama_sdk["plugs"]["llama-cpp"]["interface"] == "tunnel"
+
+
+def test_inference_sdk_slots() -> None:
+    """System SDK has slots with tunnel interface."""
+    doc = _parse(generate_workshop_yaml(_full_config()))
+    system_sdk = next(s for s in doc["sdks"] if s["name"] == "system")
+    assert system_sdk["slots"]["llama-cpp"]["interface"] == "tunnel"
+
+
+def test_sdk_ordering() -> None:
+    """SDKs appear in order: opencode, skills, inference, system."""
+    doc = _parse(generate_workshop_yaml(_full_config()))
+    sdk_names = [s["name"] for s in doc["sdks"]]
+    assert sdk_names == ["opencode", "skills", "llama-cpp", "system"]
+
+
+def test_inference_sdk_absent_when_no_inference() -> None:
+    """Project inference SDK is absent when inference is not configured."""
+    doc = _parse(generate_workshop_yaml(_bare_config()))
+    sdk_names = [s["name"] for s in doc.get("sdks", [])]
+    assert "llama-cpp" not in sdk_names

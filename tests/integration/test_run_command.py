@@ -8,7 +8,6 @@ Run with: uv run pytest -m lxd tests/integration/test_run_command.py
 """
 
 import socket
-from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -43,55 +42,45 @@ def test_run_fails_when_workload_empty(lxd_environment):  # type: ignore[no-unty
 
 
 # ---------------------------------------------------------------------------
-# T029: Inference socket gate — socket absent
+# T029: Inference tunnel gate — TCP endpoint unreachable
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.lxd
-def test_run_fails_when_inference_socket_missing(lxd_inference_environment):  # type: ignore[no-untyped-def]
-    """When --inference llama-cpp was set at init and the socket file is absent,
-    ``microjail run`` exits non-zero and names the missing socket path.
+def test_run_fails_when_inference_tunnel_unreachable(lxd_inference_environment):  # type: ignore[no-untyped-def]
+    """When --inference llama-cpp was set at init and the TCP endpoint is unreachable,
+    ``microjail run`` exits non-zero and names the unreachable host:port.
     """
     # lxd_inference_environment fixture provides an environment initialised with
-    # --inference llama-cpp; no socket file is placed on the host.
+    # --inference llama-cpp; no inference server is running on the host.
     result = runner.invoke(app, ["run", "echo", "hello"])
     assert result.exit_code != 0
-    # The error message should reference the expected socket path or the gate name.
+    # The error message should reference the expected endpoint or the gate name.
     assert any(
         keyword in result.output.lower()
-        for keyword in ("socket", "inference", "inference_socket")
+        for keyword in ("tunnel", "inference", "localhost:8080", "not reachable")
     )
 
 
 # ---------------------------------------------------------------------------
-# T030: Inference socket gate — socket present
+# T030: Inference tunnel gate — TCP endpoint reachable
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.lxd
-def test_run_succeeds_when_inference_socket_present(  # type: ignore[no-untyped-def]
+def test_run_succeeds_when_inference_tunnel_reachable(  # type: ignore[no-untyped-def]
     lxd_inference_environment, tmp_path
 ) -> None:
-    """When --inference llama-cpp was set at init and a UDS socket is listening
-    at the expected path, the inference socket gate passes and the run proceeds.
+    """When --inference llama-cpp was set at init and a TCP server is listening
+    on localhost:8080, the inference tunnel gate passes and the run proceeds.
     """
-    from microjail.state import EnvironmentState
-
-    state = EnvironmentState.from_json(Path.cwd())
-    assert state.socket_url is not None
-
-    # Extract socket path from the socket_url (unix:///path/to/socket.sock).
-    socket_path_str = state.socket_url.removeprefix("unix://")
-    socket_path = Path(socket_path_str)
-    socket_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Bind a UDS socket at the expected path so the gate can connect.
-    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    srv.bind(str(socket_path))
+    # Bind a TCP socket on port 8080 so the gate can connect.
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 8080))
     srv.listen(1)
     try:
         result = runner.invoke(app, ["run", "echo", "hello"])
         assert result.exit_code == 0
     finally:
         srv.close()
-        socket_path.unlink(missing_ok=True)

@@ -49,7 +49,7 @@ def run_all_gates(state: EnvironmentState, workspace: Path) -> list[GateResult]:
 
     Gates evaluated conditionally:
     - ``config-readonly``: ``opencode.jsonc`` is not writable (only when agent is set).
-    - ``inference-socket``: UDS socket exists and accepts a connection (only when inference is set).
+    - ``inference-tunnel``: TCP endpoint is accepting connections (only when inference is set).
 
     The list is ordered: unconditional gates first, then conditional.
     The caller is responsible for inspecting ``passed`` on each result and
@@ -58,7 +58,7 @@ def run_all_gates(state: EnvironmentState, workspace: Path) -> list[GateResult]:
     # Import here to keep the public interface clean and avoid circular imports.
     from microjail.gates.config_readonly import check_config_readonly
     from microjail.gates.egress import check_egress_down
-    from microjail.gates.inference_socket import check_inference_socket
+    from microjail.gates.inference_tunnel import check_inference_tunnel
     from microjail.gates.state_readonly import check_state_readonly
     from microjail.gates.workspace import check_workspace_mounted
 
@@ -77,6 +77,6 @@ def run_all_gates(state: EnvironmentState, workspace: Path) -> list[GateResult]:
     if state.agent is not None:
         results.append(check_config_readonly(workspace))
     if state.inference is not None:
-        results.append(check_inference_socket(state.socket_url))
+        results.append(check_inference_tunnel(state.socket_url))
 
     return results
