@@ -140,70 +140,6 @@ def test_unlock_egress_restores_routes_on_all_nics(
 @patch("subprocess.run")
 @patch("microjail.lxd.network._workshop_project", return_value=_PROJECT)
 @patch("microjail.lxd.network._container_name", return_value=_CONTAINER)
-def test_unlock_egress_reattaches_workshopbr0_when_running(
-    mock_container: MagicMock,
-    mock_project: MagicMock,
-    mock_run: MagicMock,
-) -> None:
-    """unlock_egress re-attaches workshopbr0 when container is running."""
-    info_running = MagicMock()
-    info_running.returncode = 0
-    info_running.stdout = b"Status: RUNNING\n"
-    info_running.stderr = b""
-
-    mock_run.side_effect = [
-        _mock_device_show("eth0"),
-        _mock_ok(),  # readonly state.json remove
-        _mock_ok(),  # ipv4
-        _mock_ok(),  # ipv6
-        info_running,  # info -> running
-        _mock_ok(),  # network attach workshopbr0
-    ]
-
-    unlock_egress("myproject")
-
-    calls = mock_run.call_args_list
-    attach_calls = [
-        c for c in calls if "network" in c.args[0] and "attach" in c.args[0]
-    ]
-    assert len(attach_calls) == 1
-    assert attach_calls[0].args[0][3:5] == ["network", "attach"]
-
-
-@patch("subprocess.run")
-@patch("microjail.lxd.network._workshop_project", return_value=_PROJECT)
-@patch("microjail.lxd.network._container_name", return_value=_CONTAINER)
-def test_unlock_egress_skips_workshopbr0_when_stopped(
-    mock_container: MagicMock,
-    mock_project: MagicMock,
-    mock_run: MagicMock,
-) -> None:
-    """unlock_egress skips workshopbr0 re-attachment when container is not running."""
-    info_stopped = MagicMock()
-    info_stopped.returncode = 0
-    info_stopped.stdout = b"Status: STOPPED\n"
-    info_stopped.stderr = b""
-
-    mock_run.side_effect = [
-        _mock_device_show("eth0"),
-        _mock_ok(),  # readonly state.json remove
-        _mock_ok(),  # ipv4
-        _mock_ok(),  # ipv6
-        info_stopped,
-    ]
-
-    unlock_egress("myproject")
-
-    calls = mock_run.call_args_list
-    attach_calls = [
-        c for c in calls if "network" in c.args[0] and "attach" in c.args[0]
-    ]
-    assert len(attach_calls) == 0
-
-
-@patch("subprocess.run")
-@patch("microjail.lxd.network._workshop_project", return_value=_PROJECT)
-@patch("microjail.lxd.network._container_name", return_value=_CONTAINER)
 def test_unlock_egress_survives_individual_failures(
     mock_container: MagicMock,
     mock_project: MagicMock,
@@ -215,8 +151,6 @@ def test_unlock_egress_survives_individual_failures(
         _mock_ok(),  # readonly state.json remove
         _mock_fail("cannot unset"),  # ipv4 fails
         _mock_ok(),  # ipv6
-        _mock_ok(),  # info -> running
-        _mock_fail("cannot attach"),  # workshopbr0 attach fails
     ]
 
     with pytest.raises(RuntimeError, match="Unlock completed with errors"):

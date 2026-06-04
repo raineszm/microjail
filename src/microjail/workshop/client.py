@@ -52,16 +52,15 @@ def launch(name: str, project_dir: Path) -> None:
     Expects the definition file at ``<project_dir>/.workshop/<name>.yaml``
     to already be written by the caller.
 
-    Raises :exc:`RuntimeError` with Workshop's stderr if the command fails.
+    Raises :exc:`RuntimeError` with the exit code if the command fails.
     """
     result = subprocess.run(
         ["workshop", "launch", name, "--project", str(project_dir)],
-        capture_output=True,
         check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"Workshop environment creation failed: {result.stderr.decode().strip()}"
+            f"Workshop environment creation failed (exit {result.returncode}; see output above)."
         )
 
 
@@ -107,16 +106,46 @@ def refresh(name: str, project_dir: Path) -> None:
     environment that already exists.  Used by ``microjail init --force`` when
     the named environment is present.
 
-    Raises :exc:`RuntimeError` with Workshop's stderr if the command fails.
+    Raises :exc:`RuntimeError` with the exit code if the command fails.
     """
     result = subprocess.run(
         ["workshop", "refresh", name, "--project", str(project_dir)],
-        capture_output=True,
         check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"Workshop environment refresh failed: {result.stderr.decode().strip()}"
+            f"Workshop environment refresh failed (exit {result.returncode}; see output above)."
+        )
+
+
+def connect(
+    name: str,
+    plug_ref: str,
+    slot_ref: str,
+    project_dir: Path,
+) -> None:
+    """Run ``workshop connect <name>/<plug_ref> <name>/<slot_ref>``.
+
+    *plug_ref* and *slot_ref* are ``sdk:interface`` strings that match
+    Workshop's own connect syntax, e.g. ``"local-inference:llama"``.
+
+    Explicitly wires a plug to a slot when auto-connection is not reliable.
+    Raises :exc:`RuntimeError` with the exit code if the command fails.
+    """
+    result = subprocess.run(
+        [
+            "workshop",
+            "--project",
+            str(project_dir),
+            "connect",
+            f"{name}/{plug_ref}",
+            f"{name}/{slot_ref}",
+        ],
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Workshop connect failed (exit {result.returncode}; see output above)."
         )
 
 

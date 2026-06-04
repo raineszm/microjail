@@ -3,7 +3,7 @@
 from ruamel.yaml import YAML
 
 from microjail.config.models import EnvironmentConfig
-from microjail.config.workshop import generate_workshop_yaml
+from microjail.config.workshop import generate_sdk_yaml, generate_workshop_yaml
 
 
 def _parse(yaml_str: str) -> dict:  # type: ignore[type-arg]
@@ -17,6 +17,7 @@ def _full_config() -> EnvironmentConfig:
         base_image="ubuntu@26.04",
         inference="llama-cpp",
         agent="opencode",
+        inference_endpoint="localhost:8080",
     )
 
 
@@ -63,9 +64,9 @@ def test_system_sdk_present_when_inference_set() -> None:
 
 
 def test_tunnel_keys_present_when_inference_set() -> None:
-    """Tunnel, plugs, and slots keys appear when inference is configured."""
+    """Tunnel and slots keys appear when inference is configured."""
     yaml_str = generate_workshop_yaml(_full_config())
-    for required in ("tunnel", "plugs", "slots"):
+    for required in ("tunnel", "slots"):
         assert required in yaml_str, (
             f"Required key '{required}' missing in workshop.yaml"
         )
@@ -118,32 +119,144 @@ def test_inference_sdk_endpoint() -> None:
     """System SDK slot has endpoint localhost:8080."""
     doc = _parse(generate_workshop_yaml(_full_config()))
     system_sdk = next(s for s in doc["sdks"] if s["name"] == "system")
-    assert system_sdk["slots"]["llama-cpp"]["endpoint"] == "localhost:8080"
+    assert system_sdk["slots"]["llama"]["endpoint"] == "localhost:8080"
 
 
 def test_inference_sdk_plugs() -> None:
-    """Project SDK has plugs with tunnel interface."""
+    """Project SDK entry in workshop.yaml has no inline plugs (project-SDK pattern)."""
     doc = _parse(generate_workshop_yaml(_full_config()))
-    llama_sdk = next(s for s in doc["sdks"] if s["name"] == "llama-cpp")
-    assert llama_sdk["plugs"]["llama-cpp"]["interface"] == "tunnel"
+    proj_sdk = next(s for s in doc["sdks"] if s["name"] == "project-local-inference")
+    assert "plugs" not in proj_sdk
 
 
 def test_inference_sdk_slots() -> None:
     """System SDK has slots with tunnel interface."""
     doc = _parse(generate_workshop_yaml(_full_config()))
     system_sdk = next(s for s in doc["sdks"] if s["name"] == "system")
-    assert system_sdk["slots"]["llama-cpp"]["interface"] == "tunnel"
+    assert system_sdk["slots"]["llama"]["interface"] == "tunnel"
 
 
 def test_sdk_ordering() -> None:
-    """SDKs appear in order: opencode, skills, inference, system."""
+    """SDKs appear in order: opencode, skills, project-local-inference, system."""
     doc = _parse(generate_workshop_yaml(_full_config()))
     sdk_names = [s["name"] for s in doc["sdks"]]
-    assert sdk_names == ["opencode", "skills", "llama-cpp", "system"]
+    assert sdk_names == ["opencode", "skills", "project-local-inference", "system"]
 
 
 def test_inference_sdk_absent_when_no_inference() -> None:
     """Project inference SDK is absent when inference is not configured."""
     doc = _parse(generate_workshop_yaml(_bare_config()))
     sdk_names = [s["name"] for s in doc.get("sdks", [])]
+    assert "project-local-inference" not in sdk_names
+
+
+# --- New tests for generate_sdk_yaml ---
+
+
+def test_generate_sdk_yaml_with_custom_endpoint() -> None:
+    """Plug llama endpoint uses port from inference_endpoint, host is always localhost."""
+    config = EnvironmentConfig(
+        name="x",
+        base_image="ubuntu@24.04",
+        inference="llama-cpp",
+        agent=None,
+        inference_endpoint="192.168.1.5:9000",
+    )
+    doc = _parse(generate_sdk_yaml(config))
+    assert doc["plugs"]["llama"]["endpoint"] == "localhost:9000"
+
+
+def test_generate_sdk_yaml_default_endpoint() -> None:
+    """Plug llama endpoint defaults to localhost:8080 when inference_endpoint is None."""
+    config = EnvironmentConfig(
+        name="x",
+        base_image="ubuntu@24.04",
+        inference="llama-cpp",
+        agent=None,
+        inference_endpoint=None,
+    )
+    doc = _parse(generate_sdk_yaml(config))
+    assert doc["plugs"]["llama"]["endpoint"] == "localhost:8080"
+
+
+def test_generate_sdk_yaml_returns_empty_no_inference() -> None:
+    """generate_sdk_yaml returns empty string when inference is None."""
+    config = EnvironmentConfig(
+        name="x",
+        base_image="ubuntu@24.04",
+        inference=None,
+        agent=None,
+    )
+    assert not generate_sdk_yaml(config)
+
+
+def test_omp_agent_sdk_present() -> None:
+    """Workshop YAML contains omp SDK with channel 14/edge when agent == omp."""
+    config = EnvironmentConfig(
+        name="x",
+        base_image="ubuntu@24.04",
+        inference=None,
+        agent="omp",
+    )
+    doc = _parse(generate_workshop_yaml(config))
+    sdk_names = [s["name"] for s in doc.get("sdks", [])]
+    assert "omp" in sdk_names
+    omp_sdk = next(s for s in doc["sdks"] if s["name"] == "omp")
+    assert omp_sdk["channel"] == "14/edge"
+
+
+def test_omp_no_skills_sdk() -> None:
+    """No skills entry emitted when agent == omp."""
+    config = EnvironmentConfig(
+        name="x",
+        base_image="ubuntu@24.04",
+        inference=None,
+        agent="omp",
+    )
+    doc = _parse(generate_workshop_yaml(config))
+    sdk_names = [s["name"] for s in doc.get("sdks", [])]
+    assert "skills" not in sdk_names
+
+
+def test_configurable_endpoint_in_system_slot() -> None:
+    """System slot endpoint reflects inference_endpoint when set."""
+    config = EnvironmentConfig(
+        name="x",
+        base_image="ubuntu@24.04",
+        inference="llama-cpp",
+        agent=None,
+        inference_endpoint="192.168.1.5:9000",
+    )
+    doc = _parse(generate_workshop_yaml(config))
+    system_sdk = next(s for s in doc["sdks"] if s["name"] == "system")
+    assert system_sdk["slots"]["llama"]["endpoint"] == "192.168.1.5:9000"
+
+
+def test_opencode_inference_uses_project_sdk() -> None:
+    """project-local-inference SDK present for agent=opencode + inference=llama-cpp."""
+    doc = _parse(generate_workshop_yaml(_full_config()))
+    sdk_names = [s["name"] for s in doc.get("sdks", [])]
+    assert "project-local-inference" in sdk_names
+
+
+def test_generate_sdk_yaml_raises_on_malformed_endpoint() -> None:
+    """generate_sdk_yaml raises ValueError when inference_endpoint has no colon."""
+    import pytest
+
+    config = EnvironmentConfig(
+        name="x",
+        base_image="ubuntu@24.04",
+        inference="llama-cpp",
+        agent=None,
+        inference_endpoint="noport",
+    )
+    with pytest.raises(ValueError, match="port separator"):
+        generate_sdk_yaml(config)
+
+
+def test_inference_sdk_name_is_project_local_inference() -> None:
+    """Inference SDK entry in workshop.yaml is named project-local-inference, not llama-cpp."""
+    doc = _parse(generate_workshop_yaml(_full_config()))
+    sdk_names = [s["name"] for s in doc.get("sdks", [])]
+    assert "project-local-inference" in sdk_names
     assert "llama-cpp" not in sdk_names

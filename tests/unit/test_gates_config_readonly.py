@@ -4,10 +4,12 @@ Constitution requirement: tests MUST demonstrate the gate BLOCKS when the
 config file is world-writable.
 """
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from microjail.gates import GateResult
+from microjail.gates import GateResult, run_all_gates
 from microjail.gates.config_readonly import check_config_readonly
+from microjail.state import EnvironmentState
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -52,3 +54,31 @@ def test_config_readonly_gate_passes_with_owner_only_write(tmp_path: Path) -> No
     config.chmod(0o600)
     result = check_config_readonly(tmp_path)
     assert result.passed is True
+
+
+def test_config_readonly_absent_for_omp_agent(tmp_path: Path) -> None:
+    """config-readonly gate is NOT evaluated when agent is "omp"."""
+    state = EnvironmentState(
+        name="testenv",
+        base_image="ubuntu@24.04",
+        inference=None,
+        agent="omp",
+        socket_url=None,
+        created_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    results = run_all_gates(state, tmp_path)
+    assert not any(r.name == "config-readonly" for r in results)
+
+
+def test_config_readonly_absent_for_none_agent(tmp_path: Path) -> None:
+    """config-readonly gate is NOT evaluated when agent is None."""
+    state = EnvironmentState(
+        name="testenv",
+        base_image="ubuntu@24.04",
+        inference=None,
+        agent=None,
+        socket_url=None,
+        created_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    results = run_all_gates(state, tmp_path)
+    assert not any(r.name == "config-readonly" for r in results)

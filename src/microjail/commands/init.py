@@ -21,12 +21,23 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 import typer
 
-from microjail.config.models import AgentHarness, EnvironmentConfig, InferenceBackend
+from microjail.config.models import (
+    SUPPORTED_AGENTS,
+    AgentHarness,
+    EnvironmentConfig,
+    InferenceBackend,
+)
 from microjail.config.opencode import generate_opencode_config
-from microjail.config.workshop import generate_workshop_yaml
+from microjail.config.workshop import (
+    INFERENCE_PLUG_REF,
+    INFERENCE_SLOT_REF,
+    generate_sdk_yaml,
+    generate_workshop_yaml,
+)
 from microjail.state import EnvironmentState
 from microjail.workshop import client
 
@@ -45,6 +56,7 @@ def _validate_inputs(
     name: str,
     inference: str | None,
     agent: str | None,
+    inference_url: str | None = None,
 ) -> None:
     """Raise typer.Exit(1) if any input is invalid."""
     if not _NAME_RE.match(name) or len(name) > _MAX_NAME_LEN:
@@ -58,11 +70,20 @@ def _validate_inputs(
             f"Invalid value for '--inference': '{inference}' is not one of 'llama-cpp'.",
             code=1,
         )
-    if agent is not None and agent != "opencode":
+    if agent is not None and agent not in SUPPORTED_AGENTS:
+        valid = ", ".join(f"'{a}'" for a in SUPPORTED_AGENTS)
         _err(
-            f"Invalid value for '--agent': '{agent}' is not one of 'opencode'.",
+            f"Invalid value for '--agent': '{agent}' is not one of {valid}.",
             code=1,
         )
+    if inference_url is not None:
+        parsed_url = urlparse(inference_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
+            _err(
+                "Invalid value for '--inference-url': must start with http:// or https:// "
+                "and contain a host.",
+                code=1,
+            )
 
 
 def _preflight(
@@ -135,6 +156,15 @@ def _write_config_files(
     except OSError as exc:
         _err(f"Cannot write to current directory: {exc}", code=3)
 
+    if config.inference is not None:
+        sdk_yaml_content = generate_sdk_yaml(config)
+        sdk_dir = workspace / ".workshop" / "local-inference"
+        try:
+            sdk_dir.mkdir(parents=True, exist_ok=True)
+            (sdk_dir / "sdk.yaml").write_text(sdk_yaml_content)
+        except OSError as exc:
+            _err(f"Cannot write to current directory: {exc}", code=3)
+
     if agent == "opencode":
         try:
             (workspace / "opencode.jsonc").write_text(
@@ -170,6 +200,14 @@ def init(
         AgentHarness | None,
         typer.Option("--agent", help="Configure an AI agent harness."),
     ] = None,
+    inference_url: Annotated[
+        str | None,
+        typer.Option(
+            "--inference-url",
+            help="HTTP/HTTPS URL of the inference server (e.g. http://192.168.1.5:8080). "
+            "Scheme and path are stripped; host:port stored in EnvironmentConfig.",
+        ),
+    ] = None,
     force: Annotated[
         bool,
         typer.Option(
@@ -188,22 +226,40 @@ def init(
       microjail init myproject
       microjail init myproject --inference llama-cpp --agent opencode
     """
-    _validate_inputs(name, inference, agent)
+    _validate_inputs(name, inference, agent, inference_url)
 
     workspace = Path.cwd()
     already_exists = _preflight(name, workspace, agent, force=force)
 
-    socket_url: str | None = _SOCKET_URL if inference == "llama-cpp" else None
+    inference_endpoint: str | None = None
+    socket_url: str | None = None
+    if inference is not None:
+        if inference_url is not None:
+            parsed_url = urlparse(inference_url)
+            inf_port = parsed_url.port or (443 if parsed_url.scheme == "https" else 80)
+            inference_endpoint = f"{parsed_url.hostname}:{inf_port}"
+        else:
+            inference_endpoint = (
+                None  # generate_workshop_yaml defaults to localhost:8080
+            )
+        socket_url = f"http://localhost:{(inference_endpoint or 'localhost:8080').rpartition(':')[2]}/v1"
     config = EnvironmentConfig(
         name=name,
         base_image=_BASE_IMAGE,
         inference=inference,
         agent=agent,
+        inference_endpoint=inference_endpoint,
     )
 
     _write_config_files(name, workspace, config, agent, socket_url)
 
     _launch_and_verify(name, workspace, already_exists=already_exists)
+
+    if config.inference is not None:
+        try:
+            client.connect(name, INFERENCE_PLUG_REF, INFERENCE_SLOT_REF, workspace)
+        except RuntimeError as exc:
+            _err(str(exc), code=3)
 
     state = EnvironmentState(
         name=name,
@@ -222,6 +278,9 @@ def init(
     state_path = workspace / ".microjail" / "state.json"
     typer.echo(f"Environment '{name}' created.\n")
     typer.echo(f"  definition      -> {workshop_def_path}")
+    if config.inference is not None:
+        sdk_yaml_path = workspace / ".workshop" / "local-inference" / "sdk.yaml"
+        typer.echo(f"  sdk.yaml        -> {sdk_yaml_path}")
     if agent == "opencode":
         typer.echo(f"  opencode.jsonc  -> {workspace / 'opencode.jsonc'}")
     typer.echo(f"  state           -> {state_path}")

@@ -83,7 +83,7 @@ def _container_name(env_name: str) -> str:
     candidates = [
         line.strip()
         for line in result.stdout.decode().splitlines()
-        if line.strip().endswith(f"-{env_name}") or line.strip() == env_name
+        if line.strip().startswith(f"{env_name}-") or line.strip() == env_name
     ]
     if not candidates:
         msg = (
@@ -92,24 +92,6 @@ def _container_name(env_name: str) -> str:
         )
         raise RuntimeError(msg)
     return candidates[0]
-
-
-def _container_is_running(project: str, container: str) -> bool:
-    """Return whether *container* is currently running.
-
-    Queries ``lxc info`` for the container status.
-    """
-    result = subprocess.run(
-        ["lxc", "--project", project, "info", container],
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return False
-    for line in result.stdout.decode().splitlines():
-        if line.strip().startswith("Status:"):
-            return "RUNNING" in line.upper()
-    return False
 
 
 def lock_egress(env_name: str, workspace: Path) -> None:
@@ -260,27 +242,6 @@ def unlock_egress(env_name: str) -> None:
                     f"{result.stderr.decode().strip()}"
                 )
 
-    # Re-attach to workshopbr0 if the container is running.
-    if _container_is_running(project, container):
-        result = subprocess.run(
-            [
-                "lxc",
-                "--project",
-                project,
-                "network",
-                "attach",
-                "workshopbr0",
-                container,
-            ],
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            errors.append(
-                f"Failed to re-attach container '{container}' to workshopbr0: "
-                f"{result.stderr.decode().strip()}"
-            )
-
     if errors:
         # At least one step failed — surface all errors together.
         msg = "Unlock completed with errors:\n" + "\n".join(errors)
@@ -358,8 +319,9 @@ def _workspace_mount_path(project: str, container: str) -> str:
         )
         raise RuntimeError(msg)
 
-    # Parse the YAML output to find a disk device whose source ends with the
-    # workspace directory pattern.  Workshop mounts as ``workspace``.
+    # Workshop always mounts the project workspace as a disk device named
+    # "workshop.project".  Extract its "path:" value rather than scanning
+    # content for the word "workspace", which does not appear in the values.
     lines = result.stdout.decode().splitlines()
     current_device: str | None = None
     device_lines: dict[str, list[str]] = {}
@@ -371,15 +333,11 @@ def _workspace_mount_path(project: str, container: str) -> str:
         elif current_device:
             device_lines[current_device].append(stripped)
 
-    for dlines in device_lines.values():
-        joined = "\n".join(dlines)
-        if "type: disk" in joined and "workspace" in joined:
-            for dline in dlines:
-                if dline.strip().startswith("path:"):
-                    return dline.split(":", 1)[1].strip()
+    proj_lines = device_lines.get("workshop.project", [])
+    for dline in proj_lines:
+        if dline.strip().startswith("path:"):
+            return dline.split(":", 1)[1].strip()
 
-    # Fallback: Workshop default is /root/<container-name-sans-project>
-    # This is used if the YAML parse above finds nothing.
     msg = (
         f"Cannot determine workspace mount path for container '{container}'. "
         "Ensure the Workshop environment is running and the workspace is mounted."

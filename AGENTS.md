@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/20260603-130901-inference-tunnel-proxy/plan.md
+specs/20260604-124513-ctf-thin-wrapper/plan.md
 <!-- SPECKIT END -->
 
 ## Commit Trailers

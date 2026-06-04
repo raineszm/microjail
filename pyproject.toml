@@ -62,6 +62,7 @@ ignore = [
     "D205",    # single blank line between summary and description optional in tests
     "PT011",   # broad pytest.raises is acceptable in tests
     "E741",    # short variable names acceptable in tests
+    "S106",    # hardcoded test credentials are not real secrets
 ]
 "tests/**/*.py" = [
     "S101",    # assert statements are expected in tests
@@ -78,6 +79,7 @@ ignore = [
     "D205",    # single blank line between summary and description optional in tests
     "PT011",   # broad pytest.raises is acceptable in tests
     "E741",    # short variable names acceptable in tests
+    "S106",    # hardcoded test credentials are not real secrets
 ]
 "conftest.py" = [
     "ANN",    # annotations are optional in test infrastructure
@@ -96,6 +98,25 @@ ignore = [
 "src/microjail/gates/__init__.py" = [
     "RUF067",  # GateResult and run_all_gates are intentionally defined here
     "PLC0415", # gate submodule imports are local to avoid circular-import risk
+]
+"ctf/agent_script.py" = [
+    "ANN",    # standalone script; type annotations are not required
+    "D",      # script docstrings are optional
+    "T201",   # print() is the intended output mechanism in agent_script
+    "INP001", # not a package member
+]
+"ctf/http_server.py" = [
+    "N802",   # do_GET is mandated by BaseHTTPRequestHandler naming convention
+    "A002",   # log_message's `format` parameter must match the parent class (LSP)
+    "ARG002", # log_message silences access logs; format/args are intentionally unused
+]
+"ctf/main.py" = [
+    "C901",    # orchestration entry point is intentionally linear; complexity is inherent
+    "PLR0912", # same as C901 — branch count reflects required cleanup paths
+    "PLR0914", # 20+ local variables are all needed for try/finally cleanup guarantees
+    "PLR0915", # statement count is the linear orchestration sequence; no dead code
+    "PLW0717", # setup + lock + monitoring in one try clause is intentional
+    "BLE001",  # cleanup blocks catch broad Exception intentionally (third-party code)
 ]
 
 [tool.ty.environment]

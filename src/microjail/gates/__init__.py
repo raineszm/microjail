@@ -48,7 +48,7 @@ def run_all_gates(state: EnvironmentState, workspace: Path) -> list[GateResult]:
     - ``state-readonly``: the readonly=true LXD device for state.json is present.
 
     Gates evaluated conditionally:
-    - ``config-readonly``: ``opencode.jsonc`` is not writable (only when agent is set).
+    - ``config-readonly``: ``opencode.jsonc`` is not writable (only when ``agent == "opencode"``).
     - ``inference-tunnel``: TCP endpoint is accepting connections (only when inference is set).
 
     The list is ordered: unconditional gates first, then conditional.
@@ -74,7 +74,7 @@ def run_all_gates(state: EnvironmentState, workspace: Path) -> list[GateResult]:
     )
 
     # Conditional gates — run only when the relevant intent flag was set at init.
-    if state.agent is not None:
+    if state.agent == "opencode":
         results.append(check_config_readonly(workspace))
     if state.inference is not None:
         results.append(check_inference_tunnel(state.socket_url))

@@ -76,7 +76,6 @@ def test_launch_passes_project_flag() -> None:
         client.launch("myenv", FAKE_PROJECT)
         mock_run.assert_called_once_with(
             ["workshop", "launch", "myenv", "--project", str(FAKE_PROJECT)],
-            capture_output=True,
             check=False,
         )
 
@@ -88,7 +87,6 @@ def test_refresh_passes_project_flag() -> None:
         client.refresh("myenv", FAKE_PROJECT)
         mock_run.assert_called_once_with(
             ["workshop", "refresh", "myenv", "--project", str(FAKE_PROJECT)],
-            capture_output=True,
             check=False,
         )
 
