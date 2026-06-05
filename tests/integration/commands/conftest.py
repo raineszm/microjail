@@ -12,6 +12,7 @@ import pytest
 from typer.testing import CliRunner
 
 from microjail.cli import app
+from tests.integration.commands._helpers import await_env_removed
 
 runner = CliRunner()
 
@@ -41,6 +42,7 @@ def lxd_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generato
             capture_output=True,
             check=False,
         )
+        await_env_removed(name)
 
 
 @pytest.fixture
@@ -69,3 +71,4 @@ def lxd_inference_environment(
             capture_output=True,
             check=False,
         )
+        await_env_removed(name)

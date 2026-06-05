@@ -4,10 +4,14 @@ Requires a live Workshop + LXD installation.  Tests are skipped automatically
 when the required services are unavailable; long-running tests (those that
 create containers) additionally require ``--run-long``.
 
-Each test receives a ``workspace`` fixture that provides an isolated temp
-directory as the working directory. Environment teardown is handled by a
-dedicated ``workshop_env`` fixture that yields the environment name and
-removes it unconditionally on exit — the test body never needs try/finally.
+Each test receives a ``workspace`` fixture providing an isolated temp directory
+as the working directory.  Environment teardown is handled by ``us1_env`` and
+``us2_env`` fixtures that yield the environment name and remove it
+unconditionally on exit — the test body never needs try/finally.
+
+Teardown calls ``await_env_removed`` after ``workshop remove`` to block until
+LXD has fully deleted the container.  This prevents the rapid-remove/launch
+race that causes subsequent ``workshop launch`` calls to block indefinitely.
 """
 
 import json
@@ -15,15 +19,16 @@ import subprocess
 import uuid
 from typing import TYPE_CHECKING
 
-import pytest
-from ruamel.yaml import YAML
-from typer.testing import CliRunner
-
 if TYPE_CHECKING:
     from collections.abc import Generator
     from pathlib import Path
 
+import pytest
+from ruamel.yaml import YAML
+from typer.testing import CliRunner
+
 from microjail.cli import app
+from tests.integration.commands._helpers import await_env_removed
 
 runner = CliRunner()
 
@@ -65,8 +70,10 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def us1_env(workspace: Path) -> Generator[str]:
     """Create a US1 (--inference llama-cpp --agent opencode) environment.
 
-    Yields the environment name. Removes the environment on teardown
-    regardless of whether the test passed or failed.
+    Yields the environment name.  Removes the environment on teardown
+    regardless of whether the test passed or failed, then waits until LXD has
+    fully deleted the container before returning so the next test's
+    ``workshop launch`` does not race against pending cleanup.
     """
     name = _unique_name("mj-us1")
     try:
@@ -83,13 +90,14 @@ def us1_env(workspace: Path) -> Generator[str]:
             capture_output=True,
             check=False,
         )
+        await_env_removed(name)
 
 
 @pytest.fixture
 def us2_env(workspace: Path) -> Generator[str]:
     """Create a US2 (bare, no flags) environment.
 
-    Yields the environment name. Removes the environment on teardown.
+    Same teardown guarantee as ``us1_env``.
     """
     name = _unique_name("mj-us2")
     try:
@@ -102,6 +110,7 @@ def us2_env(workspace: Path) -> Generator[str]:
             capture_output=True,
             check=False,
         )
+        await_env_removed(name)
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +134,7 @@ def test_us1_full_init_exit_zero(workspace: Path) -> None:
         capture_output=True,
         check=False,
     )
+    await_env_removed(name)
     assert result.exit_code == 0, f"Non-zero exit:\n{result.output}"
 
 
@@ -205,6 +215,7 @@ def test_us2_bare_init_exit_zero(workspace: Path) -> None:
         capture_output=True,
         check=False,
     )
+    await_env_removed(name)
     assert result.exit_code == 0, f"Non-zero exit:\n{result.output}"
 
 
@@ -293,8 +304,6 @@ def test_force_reinit_env_still_exists(workspace: Path, us1_env: str) -> None:
 @pytest.mark.long_running
 def test_us1_workshop_yaml_has_tunnel_slot(workspace: Path, us1_env: str) -> None:
     """Workshop definition contains system SDK with tunnel slot when --inference is set."""
-    from ruamel.yaml import YAML
-
     yaml_path = workspace / ".workshop" / f"{us1_env}.yaml"
     doc = YAML().load(yaml_path.read_text())
     system_sdk = next((s for s in doc["sdks"] if s["name"] == "system"), None)
@@ -308,8 +317,6 @@ def test_us1_workshop_yaml_has_tunnel_slot(workspace: Path, us1_env: str) -> Non
 @pytest.mark.long_running
 def test_us1_workshop_yaml_has_tunnel_plug(workspace: Path, us1_env: str) -> None:
     """Workshop definition contains project SDK with tunnel plug when --inference is set."""
-    from ruamel.yaml import YAML
-
     yaml_path = workspace / ".workshop" / f"{us1_env}.yaml"
     doc = YAML().load(yaml_path.read_text())
     llama_sdk = next((s for s in doc["sdks"] if s["name"] == "llama-cpp"), None)
@@ -322,8 +329,6 @@ def test_us1_workshop_yaml_has_tunnel_plug(workspace: Path, us1_env: str) -> Non
 @pytest.mark.long_running
 def test_us2_workshop_yaml_no_tunnel_entries(workspace: Path, us2_env: str) -> None:
     """Workshop definition has no tunnel entries when --inference is not set."""
-    from ruamel.yaml import YAML
-
     yaml_path = workspace / ".workshop" / f"{us2_env}.yaml"
     yaml_str = yaml_path.read_text()
     doc = YAML().load(yaml_str)
@@ -367,8 +372,6 @@ def test_us2_state_json_null_socket_url(workspace: Path, us2_env: str) -> None:
 @pytest.mark.long_running
 def test_force_reinit_preserves_tunnel_config(workspace: Path, us1_env: str) -> None:
     """--force re-initialisation preserves tunnel config in workshop.yaml."""
-    from ruamel.yaml import YAML
-
     result = runner.invoke(
         app,
         ["init", us1_env, "--inference", "llama-cpp", "--agent", "opencode", "--force"],
