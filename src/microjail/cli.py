@@ -16,13 +16,3 @@ app.command("init")(init)
 app.command("lock")(lock)
 app.command("unlock")(unlock)
 app.command("run")(run)
-
-
-@app.callback()
-def root() -> None:
-    """Manage ephemeral, network-sealed workload environments."""
-
-
-def main() -> None:
-    """Run the microjail CLI."""
-    app()

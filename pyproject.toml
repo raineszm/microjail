@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-microjail = "microjail.cli:main"
+microjail = "microjail.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.11.16,<0.12.0"]
