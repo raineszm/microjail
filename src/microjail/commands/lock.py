@@ -17,11 +17,12 @@ from pathlib import Path
 import typer
 
 from microjail.gates import run_all_gates
-from microjail.lxd.network import lock_egress, unlock_egress
-from microjail.state import STATE_DIR, STATE_FILE, EnvironmentState
+from microjail.output import err
+from microjail.state import State, StateError
+from microjail.wrappers.lxd import lock_egress, unlock_egress
 
 
-def perform_lock(state: EnvironmentState, workspace: Path) -> None:
+def perform_lock(state: State, workspace: Path) -> None:
     """Sever egress and verify all gates for *state*.
 
     On success the state file is updated with ``locked = True``.
@@ -68,21 +69,10 @@ def lock() -> None:
       microjail lock
     """
     workspace = Path.cwd()
-    state_path = workspace / STATE_DIR / STATE_FILE
-
-    if not state_path.exists():
-        typer.echo(
-            "Error: No microjail environment found in the current directory. "
-            "Run 'microjail init' first.",
-            err=True,
-        )
-        raise typer.Exit(1)
-
     try:
-        state = EnvironmentState.from_json(workspace)
-    except ValueError as exc:
-        typer.echo(f"Error: Cannot read state file: {exc}", err=True)
-        raise typer.Exit(1) from exc
+        state = State.load(workspace)
+    except StateError as exc:
+        err(str(exc))
 
     if state.locked:
         typer.echo(f"Environment '{state.name}' is already locked.")
@@ -91,7 +81,6 @@ def lock() -> None:
     try:
         perform_lock(state, workspace)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
+        err(str(exc))
 
     typer.echo(f"Environment '{state.name}' locked. All gates passed.")

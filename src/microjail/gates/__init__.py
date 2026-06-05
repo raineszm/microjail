@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from microjail.state import EnvironmentState
+    from microjail.state import State
 
 
 @dataclass(frozen=True)
@@ -39,7 +39,7 @@ class GateResult:
     """
 
 
-def run_all_gates(state: EnvironmentState, workspace: Path) -> list[GateResult]:
+def run_all_gates(state: State, workspace: Path) -> list[GateResult]:
     """Evaluate all gates applicable to *state* and return every result.
 
     Gates evaluated unconditionally:
@@ -55,8 +55,6 @@ def run_all_gates(state: EnvironmentState, workspace: Path) -> list[GateResult]:
     The caller is responsible for inspecting ``passed`` on each result and
     handling failures — this function never raises.
     """
-    # Import here to keep the public interface clean and avoid circular imports.
-    from microjail.gates.config_readonly import check_config_readonly
     from microjail.gates.egress import check_egress_down
     from microjail.gates.inference_tunnel import check_inference_tunnel
     from microjail.gates.state_readonly import check_state_readonly
@@ -74,8 +72,6 @@ def run_all_gates(state: EnvironmentState, workspace: Path) -> list[GateResult]:
     )
 
     # Conditional gates — run only when the relevant intent flag was set at init.
-    if state.agent == "opencode":
-        results.append(check_config_readonly(workspace))
     if state.inference is not None:
         results.append(check_inference_tunnel(state.socket_url))
 

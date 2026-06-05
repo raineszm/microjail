@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from microjail.state import STATE_DIR, STATE_FILE, EnvironmentState
+from microjail.state import STATE_DIR, STATE_FILE, State
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -17,7 +17,7 @@ def tmp_workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_state(**overrides: object) -> EnvironmentState:
+def _make_state(**overrides: object) -> State:
     defaults: dict[str, object] = {
         "name": "testenv",
         "base_image": "ubuntu@26.04",
@@ -27,7 +27,7 @@ def _make_state(**overrides: object) -> EnvironmentState:
         "created_at": datetime(2026, 5, 29, 15, 41, 52, tzinfo=UTC),
     }
     defaults.update(overrides)
-    return EnvironmentState(**defaults)  # type: ignore[arg-type]
+    return State(**defaults)  # type: ignore[arg-type]
 
 
 def test_round_trip_full(tmp_workspace: Path) -> None:
@@ -38,7 +38,7 @@ def test_round_trip_full(tmp_workspace: Path) -> None:
     state_path = tmp_workspace / STATE_DIR / STATE_FILE
     assert state_path.exists(), "state.json was not created"
 
-    loaded = EnvironmentState.from_json(tmp_workspace)
+    loaded = State.from_json(tmp_workspace)
     assert loaded.name == original.name
     assert loaded.base_image == original.base_image
     assert loaded.inference == original.inference
@@ -52,7 +52,7 @@ def test_round_trip_null_inference_agent(tmp_workspace: Path) -> None:
     original = _make_state(inference=None, agent=None, socket_url=None)
     original.to_json(tmp_workspace)
 
-    loaded = EnvironmentState.from_json(tmp_workspace)
+    loaded = State.from_json(tmp_workspace)
     assert loaded.inference is None
     assert loaded.agent is None
     assert loaded.socket_url is None
@@ -70,7 +70,7 @@ def test_created_at_iso8601(tmp_workspace: Path) -> None:
 def test_missing_state_file_raises(tmp_workspace: Path) -> None:
     """from_json raises FileNotFoundError when state.json is absent."""
     with pytest.raises(FileNotFoundError):
-        EnvironmentState.from_json(tmp_workspace)
+        State.from_json(tmp_workspace)
 
 
 def test_invalid_json_raises(tmp_workspace: Path) -> None:
@@ -80,4 +80,4 @@ def test_invalid_json_raises(tmp_workspace: Path) -> None:
     (state_dir / STATE_FILE).write_text("not json")
 
     with pytest.raises(ValueError, match="not valid JSON"):
-        EnvironmentState.from_json(tmp_workspace)
+        State.from_json(tmp_workspace)

@@ -9,14 +9,14 @@ import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from microjail.state import EnvironmentState
+from microjail.state import State
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _base_state(*, locked: bool = False) -> EnvironmentState:
-    return EnvironmentState(
+def _base_state(*, locked: bool = False) -> State:
+    return State(
         name="test-env",
         base_image="ubuntu@26.04",
         inference=None,
@@ -37,7 +37,7 @@ def test_locked_field_round_trip_false(tmp_path: Path) -> None:
     """``locked=False`` survives a write/read cycle."""
     state = _base_state(locked=False)
     state.to_json(tmp_path)
-    loaded = EnvironmentState.from_json(tmp_path)
+    loaded = State.from_json(tmp_path)
     assert loaded.locked is False
 
 
@@ -45,7 +45,7 @@ def test_locked_field_round_trip_true(tmp_path: Path) -> None:
     """``locked=True`` survives a write/read cycle."""
     state = _base_state(locked=True)
     state.to_json(tmp_path)
-    loaded = EnvironmentState.from_json(tmp_path)
+    loaded = State.from_json(tmp_path)
     assert loaded.locked is True
 
 
@@ -71,5 +71,5 @@ def test_locked_field_absent_in_old_state_file_defaults_to_false(
     del raw["locked"]
     state_path.write_text(json.dumps(raw))
 
-    loaded = EnvironmentState.from_json(tmp_path)
+    loaded = State.from_json(tmp_path)
     assert loaded.locked is False

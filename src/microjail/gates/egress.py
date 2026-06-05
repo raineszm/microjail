@@ -9,7 +9,7 @@ Principles I and II (safety first; correctness over confidence).
 import subprocess
 
 from microjail.gates import GateResult
-from microjail.lxd.network import _workshop_project
+from microjail.wrappers.lxd import _workshop_project
 
 _PROBE_HOST = "8.8.8.8"
 _PROBE_TIMEOUT = "3"  # seconds, as string for ping -W

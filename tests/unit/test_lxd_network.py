@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from microjail.lxd.network import lock_egress, unlock_egress
+from microjail.wrappers.lxd import lock_egress, unlock_egress
 
 _WORKSPACE = "/tmp/workspace"
 _CONTAINER = "workshop.123-myproject"
@@ -52,9 +52,9 @@ def _mock_fail(stderr: str = "error") -> MagicMock:
 
 
 @patch("subprocess.run")
-@patch("microjail.lxd.network._workshop_project", return_value=_PROJECT)
-@patch("microjail.lxd.network._container_name", return_value=_CONTAINER)
-@patch("microjail.lxd.network._workspace_mount_path", return_value="/root/myproject")
+@patch("microjail.wrappers.lxd._workshop_project", return_value=_PROJECT)
+@patch("microjail.wrappers.lxd._container_name", return_value=_CONTAINER)
+@patch("microjail.wrappers.lxd._workspace_mount_path", return_value="/root/myproject")
 def test_lock_egress_clears_routes_on_all_nics(
     mock_mount: MagicMock,
     mock_container: MagicMock,
@@ -82,9 +82,9 @@ def test_lock_egress_clears_routes_on_all_nics(
 
 
 @patch("subprocess.run")
-@patch("microjail.lxd.network._workshop_project", return_value=_PROJECT)
-@patch("microjail.lxd.network._container_name", return_value=_CONTAINER)
-@patch("microjail.lxd.network._workspace_mount_path", return_value="/root/myproject")
+@patch("microjail.wrappers.lxd._workshop_project", return_value=_PROJECT)
+@patch("microjail.wrappers.lxd._container_name", return_value=_CONTAINER)
+@patch("microjail.wrappers.lxd._workspace_mount_path", return_value="/root/myproject")
 def test_lock_egress_raises_on_nic_config_failure(
     mock_mount: MagicMock,
     mock_container: MagicMock,
@@ -109,8 +109,8 @@ def test_lock_egress_raises_on_nic_config_failure(
 
 
 @patch("subprocess.run")
-@patch("microjail.lxd.network._workshop_project", return_value=_PROJECT)
-@patch("microjail.lxd.network._container_name", return_value=_CONTAINER)
+@patch("microjail.wrappers.lxd._workshop_project", return_value=_PROJECT)
+@patch("microjail.wrappers.lxd._container_name", return_value=_CONTAINER)
 def test_unlock_egress_restores_routes_on_all_nics(
     mock_container: MagicMock,
     mock_project: MagicMock,
@@ -138,8 +138,8 @@ def test_unlock_egress_restores_routes_on_all_nics(
 
 
 @patch("subprocess.run")
-@patch("microjail.lxd.network._workshop_project", return_value=_PROJECT)
-@patch("microjail.lxd.network._container_name", return_value=_CONTAINER)
+@patch("microjail.wrappers.lxd._workshop_project", return_value=_PROJECT)
+@patch("microjail.wrappers.lxd._container_name", return_value=_CONTAINER)
 def test_unlock_egress_survives_individual_failures(
     mock_container: MagicMock,
     mock_project: MagicMock,

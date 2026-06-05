@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from microjail.cli import app
-from microjail.state import EnvironmentState
+from microjail.state import State
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,7 +19,7 @@ runner = CliRunner()
 
 
 def _write_state(tmp_path: Path, *, locked: bool) -> None:
-    state = EnvironmentState(
+    state = State(
         name="test-env",
         base_image="ubuntu@26.04",
         inference=None,
@@ -64,7 +64,7 @@ def test_unlock_restores_egress_and_updates_state(
     assert "unlocked" in result.output
     mock_unlock.assert_called_once()
 
-    loaded = EnvironmentState.from_json(tmp_path)
+    loaded = State.from_json(tmp_path)
     assert loaded.locked is False
 
 

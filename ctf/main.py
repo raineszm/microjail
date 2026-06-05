@@ -30,9 +30,9 @@ from microjail.config.workshop import (
     generate_sdk_yaml,
     generate_workshop_yaml,
 )
-from microjail.lxd.network import lock_egress, unlock_egress
-from microjail.state import EnvironmentState
-from microjail.workshop import client as workshop_client
+from microjail.state import State
+from microjail.wrappers import workshop as workshop_client
+from microjail.wrappers.lxd import lock_egress, unlock_egress
 
 app = typer.Typer(
     name="ctf",
@@ -263,7 +263,7 @@ def run(
         (workspace / "ctf_prompt.txt").write_text(prompt)
 
         # State.json required by lock_egress (reads workspace/.microjail/state.json).
-        state = EnvironmentState(
+        state = State(
             name=env_name,
             base_image="ubuntu@24.04",
             inference="llama-cpp",

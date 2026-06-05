@@ -13,7 +13,7 @@ Status: Accepted
 - Keep config generation pure and isolated in `microjail.config.*` modules.
 - Persist environment metadata in `.microjail/state.json` via `EnvironmentState`.
 - Write all local files before invoking Workshop so a failed create cannot leave a remote environment without matching local state.
-- Use a thin `microjail.workshop.client` subprocess wrapper for Workshop/LXD CLI calls instead of a broad SDK abstraction.
+- Use a thin `microjail.wrapper.workshop` subprocess wrapper for Workshop/LXD CLI calls instead of a broad SDK abstraction.
 - Verify the environment exists after creation; do not infer success from a zero exit alone.
 
 ## Consequences

@@ -21,11 +21,11 @@ def test_non_writable_workspace_exits_nonzero(tmp_path: Path) -> None:
     with (
         patch("microjail.commands.init.os.access", return_value=False),
         patch(
-            "microjail.commands.init.client.check_prerequisites",
+            "microjail.commands.init.workshop.check_prerequisites",
             return_value=None,
         ),
         patch(
-            "microjail.commands.init.client.environment_exists",
+            "microjail.commands.init.workshop.environment_exists",
             return_value=False,
         ),
     ):
@@ -40,11 +40,11 @@ def test_non_writable_workspace_message_contains_path(tmp_path: Path) -> None:
     with (
         patch("microjail.commands.init.os.access", return_value=False),
         patch(
-            "microjail.commands.init.client.check_prerequisites",
+            "microjail.commands.init.workshop.check_prerequisites",
             return_value=None,
         ),
         patch(
-            "microjail.commands.init.client.environment_exists",
+            "microjail.commands.init.workshop.environment_exists",
             return_value=False,
         ),
     ):
@@ -60,15 +60,15 @@ def test_non_writable_workspace_no_workshop_call(tmp_path: Path) -> None:
     with (
         patch("microjail.commands.init.os.access", return_value=False),
         patch(
-            "microjail.commands.init.client.check_prerequisites",
+            "microjail.commands.init.workshop.check_prerequisites",
             return_value=None,
         ) as mock_prereq,
         patch(
-            "microjail.commands.init.client.environment_exists",
+            "microjail.commands.init.workshop.environment_exists",
             return_value=False,
         ),
         patch(
-            "microjail.commands.init.client.launch",
+            "microjail.commands.init.workshop.launch",
         ) as mock_launch,
     ):
         runner.invoke(app, ["init", "testenv"], catch_exceptions=False)
@@ -85,11 +85,11 @@ def test_writable_workspace_proceeds(tmp_path: Path) -> None:
     with (
         patch("microjail.commands.init.os.access", return_value=True),
         patch(
-            "microjail.commands.init.client.check_prerequisites",
+            "microjail.commands.init.workshop.check_prerequisites",
             return_value=None,
         ),
         patch(
-            "microjail.commands.init.client.environment_exists",
+            "microjail.commands.init.workshop.environment_exists",
             return_value=True,  # triggers "already exists" exit so we stop early
         ),
     ):
@@ -105,20 +105,20 @@ def test_force_bypasses_environment_exists_check(tmp_path: Path) -> None:
     with (
         patch("microjail.commands.init.os.access", return_value=True),
         patch(
-            "microjail.commands.init.client.check_prerequisites",
+            "microjail.commands.init.workshop.check_prerequisites",
             return_value=None,
         ),
         patch(
-            "microjail.commands.init.client.environment_exists",
+            "microjail.commands.init.workshop.environment_exists",
             return_value=True,  # environment already exists
         ),
         patch("microjail.commands.init.Path.cwd", return_value=tmp_path),
         patch(
-            "microjail.commands.init.client.refresh",
+            "microjail.commands.init.workshop.refresh",
             return_value=None,
         ),
         patch(
-            "microjail.commands.init.client.verify_exists",
+            "microjail.commands.init.workshop.verify_exists",
             return_value=None,
         ),
     ):
@@ -135,16 +135,18 @@ def test_force_calls_refresh_not_launch_when_env_exists(tmp_path: Path) -> None:
     """When environment already exists, --force triggers refresh, not launch."""
     with (
         patch("microjail.commands.init.os.access", return_value=True),
-        patch("microjail.commands.init.client.check_prerequisites", return_value=None),
-        patch("microjail.commands.init.client.environment_exists", return_value=True),
+        patch(
+            "microjail.commands.init.workshop.check_prerequisites", return_value=None
+        ),
+        patch("microjail.commands.init.workshop.environment_exists", return_value=True),
         patch("microjail.commands.init.Path.cwd", return_value=tmp_path),
         patch(
-            "microjail.commands.init.client.refresh", return_value=None
+            "microjail.commands.init.workshop.refresh", return_value=None
         ) as mock_refresh,
         patch(
-            "microjail.commands.init.client.launch", return_value=None
+            "microjail.commands.init.workshop.launch", return_value=None
         ) as mock_launch,
-        patch("microjail.commands.init.client.verify_exists", return_value=None),
+        patch("microjail.commands.init.workshop.verify_exists", return_value=None),
     ):
         runner.invoke(app, ["init", "testenv", "--force"], catch_exceptions=False)
 
@@ -156,16 +158,20 @@ def test_new_env_calls_launch_not_refresh(tmp_path: Path) -> None:
     """When no environment exists, init calls launch, not refresh."""
     with (
         patch("microjail.commands.init.os.access", return_value=True),
-        patch("microjail.commands.init.client.check_prerequisites", return_value=None),
-        patch("microjail.commands.init.client.environment_exists", return_value=False),
+        patch(
+            "microjail.commands.init.workshop.check_prerequisites", return_value=None
+        ),
+        patch(
+            "microjail.commands.init.workshop.environment_exists", return_value=False
+        ),
         patch("microjail.commands.init.Path.cwd", return_value=tmp_path),
         patch(
-            "microjail.commands.init.client.refresh", return_value=None
+            "microjail.commands.init.workshop.refresh", return_value=None
         ) as mock_refresh,
         patch(
-            "microjail.commands.init.client.launch", return_value=None
+            "microjail.commands.init.workshop.launch", return_value=None
         ) as mock_launch,
-        patch("microjail.commands.init.client.verify_exists", return_value=None),
+        patch("microjail.commands.init.workshop.verify_exists", return_value=None),
     ):
         runner.invoke(app, ["init", "testenv"], catch_exceptions=False)
 
@@ -180,11 +186,15 @@ def test_state_not_written_when_creation_fails(
     """state.json is only written after launch and verification succeed."""
     patches = [
         patch("microjail.commands.init.os.access", return_value=True),
-        patch("microjail.commands.init.client.check_prerequisites", return_value=None),
-        patch("microjail.commands.init.client.environment_exists", return_value=False),
+        patch(
+            "microjail.commands.init.workshop.check_prerequisites", return_value=None
+        ),
+        patch(
+            "microjail.commands.init.workshop.environment_exists", return_value=False
+        ),
         patch("microjail.commands.init.Path.cwd", return_value=tmp_path),
-        patch("microjail.commands.init.client.launch", return_value=None),
-        patch("microjail.commands.init.client.verify_exists", return_value=None),
+        patch("microjail.commands.init.workshop.launch", return_value=None),
+        patch("microjail.commands.init.workshop.verify_exists", return_value=None),
     ]
     with (
         patches[0],

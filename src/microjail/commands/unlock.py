@@ -9,8 +9,9 @@ from pathlib import Path
 
 import typer
 
-from microjail.lxd.network import unlock_egress
-from microjail.state import STATE_DIR, STATE_FILE, EnvironmentState
+from microjail.output import err, warn
+from microjail.state import State, StateError
+from microjail.wrappers.lxd import unlock_egress
 
 
 def unlock() -> None:
@@ -29,21 +30,10 @@ def unlock() -> None:
       microjail unlock
     """
     workspace = Path.cwd()
-    state_path = workspace / STATE_DIR / STATE_FILE
-
-    if not state_path.exists():
-        typer.echo(
-            "Error: No microjail environment found in the current directory. "
-            "Run 'microjail init' first.",
-            err=True,
-        )
-        raise typer.Exit(1)
-
     try:
-        state = EnvironmentState.from_json(workspace)
-    except ValueError as exc:
-        typer.echo(f"Error: Cannot read state file: {exc}", err=True)
-        raise typer.Exit(1) from exc
+        state = State.load(workspace)
+    except StateError as exc:
+        err(str(exc))
 
     if not state.locked:
         typer.echo(f"Environment '{state.name}' is already unlocked.")
@@ -52,15 +42,12 @@ def unlock() -> None:
     try:
         unlock_egress(state.name)
     except RuntimeError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
+        err(str(exc))
 
     state.locked = False
     try:
         state.to_json(workspace)
     except OSError as exc:
-        typer.echo(
-            f"Warning: Could not update state file after unlock: {exc}", err=True
-        )
+        warn(f"Could not update state file after unlock: {exc}")
 
     typer.echo(f"Environment '{state.name}' unlocked.")

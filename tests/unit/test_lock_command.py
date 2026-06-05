@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from microjail.cli import app
 from microjail.gates import GateResult
-from microjail.state import EnvironmentState
+from microjail.state import State
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,7 +21,7 @@ runner = CliRunner()
 
 
 def _write_state(tmp_path: Path, *, locked: bool) -> None:
-    state = EnvironmentState(
+    state = State(
         name="test-env",
         base_image="ubuntu@26.04",
         inference=None,
@@ -71,7 +71,7 @@ def test_lock_success_updates_state(
     assert "locked" in result.output
     mock_lock_egress.assert_called_once()
 
-    loaded = EnvironmentState.from_json(tmp_path)
+    loaded = State.from_json(tmp_path)
     assert loaded.locked is True
 
 
@@ -101,7 +101,7 @@ def test_lock_gate_failure_triggers_egress_rollback(
     mock_unlock_egress.assert_called_once()
 
     # State must NOT be updated to locked=True after failure.
-    loaded = EnvironmentState.from_json(tmp_path)
+    loaded = State.from_json(tmp_path)
     assert loaded.locked is False
 
 

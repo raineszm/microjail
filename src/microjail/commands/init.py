@@ -26,7 +26,6 @@ from urllib.parse import urlparse
 import typer
 
 from microjail.config.models import (
-    SUPPORTED_AGENTS,
     AgentHarness,
     EnvironmentConfig,
     InferenceBackend,
@@ -38,8 +37,9 @@ from microjail.config.workshop import (
     generate_sdk_yaml,
     generate_workshop_yaml,
 )
-from microjail.state import EnvironmentState
-from microjail.workshop import client
+from microjail.output import err
+from microjail.state import State
+from microjail.wrappers import workshop
 
 _NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9-]*$")
 _MAX_NAME_LEN = 63
@@ -47,46 +47,29 @@ _SOCKET_URL = "http://127.0.0.1:8080/v1"
 _BASE_IMAGE = "ubuntu@26.04"
 
 
-def _err(msg: str, code: int = 1) -> None:
-    typer.echo(f"Error: {msg}", err=True)
-    raise typer.Exit(code)
-
-
-def _validate_inputs(
-    name: str,
-    inference: str | None,
-    agent: str | None,
-    inference_url: str | None = None,
-) -> None:
-    """Raise typer.Exit(1) if any input is invalid."""
-    if not _NAME_RE.match(name) or len(name) > _MAX_NAME_LEN:
-        _err(
-            f"Invalid environment name '{name}'. Names must start with a letter, "
-            "contain only letters, digits, and hyphens, and be at most 63 characters.",
-            code=1,
+def validate_name(value: str) -> str:
+    """Typer callback: validate the ``name`` argument format."""
+    if not _NAME_RE.match(value) or len(value) > _MAX_NAME_LEN:
+        raise typer.BadParameter(
+            f"'{value}' is invalid. Names must start with a letter, "
+            "contain only letters, digits, and hyphens, and be at most 63 characters."
         )
-    if inference is not None and inference != "llama-cpp":
-        _err(
-            f"Invalid value for '--inference': '{inference}' is not one of 'llama-cpp'.",
-            code=1,
-        )
-    if agent is not None and agent not in SUPPORTED_AGENTS:
-        valid = ", ".join(f"'{a}'" for a in SUPPORTED_AGENTS)
-        _err(
-            f"Invalid value for '--agent': '{agent}' is not one of {valid}.",
-            code=1,
-        )
-    if inference_url is not None:
-        parsed_url = urlparse(inference_url)
-        if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
-            _err(
-                "Invalid value for '--inference-url': must start with http:// or https:// "
-                "and contain a host.",
-                code=1,
-            )
+    return value
 
 
-def _preflight(
+def validate_inference_url(value: str | None) -> str | None:
+    """Typer callback: validate the ``--inference-url`` option."""
+    if value is None:
+        return value
+    parsed_url = urlparse(value)
+    if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
+        raise typer.BadParameter(
+            f"'{value}' is invalid. Must start with http:// or https:// and contain a host."
+        )
+    return value
+
+
+def preflight(
     name: str,
     workspace: Path,
     agent: str | None,
@@ -99,20 +82,20 @@ def _preflight(
     ``force=True`` so the caller can choose ``refresh`` over ``launch``).
     """
     try:
-        client.check_prerequisites()
+        workshop.check_prerequisites()
     except RuntimeError as exc:
-        _err(str(exc), code=2)
+        err(str(exc), code=2)
 
     if not os.access(workspace, os.W_OK):
-        _err(
+        err(
             f"Workspace directory '{workspace}' is not writable. "
             "Ensure you have write permission before running microjail init.",
             code=2,
         )
 
-    already_exists = client.environment_exists(name, workspace)
+    already_exists = workshop.environment_exists(name, workspace)
     if not force and already_exists:
-        _err(
+        err(
             f"Environment '{name}' already exists. Use --force to reinitialise.",
             code=2,
         )
@@ -120,20 +103,20 @@ def _preflight(
     if not force:
         workshop_def_path = workspace / ".workshop" / f"{name}.yaml"
         if workshop_def_path.exists():
-            _err(
+            err(
                 f".workshop/{name}.yaml already exists. Use --force to overwrite.",
                 code=2,
             )
 
         state_path = workspace / ".microjail" / "state.json"
         if state_path.exists():
-            _err(
+            err(
                 ".microjail/state.json already exists in this directory. Use --force to overwrite.",
                 code=2,
             )
 
         if agent == "opencode" and (workspace / "opencode.jsonc").exists():
-            _err(
+            err(
                 "opencode.jsonc already exists in this directory. Use --force to overwrite.",
                 code=2,
             )
@@ -141,7 +124,7 @@ def _preflight(
     return already_exists
 
 
-def _write_config_files(
+def write_config_files(
     name: str,
     workspace: Path,
     config: EnvironmentConfig,
@@ -154,7 +137,7 @@ def _write_config_files(
         workshop_def_path.parent.mkdir(parents=True, exist_ok=True)
         workshop_def_path.write_text(generate_workshop_yaml(config))
     except OSError as exc:
-        _err(f"Cannot write to current directory: {exc}", code=3)
+        err(f"Cannot write to current directory: {exc}", code=3)
 
     if config.inference is not None:
         sdk_yaml_content = generate_sdk_yaml(config)
@@ -163,7 +146,7 @@ def _write_config_files(
             sdk_dir.mkdir(parents=True, exist_ok=True)
             (sdk_dir / "sdk.yaml").write_text(sdk_yaml_content)
         except OSError as exc:
-            _err(f"Cannot write to current directory: {exc}", code=3)
+            err(f"Cannot write to current directory: {exc}", code=3)
 
     if agent == "opencode":
         try:
@@ -171,27 +154,26 @@ def _write_config_files(
                 generate_opencode_config(socket_url)
             )
         except OSError as exc:
-            _err(f"Cannot write to current directory: {exc}", code=3)
+            err(f"Cannot write to current directory: {exc}", code=3)
 
 
-def _launch_and_verify(name: str, workspace: Path, *, already_exists: bool) -> None:
+def launch_and_verify(name: str, workspace: Path, *, already_exists: bool) -> None:
     """Launch or refresh the workshop environment, then verify it exists."""
     try:
         if already_exists:
-            client.refresh(name, workspace)
+            workshop.refresh(name, workspace)
         else:
-            client.launch(name, workspace)
-    except RuntimeError as exc:
-        _err(str(exc), code=3)
+            workshop.launch(name, workspace)
 
-    try:
-        client.verify_exists(name, workspace)
+        workshop.verify_exists(name, workspace)
     except RuntimeError as exc:
-        _err(str(exc), code=3)
+        err(str(exc), code=3)
 
 
 def init(
-    name: Annotated[str, typer.Argument(help="Workshop environment name.")],
+    name: Annotated[
+        str, typer.Argument(help="Workshop environment name.", callback=validate_name)
+    ],
     inference: Annotated[
         InferenceBackend | None,
         typer.Option("--inference", help="Configure a local inference backend."),
@@ -206,6 +188,7 @@ def init(
             "--inference-url",
             help="HTTP/HTTPS URL of the inference server (e.g. http://192.168.1.5:8080). "
             "Scheme and path are stripped; host:port stored in EnvironmentConfig.",
+            callback=validate_inference_url,
         ),
     ] = None,
     force: Annotated[
@@ -226,10 +209,8 @@ def init(
       microjail init myproject
       microjail init myproject --inference llama-cpp --agent opencode
     """
-    _validate_inputs(name, inference, agent, inference_url)
-
     workspace = Path.cwd()
-    already_exists = _preflight(name, workspace, agent, force=force)
+    already_exists = preflight(name, workspace, agent, force=force)
 
     inference_endpoint: str | None = None
     socket_url: str | None = None
@@ -251,17 +232,17 @@ def init(
         inference_endpoint=inference_endpoint,
     )
 
-    _write_config_files(name, workspace, config, agent, socket_url)
+    write_config_files(name, workspace, config, agent, socket_url)
 
-    _launch_and_verify(name, workspace, already_exists=already_exists)
+    launch_and_verify(name, workspace, already_exists=already_exists)
 
     if config.inference is not None:
         try:
-            client.connect(name, INFERENCE_PLUG_REF, INFERENCE_SLOT_REF, workspace)
+            workshop.connect(name, INFERENCE_PLUG_REF, INFERENCE_SLOT_REF, workspace)
         except RuntimeError as exc:
-            _err(str(exc), code=3)
+            err(str(exc), code=3)
 
-    state = EnvironmentState(
+    state = State(
         name=name,
         base_image=_BASE_IMAGE,
         inference=inference,
@@ -272,7 +253,7 @@ def init(
     try:
         state.to_json(workspace)
     except OSError as exc:
-        _err(f"Cannot write state to current directory: {exc}", code=3)
+        err(f"Cannot write state to current directory: {exc}", code=3)
 
     workshop_def_path = workspace / ".workshop" / f"{name}.yaml"
     state_path = workspace / ".microjail" / "state.json"

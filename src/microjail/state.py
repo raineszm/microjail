@@ -17,8 +17,20 @@ STATE_DIR = ".microjail"
 STATE_FILE = "state.json"
 
 
+class StateError(Exception):
+    """Base class for state file errors."""
+
+
+class StateNotFoundError(StateError):
+    """Raised when no ``.microjail/state.json`` exists in the workspace."""
+
+
+class StateParseError(StateError):
+    """Raised when the state file exists but cannot be parsed."""
+
+
 @dataclass
-class EnvironmentState:
+class State:
     """Persisted record of a created microjail environment."""
 
     name: str
@@ -62,7 +74,7 @@ class EnvironmentState:
         state_path.write_text(json.dumps(payload, indent=4))
 
     @classmethod
-    def from_json(cls, workspace: Path) -> EnvironmentState:
+    def from_json(cls, workspace: Path) -> State:
         """Read state from ``<workspace>/.microjail/state.json``.
 
         Raises :exc:`FileNotFoundError` if the state file does not exist.
@@ -94,3 +106,21 @@ class EnvironmentState:
         except KeyError as exc:
             msg = f"State file at {state_path} is missing required field: {exc}"
             raise ValueError(msg) from exc
+
+    @classmethod
+    def load(cls, workspace: Path) -> State:
+        """Load state from *workspace*, raising bespoke errors on failure.
+
+        Raises :exc:`StateNotFoundError` if no ``.microjail/state.json`` is
+        present.  Raises :exc:`StateParseError` if the file cannot be parsed.
+        """
+        state_path = workspace / STATE_DIR / STATE_FILE
+        if not state_path.exists():
+            raise StateNotFoundError(
+                "No microjail environment found in the current directory. "
+                "Run 'microjail init' first."
+            )
+        try:
+            return cls.from_json(workspace)
+        except ValueError as exc:
+            raise StateParseError(f"Cannot read state file: {exc}") from exc

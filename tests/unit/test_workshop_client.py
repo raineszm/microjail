@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from microjail.workshop import client
+from microjail.wrappers import workshop as client
 
 FAKE_PROJECT = Path("/tmp/fake-project")
 

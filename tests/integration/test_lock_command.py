@@ -39,11 +39,11 @@ def test_lock_state_records_locked(lxd_environment, tmp_path):  # type: ignore[n
     """After microjail lock, state.json records locked=True."""
     from pathlib import Path
 
-    from microjail.state import EnvironmentState
+    from microjail.state import State
 
     result = runner.invoke(app, ["lock"])
     assert result.exit_code == 0
-    state = EnvironmentState.from_json(Path.cwd())
+    state = State.from_json(Path.cwd())
     assert state.locked is True
 
     runner.invoke(app, ["unlock"])

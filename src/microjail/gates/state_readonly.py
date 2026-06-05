@@ -15,7 +15,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from microjail.gates import GateResult
-from microjail.lxd.network import _workshop_project
+from microjail.wrappers.lxd import _workshop_project
 
 if TYPE_CHECKING:
     from pathlib import Path
