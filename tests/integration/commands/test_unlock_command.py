@@ -15,7 +15,7 @@ runner = CliRunner()
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_unlock_restores_egress(lxd_environment):  # type: ignore[no-untyped-def]
+def test_unlock_restores_egress(_lxd_environment):  # type: ignore[no-untyped-def]
     """After microjail lock + unlock, a network probe from inside the container succeeds."""
     lock_result = runner.invoke(app, ["lock"])
     assert lock_result.exit_code == 0
@@ -28,7 +28,7 @@ def test_unlock_restores_egress(lxd_environment):  # type: ignore[no-untyped-def
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_unlock_idempotent_on_unlocked_environment(lxd_environment):  # type: ignore[no-untyped-def]
+def test_unlock_idempotent_on_unlocked_environment(_lxd_environment):  # type: ignore[no-untyped-def]
     """Calling unlock on an already-unlocked environment exits zero."""
     result = runner.invoke(app, ["unlock"])
     assert result.exit_code == 0

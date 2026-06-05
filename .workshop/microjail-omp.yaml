@@ -1,0 +1,7 @@
+name: microjail-omp
+base: ubuntu@24.04
+sdks:
+  - name: omp
+    channel: 14/edge
+  - name: skills
+    channel: latest/edge

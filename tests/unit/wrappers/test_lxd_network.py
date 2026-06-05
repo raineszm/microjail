@@ -56,9 +56,9 @@ def _mock_fail(stderr: str = "error") -> MagicMock:
 @patch("microjail.wrappers.lxd._container_name", return_value=_CONTAINER)
 @patch("microjail.wrappers.lxd._workspace_mount_path", return_value="/root/myproject")
 def test_lock_egress_clears_routes_on_all_nics(
-    mock_mount: MagicMock,
-    mock_container: MagicMock,
-    mock_project: MagicMock,
+    _mock_mount: MagicMock,
+    _mock_container: MagicMock,
+    _mock_project: MagicMock,
     mock_run: MagicMock,
 ) -> None:
     """lock_egress clears ipv4/ipv6 routes on every NIC device."""
@@ -86,9 +86,9 @@ def test_lock_egress_clears_routes_on_all_nics(
 @patch("microjail.wrappers.lxd._container_name", return_value=_CONTAINER)
 @patch("microjail.wrappers.lxd._workspace_mount_path", return_value="/root/myproject")
 def test_lock_egress_raises_on_nic_config_failure(
-    mock_mount: MagicMock,
-    mock_container: MagicMock,
-    mock_project: MagicMock,
+    _mock_mount: MagicMock,
+    _mock_container: MagicMock,
+    _mock_project: MagicMock,
     mock_run: MagicMock,
 ) -> None:
     """lock_egress raises RuntimeError if clearing routes on any NIC fails."""
@@ -112,8 +112,8 @@ def test_lock_egress_raises_on_nic_config_failure(
 @patch("microjail.wrappers.lxd._workshop_project", return_value=_PROJECT)
 @patch("microjail.wrappers.lxd._container_name", return_value=_CONTAINER)
 def test_unlock_egress_restores_routes_on_all_nics(
-    mock_container: MagicMock,
-    mock_project: MagicMock,
+    _mock_container: MagicMock,
+    _mock_project: MagicMock,
     mock_run: MagicMock,
 ) -> None:
     """unlock_egress restores ipv4/ipv6 routes on every NIC device."""
@@ -141,8 +141,8 @@ def test_unlock_egress_restores_routes_on_all_nics(
 @patch("microjail.wrappers.lxd._workshop_project", return_value=_PROJECT)
 @patch("microjail.wrappers.lxd._container_name", return_value=_CONTAINER)
 def test_unlock_egress_survives_individual_failures(
-    mock_container: MagicMock,
-    mock_project: MagicMock,
+    _mock_container: MagicMock,
+    _mock_project: MagicMock,
     mock_run: MagicMock,
 ) -> None:
     """unlock_egress raises RuntimeError aggregating all individual failures."""

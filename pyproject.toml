@@ -28,96 +28,23 @@ dev = ["pytest>=9.0.3", "pyupgrade>=3.21.2", "ruff>=0.15.15", "ty>=0.0.40"]
 target-version = "py314"
 
 [tool.ruff.lint]
-preview = true
-select = ["ALL"]
-ignore = [
-    "FBT002", # boolean default in typer CLI definitions is idiomatic
-    "E501",   # line too long; formatter handles wrapping
-    "COM812", # missing trailing comma; conflicts with ruff formatter
-    "CPY",    # copyright headers are not required here
-    "DOC",    # pydoclint docstring-content rules are too strict for this project
-    "D203",   # conflicts with D211
-    "D213",   # conflicts with D212
-    "S404",   # subprocess is expected for CLI/workload orchestration
-    "S603",   # subprocess is invoked with argv lists (no shell); inputs are passed as separate args
-    "S607",   # standard executable lookup is acceptable for CLI wrappers
-    "S108",   # temporary paths are expected during sandbox/container setup
-    "TID252", # relative imports are idiomatic within the package
-    "TRY003", # inline exception messages are readable for this project
-    "EM",     # overly verbose for small CLI exception paths
+select = [
+    "E",   # pycodestyle
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "C4",  # flake8-comprehensions
+    "PIE", # flake8-pie
+    "RUF", # Ruff-specific rules
+    "ARG", # flake8-unused-arguments
+    "PTH", # flake8-use-pathlib
+    "TC",  # flake8-type-checking
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"test_*.py" = [
-    "S101",    # assert statements are expected in tests
-    "ARG",     # fixtures may be used implicitly
-    "FBT",     # common in pytest.mark.parametrize
-    "PLR2004", # acceptable in test assertions
-    "S311",    # cryptographic strength is not needed in tests
-    "S603",    # test helpers use controlled subprocess inputs
-    "D103",    # test names are self-documenting
-    "ANN",     # test annotations are optional
-    "PLC0415", # local imports acceptable in test helpers
-    "PLC2701", # testing private implementation details is acceptable
-    "TC003",   # pathlib.Path used at runtime in test fixtures
-    "D205",    # single blank line between summary and description optional in tests
-    "PT011",   # broad pytest.raises is acceptable in tests
-    "E741",    # short variable names acceptable in tests
-    "S106",    # hardcoded test credentials are not real secrets
-]
-"tests/**/*.py" = [
-    "S101",    # assert statements are expected in tests
-    "ARG",     # fixtures may be used implicitly
-    "FBT",     # common in pytest.mark.parametrize
-    "PLR2004", # acceptable in test assertions
-    "S311",    # cryptographic strength is not needed in tests
-    "S603",    # test helpers use controlled subprocess inputs
-    "D103",    # test names are self-documenting
-    "ANN",     # test annotations are optional
-    "PLC0415", # local imports acceptable in test helpers
-    "PLC2701", # testing private implementation details is acceptable
-    "TC003",   # pathlib.Path used at runtime in test fixtures
-    "D205",    # single blank line between summary and description optional in tests
-    "PT011",   # broad pytest.raises is acceptable in tests
-    "E741",    # short variable names acceptable in tests
-    "S106",    # hardcoded test credentials are not real secrets
-]
-"conftest.py" = [
-    "ANN",    # annotations are optional in test infrastructure
-    "D103",   # pytest hooks/fixtures are self-describing
-    "SLF001", # test teardown may intentionally reset internals
-]
-"tests/conftest.py" = [
-    "ANN",    # annotations are optional in test infrastructure
-    "D103",   # pytest hooks/fixtures are self-describing
-    "SLF001", # test teardown may intentionally reset internals
-]
-"src/microjail/commands/run.py" = [
-    "PLR0913", # _write_run_log is a log helper; 6 args is justified
-    "PLR0917", # same as PLR0913
-]
-"src/microjail/gates/__init__.py" = [
-    "RUF067",  # GateResult and run_all_gates are intentionally defined here
-    "PLC0415", # gate submodule imports are local to avoid circular-import risk
-]
-"ctf/agent_script.py" = [
-    "ANN",    # standalone script; type annotations are not required
-    "D",      # script docstrings are optional
-    "T201",   # print() is the intended output mechanism in agent_script
-    "INP001", # not a package member
-]
-"ctf/http_server.py" = [
-    "N802",   # do_GET is mandated by BaseHTTPRequestHandler naming convention
-    "A002",   # log_message's `format` parameter must match the parent class (LSP)
-    "ARG002", # log_message silences access logs; format/args are intentionally unused
-]
-"ctf/main.py" = [
-    "C901",    # orchestration entry point is intentionally linear; complexity is inherent
-    "PLR0912", # same as C901 — branch count reflects required cleanup paths
-    "PLR0914", # 20+ local variables are all needed for try/finally cleanup guarantees
-    "PLR0915", # statement count is the linear orchestration sequence; no dead code
-    "PLW0717", # setup + lock + monitoring in one try clause is intentional
-    "BLE001",  # cleanup blocks catch broad Exception intentionally (third-party code)
+ignore = [
+    "E501", # Line too long (handled by formatter)
 ]
 
 [tool.ty.environment]

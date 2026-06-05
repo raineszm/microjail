@@ -16,7 +16,7 @@ from microjail.state import STATE_DIR, STATE_FILE
 runner = CliRunner()
 
 
-def test_non_writable_workspace_exits_nonzero(tmp_path: Path) -> None:
+def test_non_writable_workspace_exits_nonzero() -> None:
     """Init exits non-zero when the workspace directory is not writable."""
     with (
         patch("microjail.commands.init.os.access", return_value=False),
@@ -34,7 +34,7 @@ def test_non_writable_workspace_exits_nonzero(tmp_path: Path) -> None:
     assert result.exit_code != 0
 
 
-def test_non_writable_workspace_message_contains_path(tmp_path: Path) -> None:
+def test_non_writable_workspace_message_contains_path() -> None:
     """Error message names the failing workspace path."""
     workspace = Path.cwd()
     with (
@@ -55,7 +55,7 @@ def test_non_writable_workspace_message_contains_path(tmp_path: Path) -> None:
     assert str(workspace) in result.output or str(workspace) in (result.stderr or "")
 
 
-def test_non_writable_workspace_no_workshop_call(tmp_path: Path) -> None:
+def test_non_writable_workspace_no_workshop_call() -> None:
     """Workshop subprocess is never called when the workspace is not writable."""
     with (
         patch("microjail.commands.init.os.access", return_value=False),
@@ -78,7 +78,7 @@ def test_non_writable_workspace_no_workshop_call(tmp_path: Path) -> None:
     mock_prereq.assert_called_once()
 
 
-def test_writable_workspace_proceeds(tmp_path: Path) -> None:
+def test_writable_workspace_proceeds() -> None:
     """Init proceeds past the writability check when workspace is writable."""
     # When os.access returns True, execution should move past the probe.
     # We stop it at the environment-exists check to avoid full orchestration.
