@@ -1,7 +1,7 @@
 """Integration tests for ``microjail unlock``.
 
-Requires a live Workshop + LXD installation.
-Run with: uv run pytest -m lxd tests/integration/test_unlock_command.py
+Requires a live Workshop + LXD installation.  Tests are skipped automatically
+when the required services are unavailable; pass ``--run-long`` to include.
 """
 
 import pytest
@@ -13,6 +13,8 @@ runner = CliRunner()
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_unlock_restores_egress(lxd_environment):  # type: ignore[no-untyped-def]
     """After microjail lock + unlock, a network probe from inside the container succeeds."""
     lock_result = runner.invoke(app, ["lock"])
@@ -24,6 +26,8 @@ def test_unlock_restores_egress(lxd_environment):  # type: ignore[no-untyped-def
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_unlock_idempotent_on_unlocked_environment(lxd_environment):  # type: ignore[no-untyped-def]
     """Calling unlock on an already-unlocked environment exits zero."""
     result = runner.invoke(app, ["unlock"])

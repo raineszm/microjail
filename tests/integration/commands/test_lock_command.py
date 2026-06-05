@@ -1,7 +1,7 @@
 """Integration tests for ``microjail lock``.
 
-Requires a live Workshop + LXD installation.
-Run with: uv run pytest -m lxd tests/integration/test_lock_command.py
+Requires a live Workshop + LXD installation.  Tests are skipped automatically
+when the required services are unavailable; pass ``--run-long`` to include.
 """
 
 import pytest
@@ -13,6 +13,8 @@ runner = CliRunner()
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_lock_severs_egress(lxd_environment):  # type: ignore[no-untyped-def]
     """After microjail lock, a network probe from inside the container fails."""
     result = runner.invoke(app, ["lock"])
@@ -24,6 +26,8 @@ def test_lock_severs_egress(lxd_environment):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_lock_idempotent_on_locked_environment(lxd_environment):  # type: ignore[no-untyped-def]
     """Calling lock on an already-locked environment exits zero."""
     runner.invoke(app, ["lock"])
@@ -35,6 +39,8 @@ def test_lock_idempotent_on_locked_environment(lxd_environment):  # type: ignore
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_lock_state_records_locked(lxd_environment, tmp_path):  # type: ignore[no-untyped-def]
     """After microjail lock, state.json records locked=True."""
     from pathlib import Path

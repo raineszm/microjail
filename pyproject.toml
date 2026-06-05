@@ -125,5 +125,8 @@ python-version = "3.14"
 
 [tool.pytest.ini_options]
 anyio_mode = "auto"
-addopts = "-m 'not lxd'"
-markers = ["lxd: mark test as requiring LXD daemon or Workshop environment"]
+markers = [
+    "lxd: requires a running LXD daemon (lxc available and responsive)",
+    "workshop: requires the Workshop CLI (workshop binary on PATH)",
+    "long_running: slow test (container creation etc.); pass --run-long to include",
+]

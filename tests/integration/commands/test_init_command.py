@@ -1,8 +1,8 @@
 """Integration tests for ``microjail init``.
 
-Requires a live Workshop + LXD installation. Skip with::
-
-    pytest -m "not lxd"
+Requires a live Workshop + LXD installation.  Tests are skipped automatically
+when the required services are unavailable; long-running tests (those that
+create containers) additionally require ``--run-long``.
 
 Each test receives a ``workspace`` fixture that provides an isolated temp
 directory as the working directory. Environment teardown is handled by a
@@ -110,6 +110,8 @@ def us2_env(workspace: Path) -> Generator[str]:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_full_init_exit_zero(workspace: Path) -> None:
     """Microjail init <name> --inference llama-cpp --agent opencode exits 0."""
     name = _unique_name("mj-us1")
@@ -127,18 +129,24 @@ def test_us1_full_init_exit_zero(workspace: Path) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_definition_yaml_written(workspace: Path, us1_env: str) -> None:
     """Workshop definition is written at .workshop/<name>.yaml."""
     assert (workspace / ".workshop" / f"{us1_env}.yaml").exists()
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_opencode_jsonc_written(workspace: Path, us1_env: str) -> None:
     """opencode.jsonc is written when --agent opencode is specified."""
     assert (workspace / "opencode.jsonc").exists()
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_state_json_written(workspace: Path, us1_env: str) -> None:
     """state.json is written with correct name, inference, and agent fields."""
     state_path = workspace / ".microjail" / "state.json"
@@ -150,6 +158,8 @@ def test_us1_state_json_written(workspace: Path, us1_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_workshop_env_exists(workspace: Path, us1_env: str) -> None:
     """Workshop info exits 0 after successful init (invariant 1)."""
     assert _workshop_info_ok(us1_env, workspace), (
@@ -158,6 +168,8 @@ def test_us1_workshop_env_exists(workspace: Path, us1_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_no_remote_providers_enabled(workspace: Path, us1_env: str) -> None:
     """opencode.jsonc has no enabled remote provider entries (invariant 3)."""
     cfg = json.loads((workspace / "opencode.jsonc").read_text())
@@ -167,6 +179,8 @@ def test_us1_no_remote_providers_enabled(workspace: Path, us1_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_duplicate_name_rejected(workspace: Path, us1_env: str) -> None:
     """Second init with same name exits 2 with 'already exists' message."""
     result = runner.invoke(app, ["init", us1_env], catch_exceptions=False)
@@ -180,6 +194,8 @@ def test_us1_duplicate_name_rejected(workspace: Path, us1_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us2_bare_init_exit_zero(workspace: Path) -> None:
     """Microjail init <name> (no flags) exits 0."""
     name = _unique_name("mj-us2")
@@ -193,6 +209,8 @@ def test_us2_bare_init_exit_zero(workspace: Path) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us2_no_opencode_jsonc(workspace: Path, us2_env: str) -> None:
     """opencode.jsonc is NOT written when --agent is not specified."""
     assert not (workspace / "opencode.jsonc").exists(), (
@@ -201,6 +219,8 @@ def test_us2_no_opencode_jsonc(workspace: Path, us2_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us2_workshop_yaml_empty_sdks(workspace: Path, us2_env: str) -> None:
     """Workshop definition has empty sdks list for bare init."""
     yaml = YAML()
@@ -210,6 +230,8 @@ def test_us2_workshop_yaml_empty_sdks(workspace: Path, us2_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us2_state_json_null_fields(workspace: Path, us2_env: str) -> None:
     """state.json has null inference, agent, and socket_url for bare init."""
     state = json.loads((workspace / ".microjail" / "state.json").read_text())
@@ -219,6 +241,8 @@ def test_us2_state_json_null_fields(workspace: Path, us2_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us2_workshop_env_exists(workspace: Path, us2_env: str) -> None:
     """Workshop info exits 0 after bare init."""
     assert _workshop_info_ok(us2_env, workspace), (
@@ -232,6 +256,8 @@ def test_us2_workshop_env_exists(workspace: Path, us2_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_force_reinit_exits_zero(workspace: Path, us1_env: str) -> None:
     """Microjail init <name> --force exits 0 when environment already exists."""
     result = runner.invoke(
@@ -243,6 +269,8 @@ def test_force_reinit_exits_zero(workspace: Path, us1_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_force_reinit_env_still_exists(workspace: Path, us1_env: str) -> None:
     """Workshop environment is still reachable after --force reinit."""
     runner.invoke(
@@ -261,6 +289,8 @@ def test_force_reinit_env_still_exists(workspace: Path, us1_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_workshop_yaml_has_tunnel_slot(workspace: Path, us1_env: str) -> None:
     """Workshop definition contains system SDK with tunnel slot when --inference is set."""
     from ruamel.yaml import YAML
@@ -274,6 +304,8 @@ def test_us1_workshop_yaml_has_tunnel_slot(workspace: Path, us1_env: str) -> Non
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_workshop_yaml_has_tunnel_plug(workspace: Path, us1_env: str) -> None:
     """Workshop definition contains project SDK with tunnel plug when --inference is set."""
     from ruamel.yaml import YAML
@@ -286,6 +318,8 @@ def test_us1_workshop_yaml_has_tunnel_plug(workspace: Path, us1_env: str) -> Non
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us2_workshop_yaml_no_tunnel_entries(workspace: Path, us2_env: str) -> None:
     """Workshop definition has no tunnel entries when --inference is not set."""
     from ruamel.yaml import YAML
@@ -306,6 +340,8 @@ def test_us2_workshop_yaml_no_tunnel_entries(workspace: Path, us2_env: str) -> N
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us1_state_json_has_http_socket_url(workspace: Path, us1_env: str) -> None:
     """state.json contains HTTP URL for socket_url when --inference is set."""
     state = json.loads((workspace / ".microjail" / "state.json").read_text())
@@ -313,6 +349,8 @@ def test_us1_state_json_has_http_socket_url(workspace: Path, us1_env: str) -> No
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_us2_state_json_null_socket_url(workspace: Path, us2_env: str) -> None:
     """state.json has null socket_url when --inference is not set."""
     state = json.loads((workspace / ".microjail" / "state.json").read_text())
@@ -325,6 +363,8 @@ def test_us2_state_json_null_socket_url(workspace: Path, us2_env: str) -> None:
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_force_reinit_preserves_tunnel_config(workspace: Path, us1_env: str) -> None:
     """--force re-initialisation preserves tunnel config in workshop.yaml."""
     from ruamel.yaml import YAML

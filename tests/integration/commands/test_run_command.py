@@ -1,10 +1,10 @@
 """Integration tests for ``microjail run``.
 
-These tests require a live Workshop + LXD installation and are marked
-``@pytest.mark.lxd`` so they are excluded from the default test run
-(``addopts = "-m 'not lxd'"`` in pyproject.toml).
+These tests require a live Workshop + LXD installation.  They are skipped
+automatically when the required services are unavailable.  Long-running tests
+(those that create containers) additionally require ``--run-long``::
 
-Run with: uv run pytest -m lxd tests/integration/test_run_command.py
+    uv run pytest --run-long tests/integration/commands/test_run_command.py
 """
 
 import socket
@@ -18,13 +18,14 @@ runner = CliRunner()
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_run_echo_hello_exits_zero(lxd_environment):  # type: ignore[no-untyped-def]
     """``microjail run -- echo hello`` executes and exits with the workload's exit code."""
     result = runner.invoke(app, ["run", "echo", "hello"])
     assert result.exit_code == 0
 
 
-@pytest.mark.lxd
 def test_run_fails_when_no_state_file(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     """``microjail run`` exits non-zero when no state file exists."""
     monkeypatch.chdir(tmp_path)
@@ -34,6 +35,8 @@ def test_run_fails_when_no_state_file(tmp_path, monkeypatch):  # type: ignore[no
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_run_fails_when_workload_empty(lxd_environment):  # type: ignore[no-untyped-def]
     """``microjail run`` with no workload tokens exits non-zero before locking."""
     result = runner.invoke(app, ["run"])
@@ -47,6 +50,8 @@ def test_run_fails_when_workload_empty(lxd_environment):  # type: ignore[no-unty
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_run_fails_when_inference_tunnel_unreachable(lxd_inference_environment):  # type: ignore[no-untyped-def]
     """When --inference llama-cpp was set at init and the TCP endpoint is unreachable,
     ``microjail run`` exits non-zero and names the unreachable host:port.
@@ -68,6 +73,8 @@ def test_run_fails_when_inference_tunnel_unreachable(lxd_inference_environment):
 
 
 @pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
 def test_run_succeeds_when_inference_tunnel_reachable(  # type: ignore[no-untyped-def]
     lxd_inference_environment, tmp_path
 ) -> None:
