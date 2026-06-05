@@ -34,7 +34,7 @@ def test_locked_field_defaults_to_false() -> None:
 def test_locked_field_round_trip_false(tmp_path: Path) -> None:
     """``locked=False`` survives a write/read cycle."""
     state = _base_state(locked=False)
-    state.to_json(tmp_path)
+    state.dump(tmp_path)
     loaded = State.from_json(tmp_path)
     assert loaded.locked is False
 
@@ -42,7 +42,7 @@ def test_locked_field_round_trip_false(tmp_path: Path) -> None:
 def test_locked_field_round_trip_true(tmp_path: Path) -> None:
     """``locked=True`` survives a write/read cycle."""
     state = _base_state(locked=True)
-    state.to_json(tmp_path)
+    state.dump(tmp_path)
     loaded = State.from_json(tmp_path)
     assert loaded.locked is True
 
@@ -50,7 +50,7 @@ def test_locked_field_round_trip_true(tmp_path: Path) -> None:
 def test_locked_field_persisted_in_json(tmp_path: Path) -> None:
     """The ``locked`` key is present in the written JSON."""
     state = _base_state(locked=True)
-    state.to_json(tmp_path)
+    state.dump(tmp_path)
     raw = json.loads((tmp_path / ".microjail" / "state.json").read_text())
     assert raw["locked"] is True
 
@@ -62,7 +62,7 @@ def test_locked_field_absent_in_old_state_file_defaults_to_false(
     deserialise with ``locked=False`` (backwards compatibility).
     """
     state = _base_state()
-    state.to_json(tmp_path)
+    state.dump(tmp_path)
     # Remove the locked key to simulate an old state file.
     state_path = tmp_path / ".microjail" / "state.json"
     raw = json.loads(state_path.read_text())

@@ -249,7 +249,7 @@ def init(
         socket_url=socket_url,
     )
     try:
-        state.to_json(workspace)
+        state.dump(workspace)
     except OSError as exc:
         err(f"Cannot write state to current directory: {exc}", code=3)
 

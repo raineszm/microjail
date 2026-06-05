@@ -17,7 +17,7 @@ import typer
 
 from microjail.commands.lock import perform_lock
 from microjail.output import err, warn
-from microjail.state import State, StateError
+from microjail.state import State
 from microjail.wrappers import workshop
 from microjail.wrappers.lxd import unlock_egress
 
@@ -46,13 +46,12 @@ def run(
 
     workspace = Path.cwd()
     try:
-        state = State.load(workspace)
-    except StateError as exc:
-        err(str(exc))
-
-    # Lock (cuts egress + runs all gates).
-    try:
+        state = State.from_json(workspace)
         perform_lock(state, workspace)
+    except FileNotFoundError:
+        err(
+            "No microjail environment found in the current directory. Run 'microjail init' first."
+        )
     except RuntimeError as exc:
         err(str(exc))
 
@@ -84,6 +83,6 @@ def _unlock_after_run(state: State, workspace: Path) -> None:
         return
     state.locked = False
     try:
-        state.to_json(workspace)
+        state.dump(workspace)
     except OSError as exc:
         warn(f"Could not update state file after unlock: {exc}")

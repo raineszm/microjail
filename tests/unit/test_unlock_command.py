@@ -26,7 +26,7 @@ def _write_state(tmp_path: Path, *, locked: bool) -> None:
         socket_url=None,
         locked=locked,
     )
-    state.to_json(tmp_path)
+    state.dump(tmp_path)
 
 
 def test_unlock_exits_zero_when_already_unlocked(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

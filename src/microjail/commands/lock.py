@@ -18,7 +18,7 @@ import typer
 
 from microjail.gates import run_all_gates
 from microjail.output import err
-from microjail.state import State, StateError
+from microjail.state import State
 from microjail.wrappers.lxd import lock_egress, unlock_egress
 
 
@@ -50,7 +50,7 @@ def perform_lock(state: State, workspace: Path) -> None:
 
     # Step 4: All gates passed — persist locked state.
     state.locked = True
-    state.to_json(workspace)
+    state.dump(workspace)
 
 
 def lock() -> None:
@@ -70,16 +70,17 @@ def lock() -> None:
     """
     workspace = Path.cwd()
     try:
-        state = State.load(workspace)
-    except StateError as exc:
-        err(str(exc))
+        state = State.from_json(workspace)
 
-    if state.locked:
-        typer.echo(f"Environment '{state.name}' is already locked.")
-        return
+        if state.locked:
+            typer.echo(f"Environment '{state.name}' is already locked.")
+            return
 
-    try:
         perform_lock(state, workspace)
+    except FileNotFoundError:
+        err(
+            "No microjail environment found in the current directory. Run 'microjail init' first."
+        )
     except RuntimeError as exc:
         err(str(exc))
 

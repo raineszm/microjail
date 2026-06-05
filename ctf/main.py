@@ -270,7 +270,7 @@ def run(
             agent="omp",
             socket_url=f"http://localhost:{inference_port}/v1",
         )
-        state.to_json(workspace)
+        state.dump(workspace)
         console.print("[green]✓[/green] state written")
 
         config = TestRunConfig(
