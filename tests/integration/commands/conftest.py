@@ -24,10 +24,14 @@ def _unique_name(prefix: str) -> str:
 
 @pytest.fixture
 def lxd_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[str]:
-    """Create a bare microjail environment and chdir to its workspace.
+    """Create a configured microjail environment and chdir to its workspace.
 
-    Yields the environment name. Restores egress and removes the Workshop
-    environment on teardown regardless of test outcome.
+    Yields the environment name with ``state.launched=False``.  The container
+    is provisioned on demand by the first ``microjail lock`` or ``microjail run``
+    call inside the test (lazy launch).
+
+    Restores egress and removes the Workshop environment on teardown regardless
+    of test outcome.
     """
     monkeypatch.chdir(tmp_path)
     name = _unique_name("mj-int")
@@ -49,10 +53,14 @@ def lxd_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generato
 def lxd_inference_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[str]:
-    """Create a microjail environment with --inference llama-cpp and chdir to workspace.
+    """Create a configured microjail environment with ``--inference llama-cpp``.
 
-    Yields the environment name. Restores egress and removes the Workshop
-    environment on teardown regardless of test outcome.
+    Yields the environment name with ``state.launched=False``.  The container
+    and inference tunnel are provisioned on demand by the first ``microjail lock``
+    or ``microjail run`` call inside the test.
+
+    Restores egress and removes the Workshop environment on teardown regardless
+    of test outcome.
     """
     monkeypatch.chdir(tmp_path)
     name = _unique_name("mj-inf")

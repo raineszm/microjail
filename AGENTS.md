@@ -36,5 +36,5 @@ refactors; rename only when a function is being touched for another reason.
 ## Active Implementation Plan
 
 <plan>
-specs/20260605-095056-simplify-exception-handling/plan.md
+specs/20260605-154611-workshop-init/plan.md
 </plan>

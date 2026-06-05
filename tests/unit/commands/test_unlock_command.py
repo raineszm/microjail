@@ -65,6 +65,9 @@ def test_unlock_restores_egress_and_updates_state(
     loaded = State.from_json(tmp_path)
     assert loaded.locked is False
 
+    # FR-015: unlock must not touch state.launched.
+    assert loaded.launched is True
+
 
 @patch("microjail.commands.unlock.unlock_egress")
 def test_unlock_exits_nonzero_when_unlock_egress_fails(

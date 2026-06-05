@@ -19,13 +19,14 @@ if TYPE_CHECKING:
 runner = CliRunner()
 
 
-def _write_state(tmp_path: Path, *, locked: bool) -> None:
+def _write_state(tmp_path: Path, *, locked: bool, launched: bool = True) -> None:
     state = State(
         name="test-env",
         base_image="ubuntu@26.04",
         inference=None,
         agent=None,
         socket_url=None,
+        launched=launched,
         locked=locked,
     )
     state.dump(tmp_path)
@@ -125,3 +126,92 @@ def test_lock_gate_failure_rollback_survives_unlock_error(
     result = runner.invoke(app, ["lock"])
     assert result.exit_code != 0
     assert "workspace" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# Lazy-launch path (FR-007, FR-008, FR-010)
+# ---------------------------------------------------------------------------
+
+
+@patch("microjail.commands.lock.run_all_gates")
+@patch("microjail.commands.lock.lock_egress")
+@patch("microjail.commands.lock.ensure_container_ready")
+def test_lock_calls_ensure_container_ready_when_not_launched(
+    mock_ensure: MagicMock,
+    mock_lock_egress: MagicMock,
+    mock_run_gates: MagicMock,
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    """``perform_lock`` calls ``ensure_container_ready`` when ``launched=False``."""
+    monkeypatch.chdir(tmp_path)
+    _write_state(tmp_path, locked=False, launched=False)
+    mock_ensure.return_value = None
+    mock_lock_egress.return_value = None
+    mock_run_gates.return_value = [
+        GateResult(name="egress", passed=True, message="Egress down"),
+    ]
+
+    result = runner.invoke(app, ["lock"])
+    assert result.exit_code == 0
+    mock_ensure.assert_called_once()
+
+
+@patch("microjail.commands.lock.run_all_gates")
+@patch("microjail.commands.lock.lock_egress")
+@patch("microjail.commands.lock.ensure_container_ready")
+def test_lock_does_not_call_ensure_container_ready_when_already_launched(
+    mock_ensure: MagicMock,
+    mock_lock_egress: MagicMock,
+    mock_run_gates: MagicMock,
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    """``perform_lock`` skips ``ensure_container_ready`` when ``launched=True``."""
+    monkeypatch.chdir(tmp_path)
+    _write_state(tmp_path, locked=False, launched=True)
+    mock_lock_egress.return_value = None
+    mock_run_gates.return_value = [
+        GateResult(name="egress", passed=True, message="Egress down"),
+    ]
+
+    result = runner.invoke(app, ["lock"])
+    assert result.exit_code == 0
+    mock_ensure.assert_not_called()
+
+
+@patch("microjail.commands.lock.lock_egress")
+@patch("microjail.commands.lock.workshop")
+def test_lock_persists_launched_before_lock_egress(
+    mock_workshop: MagicMock,
+    mock_lock_egress: MagicMock,
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    """``state.launched=True`` is persisted before ``lock_egress`` is called (FR-008).
+
+    Verified by asserting that the state file on disk has ``launched=True``
+    at the point ``lock_egress`` is invoked.
+    """
+    monkeypatch.chdir(tmp_path)
+    _write_state(tmp_path, locked=False, launched=False)
+    mock_workshop.ensure_launched.return_value = None
+    mock_workshop.connect.return_value = None
+
+    launched_at_lock_egress: list[bool] = []
+
+    def capture_launched(*_args: object, **_kwargs: object) -> None:
+        # Read the state file as it exists when lock_egress is called.
+        launched_at_lock_egress.append(State.from_json(tmp_path).launched)
+
+    mock_lock_egress.side_effect = capture_launched
+    # lock_egress will return without LXD calls, but gates need to succeed too.
+    with patch("microjail.commands.lock.run_all_gates") as mock_gates:
+        mock_gates.return_value = [
+            GateResult(name="egress", passed=True, message="Egress down"),
+        ]
+        runner.invoke(app, ["lock"])
+
+    assert launched_at_lock_egress == [True], (
+        f"expected launched=True when lock_egress called, got {launched_at_lock_egress}"
+    )

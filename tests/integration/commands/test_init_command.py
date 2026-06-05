@@ -170,10 +170,20 @@ def test_us1_state_json_written(workspace: Path, us1_env: str) -> None:
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_us1_workshop_env_exists(workspace: Path, us1_env: str) -> None:
-    """Workshop info exits 0 after successful init (invariant 1)."""
-    assert _workshop_info_ok(us1_env, workspace), (
-        f"Workshop environment '{us1_env}' not found after init"
+def test_us1_workshop_env_not_present_after_init(workspace: Path) -> None:
+    """Workshop environment does NOT exist immediately after init (deferred launch).
+
+    ``microjail init`` no longer calls ``workshop launch`` — the container is
+    created on first ``microjail lock`` or ``microjail run``.
+    """
+    name = _unique_name("mj-us1-check")
+    runner.invoke(
+        app,
+        ["init", name, "--inference", "llama-cpp", "--agent", "opencode"],
+        catch_exceptions=False,
+    )
+    assert not _workshop_info_ok(name, workspace), (
+        f"Workshop environment '{name}' found after init — should not be launched yet"
     )
 
 
@@ -196,6 +206,30 @@ def test_us1_duplicate_name_rejected(workspace: Path, us1_env: str) -> None:
     result = runner.invoke(app, ["init", us1_env], catch_exceptions=False)
     assert result.exit_code == 2
     assert "already exists" in result.output
+
+
+@pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
+def test_us1_workshop_env_exists_after_lock(workspace: Path) -> None:
+    """Workshop environment exists after ``microjail lock`` triggers lazy launch."""
+    name = _unique_name("mj-us1-lk")
+    runner.invoke(
+        app,
+        ["init", name, "--inference", "llama-cpp", "--agent", "opencode"],
+        catch_exceptions=False,
+    )
+    runner.invoke(app, ["lock"], catch_exceptions=False)
+    assert _workshop_info_ok(name, workspace), (
+        f"Workshop environment '{name}' not found after lock"
+    )
+    # Cleanup.
+    runner.invoke(app, ["unlock"], catch_exceptions=False)
+    subprocess.run(
+        ["workshop", "remove", name, "--project", str(workspace)],
+        capture_output=True,
+        check=False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -254,10 +288,32 @@ def test_us2_state_json_null_fields(workspace: Path, us2_env: str) -> None:
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_us2_workshop_env_exists(workspace: Path, us2_env: str) -> None:
-    """Workshop info exits 0 after bare init."""
-    assert _workshop_info_ok(us2_env, workspace), (
-        f"Workshop environment '{us2_env}' not found after bare init"
+def test_us2_workshop_env_not_present_after_init(workspace: Path) -> None:
+    """Workshop environment does NOT exist immediately after bare init (deferred launch)."""
+    name = _unique_name("mj-us2-check")
+    runner.invoke(app, ["init", name], catch_exceptions=False)
+    assert not _workshop_info_ok(name, workspace), (
+        f"Workshop environment '{name}' found after bare init — should not be launched yet"
+    )
+
+
+@pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
+def test_us2_workshop_env_exists_after_lock(workspace: Path) -> None:
+    """Workshop environment exists after ``microjail lock`` triggers lazy launch (bare init)."""
+    name = _unique_name("mj-us2-lk")
+    runner.invoke(app, ["init", name], catch_exceptions=False)
+    runner.invoke(app, ["lock"], catch_exceptions=False)
+    assert _workshop_info_ok(name, workspace), (
+        f"Workshop environment '{name}' not found after lock"
+    )
+    # Cleanup.
+    runner.invoke(app, ["unlock"], catch_exceptions=False)
+    subprocess.run(
+        ["workshop", "remove", name, "--project", str(workspace)],
+        capture_output=True,
+        check=False,
     )
 
 
@@ -283,7 +339,16 @@ def test_force_reinit_exits_zero(workspace: Path, us1_env: str) -> None:
 @pytest.mark.workshop
 @pytest.mark.long_running
 def test_force_reinit_env_still_exists(workspace: Path, us1_env: str) -> None:
-    """Workshop environment is still reachable after --force reinit."""
+    """Workshop environment is still reachable after --force reinit.
+
+    Requires a launched container so the --force path calls ``workshop refresh``
+    rather than just rewriting local files.
+    """
+    # Launch the container so state.launched becomes True.
+    result = runner.invoke(app, ["lock"], catch_exceptions=False)
+    assert result.exit_code == 0, f"Lock failed:\n{result.output}"
+    runner.invoke(app, ["unlock"], catch_exceptions=False)
+
     runner.invoke(
         app,
         ["init", us1_env, "--inference", "llama-cpp", "--agent", "opencode", "--force"],
@@ -383,3 +448,44 @@ def test_force_reinit_preserves_tunnel_config(workspace: Path, us1_env: str) -> 
     sdk_names = [s["name"] for s in doc["sdks"]]
     assert "system" in sdk_names
     assert "llama-cpp" in sdk_names
+
+
+# ---------------------------------------------------------------------------
+# T014 — --force on locked env; duplicate detection via local files
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
+def test_force_on_locked_env_exits_2_integration(workspace: Path, us1_env: str) -> None:
+    """``--force`` on a locked environment exits 2 and names 'unlock' without Workshop calls."""
+    # Lock the environment (triggers lazy launch of the container).
+    result = runner.invoke(app, ["lock"], catch_exceptions=False)
+    assert result.exit_code == 0, f"Lock failed:\n{result.output}"
+
+    result = runner.invoke(
+        app,
+        ["init", us1_env, "--force"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 2
+    assert "unlock" in result.output.lower()
+
+    # Teardown: unlock so the fixture teardown can remove the environment.
+    runner.invoke(app, ["unlock"])
+
+
+@pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
+def test_duplicate_name_rejected_when_only_local_files_exist(workspace: Path) -> None:
+    """Duplicate detection uses state.json, not Workshop, so it works without a container."""
+    name = _unique_name("mj-dup")
+    runner.invoke(app, ["init", name], catch_exceptions=False)
+    # Container does NOT exist (no lock called) but state.json does.
+    assert not _workshop_info_ok(name, workspace), "Container should not exist yet"
+
+    result = runner.invoke(app, ["init", name], catch_exceptions=False)
+    assert result.exit_code == 2
+    assert "already exists" in result.output

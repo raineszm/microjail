@@ -18,7 +18,14 @@ STATE_FILE = "state.json"
 
 
 class State(msgspec.Struct):
-    """Persisted record of a created microjail environment."""
+    """Persisted record of a created microjail environment.
+
+    Valid lifecycle combinations:
+    - ``{launched=False, locked=False}`` — configured, container not yet created.
+    - ``{launched=True, locked=False}`` — ready, container running and egress open.
+    - ``{launched=True, locked=True}`` — locked, egress severed and gates passed.
+    The combination ``{launched=False, locked=True}`` must never occur.
+    """
 
     name: str
     """Workshop environment name."""
@@ -34,6 +41,20 @@ class State(msgspec.Struct):
 
     socket_url: str | None
     """Inference endpoint URL, or ``None`` if no inference backend configured."""
+
+    launched: bool = field(default=True)
+    """Whether the Workshop container has been provisioned and verified at least once.
+
+    Set to ``False`` by ``microjail init`` (container not yet created).
+    Set to ``True`` by :func:`~microjail.commands.lock.ensure_container_ready`
+    after ``workshop launch`` and ``verify_exists`` succeed.  Persisted before
+    any LXD mutation so a crash between provisioning and locking leaves the
+    state file truthful (FR-008).
+
+    Defaults to ``True`` for backward compatibility: all state files written
+    before this field was introduced were written after a successful launch,
+    so an absent ``launched`` key means the container was already running.
+    """
 
     locked: bool = field(default=False)
     """Whether the environment's network egress is currently severed.

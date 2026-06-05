@@ -8,6 +8,8 @@ automatically when the required services are unavailable.  Long-running tests
 """
 
 import socket
+import subprocess
+import uuid
 
 import pytest
 from typer.testing import CliRunner
@@ -91,3 +93,61 @@ def test_run_succeeds_when_inference_tunnel_reachable(  # type: ignore[no-untype
         assert result.exit_code == 0
     finally:
         srv.close()
+
+
+# ---------------------------------------------------------------------------
+# T020: Lazy launch via microjail run (SC-004)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.lxd
+@pytest.mark.workshop
+@pytest.mark.long_running
+def test_run_lazy_launches_unlaunched_environment_and_unlocks_after_success(  # type: ignore[no-untyped-def]
+    tmp_path, monkeypatch
+) -> None:
+    """First ``microjail run`` on a configured-not-launched env provisions the container.
+
+    After ``init`` (no lock), the container does not exist.  ``run`` triggers
+    lazy launch, executes the workload, unlocks, and leaves state with
+    ``launched=True, locked=False``.
+    """
+    from microjail.state import State
+
+    monkeypatch.chdir(tmp_path)
+    name = f"mj-run-lazy-{uuid.uuid4().hex[:8]}"
+    try:
+        result = runner.invoke(app, ["init", name], catch_exceptions=False)
+        assert result.exit_code == 0, f"init failed:\n{result.output}"
+
+        # Container must NOT exist yet.
+        info = subprocess.run(
+            ["workshop", "info", name, "--project", str(tmp_path)],
+            capture_output=True,
+            check=False,
+        )
+        assert info.returncode != 0, "Container found before run — expected absent"
+
+        result = runner.invoke(
+            app, ["run", "--", "echo", "hello"], catch_exceptions=False
+        )
+        assert result.exit_code == 0, f"run failed:\n{result.output}"
+
+        # Container must now exist.
+        info = subprocess.run(
+            ["workshop", "info", name, "--project", str(tmp_path)],
+            capture_output=True,
+            check=False,
+        )
+        assert info.returncode == 0, "Container not found after run"
+
+        # State must reflect launched=True, locked=False.
+        state = State.from_json(tmp_path)
+        assert state.launched is True
+        assert state.locked is False
+    finally:
+        subprocess.run(
+            ["workshop", "remove", name, "--project", str(tmp_path)],
+            capture_output=True,
+            check=False,
+        )

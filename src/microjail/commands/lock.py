@@ -4,8 +4,10 @@
 ``microjail lock`` (this module) and ``microjail run`` (commands/run.py) call
 it — no duplication of locking logic.
 
-Lock sequence (FR-001 through FR-010):
-1. Cut network egress via ``lxd.network.lock_egress()``.
+Lock sequence:
+0. Ensure container exists, launching on first use if ``state.launched`` is
+   ``False`` (via ``ensure_container_ready``).
+1. Cut network egress via ``lxd.lock_egress()``.
 2. Run all applicable gates via ``gates.run_all_gates()``.
 3. If any gate fails: restore egress, raise ``RuntimeError`` naming the gate.
 4. On success: update ``state.locked = True`` and persist state.
@@ -18,12 +20,37 @@ from typing import TYPE_CHECKING
 import typer
 
 from microjail.commands import load_state_or_exit
+from microjail.config.workshop import INFERENCE_PLUG_REF, INFERENCE_SLOT_REF
 from microjail.gates import run_all_gates
 from microjail.output import err
+from microjail.wrappers import workshop
 from microjail.wrappers.lxd import lock_egress, unlock_egress
 
 if TYPE_CHECKING:
     from microjail.state import State
+
+
+def ensure_container_ready(state: State, workspace: Path) -> None:
+    """Launch the Workshop container on first use and connect the inference tunnel.
+
+    Only called when ``state.launched`` is ``False``.  After a successful
+    return the container is running, ``state.launched`` is persisted as
+    ``True``, and (when inference is configured) the tunnel is wired.
+
+    FR-008: ``state.launched`` is persisted before any LXD mutation so a
+    crash after provisioning but before locking leaves the state truthful
+    (the container exists; the next ``lock`` retries only the connect step).
+
+    Raises :exc:`RuntimeError` if launch, verification, or tunnel connection
+    fails.  On failure, ``state.launched`` is left unchanged (``False``) so
+    the next invocation retries the full launch sequence.
+    """
+    workshop.ensure_launched(state.name, workspace)
+    # Persist launched=True before any LXD mutation (FR-008).
+    state.launched = True
+    state.dump(workspace)
+    if state.inference is not None:
+        workshop.connect(state.name, INFERENCE_PLUG_REF, INFERENCE_SLOT_REF, workspace)
 
 
 def perform_lock(state: State, workspace: Path) -> None:
@@ -31,11 +58,20 @@ def perform_lock(state: State, workspace: Path) -> None:
 
     On success the state file is updated with ``locked = True``.
 
+    Step 0 (new): if ``state.launched`` is ``False``, the container is
+    provisioned via :func:`ensure_container_ready` before any LXD call is
+    made.  On failure: ``launched`` stays ``False``, ``locked`` stays
+    ``False``, and a :exc:`RuntimeError` is raised.
+
     Raises :exc:`RuntimeError` if egress cannot be cut or any gate fails.
     When a gate fails after egress has been severed, egress is restored before
     raising so the container is never left in a partially-locked state
-    (FR-007, constitution §I).
+    (constitution §I).
     """
+    # Step 0: ensure container exists, launching on first use.
+    if not state.launched:
+        ensure_container_ready(state, workspace)
+
     # Step 1: Cut egress.
     lock_egress(state.name, workspace)
 
@@ -62,8 +98,10 @@ def lock() -> None:
 
     \b
     Reads .microjail/state.json from the current directory to identify
-    the environment.  Exits zero when all gates pass; exits non-zero and
-    names the failing gate when any gate fails.
+    the environment.  If the Workshop container has not been created yet
+    (``launched=False``), provisions it on demand before locking.  Exits
+    zero when all gates pass; exits non-zero and names the failing gate when
+    any gate fails.
 
     If the environment is already locked, exits zero with an informational
     message (idempotent).

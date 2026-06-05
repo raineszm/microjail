@@ -99,6 +99,22 @@ def environment_exists(name: str, project_dir: Path) -> bool:
     return result.returncode == 0
 
 
+def ensure_launched(name: str, project_dir: Path) -> None:
+    """Provision the Workshop environment *name* and verify it exists.
+
+    Calls :func:`check_prerequisites`, :func:`launch`, and then
+    :func:`verify_exists` (constitution §II: always verify the postcondition
+    independently after ``workshop launch`` reports success).
+
+    Raises :exc:`RuntimeError` with an actionable message on any failure.
+    The caller is responsible for persisting ``State.launched = True`` after
+    this returns — state mutation belongs in the command layer, not here.
+    """
+    check_prerequisites()
+    launch(name, project_dir)
+    verify_exists(name, project_dir)
+
+
 def refresh(name: str, project_dir: Path) -> None:
     """Run ``workshop refresh <name>`` in *project_dir*.
 
