@@ -15,7 +15,7 @@ def test_secret_fields() -> None:
     assert s.name == "filesystem"
     assert s.value == "abc"
     with pytest.raises(dataclasses.FrozenInstanceError):
-        s.name = "other"  # type: ignore[misc]
+        s.name = "other"  # type: ignore[misc]  # ty: ignore[invalid-assignment]
 
 
 def test_test_run_config_fields() -> None:

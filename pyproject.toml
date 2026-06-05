@@ -49,6 +49,7 @@ ignore = [
 
 [tool.ty.environment]
 python-version = "3.14"
+extra-paths = [".venv/lib/python3.14/site-packages"]
 
 [tool.pytest.ini_options]
 anyio_mode = "auto"
