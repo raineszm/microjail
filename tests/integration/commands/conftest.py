@@ -1,7 +1,5 @@
 """Shared fixtures for integration command tests."""
 
-from __future__ import annotations
-
 import subprocess
 import uuid
 from typing import TYPE_CHECKING

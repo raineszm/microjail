@@ -66,6 +66,7 @@ def resolve_project(gate_name: str) -> tuple[str | None, GateResult | None]:
             ),
         )
 
+
 def run_all_gates(state: State, workspace: Path) -> list[GateResult]:
     """Evaluate all gates applicable to *state* and return every result.
 

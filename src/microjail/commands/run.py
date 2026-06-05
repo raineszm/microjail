@@ -10,8 +10,6 @@ Execution order (FR-015 through FR-019):
 7. Exit with the workload's exit code.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 

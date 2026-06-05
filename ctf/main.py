@@ -270,8 +270,10 @@ def run(
             console.print("[green]✓[/green] environment launched")
 
             # Register env cleanup after launch. LIFO: cleanup_egress runs before cleanup_env.
-            stack.callback(cleanup_env, console, env_name, workspace)   # runs 2nd-to-last
-            stack.callback(cleanup_egress, console, env_name)            # runs before remove
+            stack.callback(
+                cleanup_env, console, env_name, workspace
+            )  # runs 2nd-to-last
+            stack.callback(cleanup_egress, console, env_name)  # runs before remove
 
             with console.status("[dim]connecting inference tunnel…[/dim]"):
                 workshop_client.connect(
