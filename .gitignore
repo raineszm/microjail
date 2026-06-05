@@ -178,3 +178,4 @@ pyrightconfig.json
 tmp/
 
 ctf-reports/*
+.workshop.lock
