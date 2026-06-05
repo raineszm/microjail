@@ -15,7 +15,7 @@ runner = CliRunner()
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_lock_severs_egress(_lxd_environment):  # type: ignore[no-untyped-def]
+def test_lock_severs_egress(lxd_environment):  # type: ignore[no-untyped-def]
     """After microjail lock, a network probe from inside the container fails."""
     result = runner.invoke(app, ["lock"])
     assert result.exit_code == 0
@@ -28,7 +28,7 @@ def test_lock_severs_egress(_lxd_environment):  # type: ignore[no-untyped-def]
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_lock_idempotent_on_locked_environment(_lxd_environment):  # type: ignore[no-untyped-def]
+def test_lock_idempotent_on_locked_environment(lxd_environment):  # type: ignore[no-untyped-def]
     """Calling lock on an already-locked environment exits zero."""
     runner.invoke(app, ["lock"])
     result = runner.invoke(app, ["lock"])
@@ -41,7 +41,7 @@ def test_lock_idempotent_on_locked_environment(_lxd_environment):  # type: ignor
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_lock_state_records_locked(_lxd_environment):  # type: ignore[no-untyped-def]
+def test_lock_state_records_locked(lxd_environment):  # type: ignore[no-untyped-def]
     """After microjail lock, state.json records locked=True."""
     from pathlib import Path
 

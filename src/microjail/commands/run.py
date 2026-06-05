@@ -10,16 +10,21 @@ Execution order (FR-015 through FR-019):
 7. Exit with the workload's exit code.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
+from microjail.commands import load_state_or_exit
 from microjail.commands.lock import perform_lock
 from microjail.output import err, warn
-from microjail.state import State
 from microjail.wrappers import workshop
 from microjail.wrappers.lxd import unlock_egress
+
+if TYPE_CHECKING:
+    from microjail.state import State
 
 
 def run(
@@ -45,13 +50,9 @@ def run(
         err("No workload command provided. Usage: microjail run -- <command>")
 
     workspace = Path.cwd()
+    state = load_state_or_exit(workspace)
     try:
-        state = State.from_json(workspace)
         perform_lock(state, workspace)
-    except FileNotFoundError:
-        err(
-            "No microjail environment found in the current directory. Run 'microjail init' first."
-        )
     except RuntimeError as exc:
         err(str(exc))
 
@@ -60,29 +61,27 @@ def run(
         proc = workshop.exec_in_env(state.name, list(workload), workspace)
     except RuntimeError as exc:
         typer.echo(f"Error: Cannot execute workload: {exc}", err=True)
-        _unlock_after_run(state, workspace)
+        unlock_after_run(state, workspace)
         raise typer.Exit(1) from exc
 
     exit_code = proc.returncode
 
     # Unlock (restore egress, update state).
-    _unlock_after_run(state, workspace)
+    unlock_after_run(state, workspace)
 
     raise typer.Exit(exit_code)
 
 
-def _unlock_after_run(state: State, workspace: Path) -> None:
+def unlock_after_run(state: State, workspace: Path) -> None:
     """Restore egress and mark state as unlocked after a run completes."""
     try:
         unlock_egress(state.name)
+        state.locked = False
+        state.dump(workspace)
     except RuntimeError as exc:
         warn(
             f"Could not restore egress after run: {exc}\n"
             "Run 'microjail unlock' to restore networking manually."
         )
-        return
-    state.locked = False
-    try:
-        state.dump(workspace)
     except OSError as exc:
         warn(f"Could not update state file after unlock: {exc}")

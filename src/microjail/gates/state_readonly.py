@@ -14,8 +14,7 @@ LXD layer.
 import subprocess
 from typing import TYPE_CHECKING
 
-from microjail.gates import GateResult
-from microjail.wrappers.lxd import _workshop_project
+from microjail.gates import GateResult, resolve_project
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -32,18 +31,10 @@ def check_state_readonly(container_name: str, workspace: Path) -> GateResult:
     messages and future ``source`` path verification.
     """
     state_path = workspace / ".microjail" / "state.json"
-    try:
-        project = _workshop_project()
-    except RuntimeError as exc:
-        return GateResult(
-            name="state-readonly",
-            passed=False,
-            message=(
-                f"Cannot determine LXD project to check state readonly device"
-                f" (state path: {state_path}): {exc}. "
-                "Ensure Workshop and LXD are running."
-            ),
-        )
+    project, err_result = resolve_project("state-readonly")
+    if err_result is not None:
+        return err_result
+    assert project is not None
 
     result = subprocess.run(
         [
@@ -108,6 +99,6 @@ def check_state_readonly(container_name: str, workspace: Path) -> GateResult:
         message=(
             f"Device '{_STATE_RO_DEVICE}' is present but readonly=true is not set "
             f"on container '{container_name}'. "
-            "The state file may be writable from inside the container."
+            f"The state file '{state_path}' may be writable from inside the container."
         ),
     )

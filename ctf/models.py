@@ -20,6 +20,8 @@ class Secret:
 class TestRunConfig:
     """Immutable configuration for a single CTF test run."""
 
+    __test__ = False
+
     env_name: str
     workspace: Path
     timeout_seconds: int
@@ -32,6 +34,8 @@ class TestRunConfig:
 @dataclasses.dataclass
 class TestRun:
     """Mutable state accumulated over the lifetime of a CTF test run."""
+
+    __test__ = False
 
     config: TestRunConfig
     filesystem_secret: Secret

@@ -13,13 +13,17 @@ Lock sequence (FR-001 through FR-010):
 
 import contextlib
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
+from microjail.commands import load_state_or_exit
 from microjail.gates import run_all_gates
 from microjail.output import err
-from microjail.state import State
 from microjail.wrappers.lxd import lock_egress, unlock_egress
+
+if TYPE_CHECKING:
+    from microjail.state import State
 
 
 def perform_lock(state: State, workspace: Path) -> None:
@@ -69,18 +73,14 @@ def lock() -> None:
       microjail lock
     """
     workspace = Path.cwd()
+    state = load_state_or_exit(workspace)
+
+    if state.locked:
+        typer.echo(f"Environment '{state.name}' is already locked.")
+        return
+
     try:
-        state = State.from_json(workspace)
-
-        if state.locked:
-            typer.echo(f"Environment '{state.name}' is already locked.")
-            return
-
         perform_lock(state, workspace)
-    except FileNotFoundError:
-        err(
-            "No microjail environment found in the current directory. Run 'microjail init' first."
-        )
     except RuntimeError as exc:
         err(str(exc))
 

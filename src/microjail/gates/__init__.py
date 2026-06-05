@@ -39,6 +39,33 @@ class GateResult:
     """
 
 
+def resolve_project(gate_name: str) -> tuple[str | None, GateResult | None]:
+    """Return the Workshop LXD project name, or a failed GateResult on error.
+
+    Returns ``(project, None)`` on success or ``(None, GateResult(passed=False))``
+    when the LXD project cannot be determined.
+
+    Typical usage in gate functions::
+
+        project, err_result = resolve_project("egress-down")
+        if err_result is not None:
+            return err_result
+        assert project is not None
+    """
+    from microjail.wrappers.lxd import _workshop_project  # local import avoids cycle
+
+    try:
+        return _workshop_project(), None
+    except RuntimeError as exc:
+        return None, GateResult(
+            name=gate_name,
+            passed=False,
+            message=(
+                f"Cannot determine LXD project to run {gate_name} check: {exc}. "
+                "Ensure Workshop and LXD are running."
+            ),
+        )
+
 def run_all_gates(state: State, workspace: Path) -> list[GateResult]:
     """Evaluate all gates applicable to *state* and return every result.
 

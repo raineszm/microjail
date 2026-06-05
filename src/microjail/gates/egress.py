@@ -8,8 +8,7 @@ Principles I and II (safety first; correctness over confidence).
 
 import subprocess
 
-from microjail.gates import GateResult
-from microjail.wrappers.lxd import _workshop_project
+from microjail.gates import GateResult, resolve_project
 
 _PROBE_HOST = "8.8.8.8"
 _PROBE_TIMEOUT = "3"  # seconds, as string for ping -W
@@ -24,17 +23,10 @@ def check_egress_down(container_name: str) -> GateResult:
 
     A *zero* exit code means egress is still reachable and the gate fails.
     """
-    try:
-        project = _workshop_project()
-    except RuntimeError as exc:
-        return GateResult(
-            name="egress-down",
-            passed=False,
-            message=(
-                f"Cannot determine LXD project to run egress probe: {exc}. "
-                "Ensure Workshop and LXD are running."
-            ),
-        )
+    project, err_result = resolve_project("egress-down")
+    if err_result is not None:
+        return err_result
+    assert project is not None
 
     result = subprocess.run(
         [

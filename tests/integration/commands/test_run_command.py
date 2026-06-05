@@ -20,7 +20,7 @@ runner = CliRunner()
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_run_echo_hello_exits_zero(_lxd_environment):  # type: ignore[no-untyped-def]
+def test_run_echo_hello_exits_zero(lxd_environment):  # type: ignore[no-untyped-def]
     """``microjail run -- echo hello`` executes and exits with the workload's exit code."""
     result = runner.invoke(app, ["run", "echo", "hello"])
     assert result.exit_code == 0
@@ -37,7 +37,7 @@ def test_run_fails_when_no_state_file(tmp_path, monkeypatch):  # type: ignore[no
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_run_fails_when_workload_empty(_lxd_environment):  # type: ignore[no-untyped-def]
+def test_run_fails_when_workload_empty(lxd_environment):  # type: ignore[no-untyped-def]
     """``microjail run`` with no workload tokens exits non-zero before locking."""
     result = runner.invoke(app, ["run"])
     assert result.exit_code != 0
@@ -52,7 +52,7 @@ def test_run_fails_when_workload_empty(_lxd_environment):  # type: ignore[no-unt
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_run_fails_when_inference_tunnel_unreachable(_lxd_inference_environment):  # type: ignore[no-untyped-def]
+def test_run_fails_when_inference_tunnel_unreachable(lxd_inference_environment):  # type: ignore[no-untyped-def]
     """When --inference llama-cpp was set at init and the TCP endpoint is unreachable,
     ``microjail run`` exits non-zero and names the unreachable host:port.
     """
@@ -76,7 +76,7 @@ def test_run_fails_when_inference_tunnel_unreachable(_lxd_inference_environment)
 @pytest.mark.workshop
 @pytest.mark.long_running
 def test_run_succeeds_when_inference_tunnel_reachable(  # type: ignore[no-untyped-def]
-    _lxd_inference_environment,
+    lxd_inference_environment,
 ) -> None:
     """When --inference llama-cpp was set at init and a TCP server is listening
     on localhost:8080, the inference tunnel gate passes and the run proceeds.

@@ -139,7 +139,7 @@ def test_us1_definition_yaml_written(workspace: Path, us1_env: str) -> None:
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_us1_opencode_jsonc_written(workspace: Path, _us1_env: str) -> None:
+def test_us1_opencode_jsonc_written(workspace: Path, us1_env: str) -> None:
     """opencode.jsonc is written when --agent opencode is specified."""
     assert (workspace / "opencode.jsonc").exists()
 
@@ -170,7 +170,7 @@ def test_us1_workshop_env_exists(workspace: Path, us1_env: str) -> None:
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_us1_no_remote_providers_enabled(workspace: Path, _us1_env: str) -> None:
+def test_us1_no_remote_providers_enabled(workspace: Path, us1_env: str) -> None:
     """opencode.jsonc has no enabled remote provider entries (invariant 3)."""
     cfg = json.loads((workspace / "opencode.jsonc").read_text())
     remote = {k: v for k, v in cfg["provider"].items() if k != "llama.cpp"}
@@ -181,7 +181,7 @@ def test_us1_no_remote_providers_enabled(workspace: Path, _us1_env: str) -> None
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_us1_duplicate_name_rejected(_workspace: Path, us1_env: str) -> None:
+def test_us1_duplicate_name_rejected(workspace: Path, us1_env: str) -> None:
     """Second init with same name exits 2 with 'already exists' message."""
     result = runner.invoke(app, ["init", us1_env], catch_exceptions=False)
     assert result.exit_code == 2
@@ -211,7 +211,7 @@ def test_us2_bare_init_exit_zero(workspace: Path) -> None:
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_us2_no_opencode_jsonc(workspace: Path, _us2_env: str) -> None:
+def test_us2_no_opencode_jsonc(workspace: Path, us2_env: str) -> None:
     """opencode.jsonc is NOT written when --agent is not specified."""
     assert not (workspace / "opencode.jsonc").exists(), (
         "opencode.jsonc should not be written for bare init"
@@ -232,7 +232,7 @@ def test_us2_workshop_yaml_empty_sdks(workspace: Path, us2_env: str) -> None:
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_us2_state_json_null_fields(workspace: Path, _us2_env: str) -> None:
+def test_us2_state_json_null_fields(workspace: Path, us2_env: str) -> None:
     """state.json has null inference, agent, and socket_url for bare init."""
     state = json.loads((workspace / ".microjail" / "state.json").read_text())
     assert state["inference"] is None
@@ -258,7 +258,7 @@ def test_us2_workshop_env_exists(workspace: Path, us2_env: str) -> None:
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_force_reinit_exits_zero(_workspace: Path, us1_env: str) -> None:
+def test_force_reinit_exits_zero(workspace: Path, us1_env: str) -> None:
     """Microjail init <name> --force exits 0 when environment already exists."""
     result = runner.invoke(
         app,
@@ -342,7 +342,7 @@ def test_us2_workshop_yaml_no_tunnel_entries(workspace: Path, us2_env: str) -> N
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_us1_state_json_has_http_socket_url(workspace: Path, _us1_env: str) -> None:
+def test_us1_state_json_has_http_socket_url(workspace: Path, us1_env: str) -> None:
     """state.json contains HTTP URL for socket_url when --inference is set."""
     state = json.loads((workspace / ".microjail" / "state.json").read_text())
     assert state["socket_url"] == "http://127.0.0.1:8080/v1"
@@ -351,7 +351,7 @@ def test_us1_state_json_has_http_socket_url(workspace: Path, _us1_env: str) -> N
 @pytest.mark.lxd
 @pytest.mark.workshop
 @pytest.mark.long_running
-def test_us2_state_json_null_socket_url(workspace: Path, _us2_env: str) -> None:
+def test_us2_state_json_null_socket_url(workspace: Path, us2_env: str) -> None:
     """state.json has null socket_url when --inference is not set."""
     state = json.loads((workspace / ".microjail" / "state.json").read_text())
     assert state["socket_url"] is None

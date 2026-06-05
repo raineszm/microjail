@@ -135,25 +135,17 @@ def write_config_files(
     try:
         workshop_def_path.parent.mkdir(parents=True, exist_ok=True)
         workshop_def_path.write_text(generate_workshop_yaml(config))
-    except OSError as exc:
-        err(f"Cannot write to current directory: {exc}", code=3)
-
-    if config.inference is not None:
-        sdk_yaml_content = generate_sdk_yaml(config)
-        sdk_dir = workspace / ".workshop" / "local-inference"
-        try:
+        if config.inference is not None:
+            sdk_yaml_content = generate_sdk_yaml(config)
+            sdk_dir = workspace / ".workshop" / "local-inference"
             sdk_dir.mkdir(parents=True, exist_ok=True)
             (sdk_dir / "sdk.yaml").write_text(sdk_yaml_content)
-        except OSError as exc:
-            err(f"Cannot write to current directory: {exc}", code=3)
-
-    if agent == "opencode":
-        try:
+        if agent == "opencode":
             (workspace / "opencode.jsonc").write_text(
                 generate_opencode_config(socket_url)
             )
-        except OSError as exc:
-            err(f"Cannot write to current directory: {exc}", code=3)
+    except OSError as exc:
+        err(f"Cannot write to current directory: {exc}", code=3)
 
 
 def launch_and_verify(name: str, workspace: Path, *, already_exists: bool) -> None:

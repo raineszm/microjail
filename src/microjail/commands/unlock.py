@@ -9,8 +9,8 @@ from pathlib import Path
 
 import typer
 
+from microjail.commands import load_state_or_exit
 from microjail.output import err, warn
-from microjail.state import State
 from microjail.wrappers.lxd import unlock_egress
 
 
@@ -30,18 +30,14 @@ def unlock() -> None:
       microjail unlock
     """
     workspace = Path.cwd()
+    state = load_state_or_exit(workspace)
+
+    if not state.locked:
+        typer.echo(f"Environment '{state.name}' is already unlocked.")
+        return
+
     try:
-        state = State.from_json(workspace)
-
-        if not state.locked:
-            typer.echo(f"Environment '{state.name}' is already unlocked.")
-            return
-
         unlock_egress(state.name)
-    except FileNotFoundError:
-        err(
-            "No microjail environment found in the current directory. Run 'microjail init' first."
-        )
     except RuntimeError as exc:
         err(str(exc))
 
