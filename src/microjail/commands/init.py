@@ -18,7 +18,6 @@ environment.
 
 import os
 import re
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
@@ -248,7 +247,6 @@ def init(
         inference=inference,
         agent=agent,
         socket_url=socket_url,
-        created_at=datetime.now(tz=UTC),
     )
     try:
         state.to_json(workspace)

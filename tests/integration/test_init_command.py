@@ -255,22 +255,6 @@ def test_force_reinit_env_still_exists(workspace: Path, us1_env: str) -> None:
     )
 
 
-@pytest.mark.lxd
-def test_force_reinit_state_updated(workspace: Path, us1_env: str) -> None:
-    """state.json is rewritten with a fresh created_at timestamp after --force reinit."""
-    state_before = json.loads((workspace / ".microjail" / "state.json").read_text())
-    result = runner.invoke(
-        app,
-        ["init", us1_env, "--inference", "llama-cpp", "--agent", "opencode", "--force"],
-        catch_exceptions=False,
-    )
-    assert result.exit_code == 0, f"Non-zero exit:\n{result.output}"
-    state_after = json.loads((workspace / ".microjail" / "state.json").read_text())
-    assert state_after["created_at"] >= state_before["created_at"], (
-        "state.json created_at was not updated after --force reinit"
-    )
-
-
 # ---------------------------------------------------------------------------
 # T015 — Tunnel YAML structure assertions
 # ---------------------------------------------------------------------------

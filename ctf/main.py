@@ -269,7 +269,6 @@ def run(
             inference="llama-cpp",
             agent="omp",
             socket_url=f"http://localhost:{inference_port}/v1",
-            created_at=datetime.now(UTC),
         )
         state.to_json(workspace)
         console.print("[green]✓[/green] state written")

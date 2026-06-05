@@ -6,7 +6,6 @@ compatibility for environments created before this field was added).
 """
 
 import json
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from microjail.state import State
@@ -22,7 +21,6 @@ def _base_state(*, locked: bool = False) -> State:
         inference=None,
         agent=None,
         socket_url=None,
-        created_at=datetime(2026, 6, 2, 10, 0, 0, tzinfo=UTC),
         locked=locked,
     )
 

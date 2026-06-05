@@ -3,7 +3,6 @@
 Tests idempotency, successful unlock, and missing state file error.
 """
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -25,7 +24,6 @@ def _write_state(tmp_path: Path, *, locked: bool) -> None:
         inference=None,
         agent=None,
         socket_url=None,
-        created_at=datetime(2026, 6, 2, 10, 0, 0, tzinfo=UTC),
         locked=locked,
     )
     state.to_json(tmp_path)

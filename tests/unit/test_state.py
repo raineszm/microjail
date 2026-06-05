@@ -1,7 +1,5 @@
 """Unit tests for EnvironmentState serialisation round-trip."""
 
-import json
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -24,7 +22,6 @@ def _make_state(**overrides: object) -> State:
         "inference": "llama-cpp",
         "agent": "opencode",
         "socket_url": "http://127.0.0.1:8080/v1",
-        "created_at": datetime(2026, 5, 29, 15, 41, 52, tzinfo=UTC),
     }
     defaults.update(overrides)
     return State(**defaults)  # type: ignore[arg-type]
@@ -44,7 +41,6 @@ def test_round_trip_full(tmp_workspace: Path) -> None:
     assert loaded.inference == original.inference
     assert loaded.agent == original.agent
     assert loaded.socket_url == original.socket_url
-    assert loaded.created_at == original.created_at
 
 
 def test_round_trip_null_inference_agent(tmp_workspace: Path) -> None:
@@ -56,15 +52,6 @@ def test_round_trip_null_inference_agent(tmp_workspace: Path) -> None:
     assert loaded.inference is None
     assert loaded.agent is None
     assert loaded.socket_url is None
-
-
-def test_created_at_iso8601(tmp_workspace: Path) -> None:
-    """created_at is serialised as ISO-8601 UTC string."""
-    original = _make_state()
-    original.to_json(tmp_workspace)
-
-    raw = json.loads((tmp_workspace / STATE_DIR / STATE_FILE).read_text())
-    assert raw["created_at"] == "2026-05-29T15:41:52Z"
 
 
 def test_missing_state_file_raises(tmp_workspace: Path) -> None:

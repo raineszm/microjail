@@ -7,7 +7,6 @@ its configuration without the user re-specifying flags.
 
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -48,9 +47,6 @@ class State:
     socket_url: str | None
     """Inference endpoint URL, or ``None`` if no inference backend configured."""
 
-    created_at: datetime
-    """UTC timestamp of environment creation."""
-
     locked: bool = field(default=False)
     """Whether the environment's network egress is currently severed.
 
@@ -70,7 +66,6 @@ class State:
         state_dir.mkdir(parents=True, exist_ok=True)
         state_path = state_dir / STATE_FILE
         payload = asdict(self)
-        payload["created_at"] = self.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
         state_path.write_text(json.dumps(payload, indent=4))
 
     @classmethod
@@ -87,20 +82,12 @@ class State:
             msg = f"State file at {state_path} is not valid JSON: {exc}"
             raise ValueError(msg) from exc
         try:
-            created_at = datetime.strptime(
-                raw["created_at"], "%Y-%m-%dT%H:%M:%SZ"
-            ).replace(tzinfo=UTC)
-        except (KeyError, ValueError) as exc:
-            msg = f"State file at {state_path} has invalid 'created_at' field: {exc}"
-            raise ValueError(msg) from exc
-        try:
             return cls(
                 name=raw["name"],
                 base_image=raw["base_image"],
                 inference=raw.get("inference"),
                 agent=raw.get("agent"),
                 socket_url=raw.get("socket_url"),
-                created_at=created_at,
                 locked=bool(raw.get("locked", False)),
             )
         except KeyError as exc:
