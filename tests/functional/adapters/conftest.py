@@ -16,10 +16,13 @@ class TmpWorkshop:
 
 
 @pytest.fixture
-def tmp_workshop(tmpdir, project_name) -> Generator[TmpWorkshop]:
+def tmp_workshop(tmpdir, project_name, monkeypatch) -> Generator[TmpWorkshop]:
     """A tempory directory for creating a workshop.
 
     Ensure that the workshop is removed when it's done."""
+
+    monkeypatch.chdir(tmpdir)
+
     yield TmpWorkshop(
         name=project_name,
         path=tmpdir,
