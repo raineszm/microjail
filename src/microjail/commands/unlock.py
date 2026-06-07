@@ -1,0 +1,2 @@
+def unlock() -> None:
+    pass
