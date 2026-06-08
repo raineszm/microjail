@@ -25,6 +25,18 @@ class WorkshopExistsError(Exception):
     project: Path
 
 
+@dataclass
+class WorkshopNotFoundError(Exception):
+    name: str
+    project: Path
+
+
+@dataclass
+class WorkshopNotLaunchedError(Exception):
+    name: str
+    project: Path
+
+
 _VALID_PROJECT_SUFFIX = re.compile(r"^[a-zA-Z][-a-zA-Z0-9.]{0,31}$")
 
 
@@ -116,3 +128,27 @@ def exists(name: str, project: Path) -> bool:
             return False
         raise
     return False
+
+
+def exec_(
+    name: str, project: Path, command: list[str], **kwargs
+) -> subprocess.CompletedProcess:
+    if not exists(name, project):
+        raise WorkshopNotFoundError(name=name, project=project)
+
+    if info(name, project) is None:
+        raise WorkshopNotLaunchedError(name=name, project=project)
+
+    return subprocess.run(
+        [
+            "workshop",
+            "exec",
+            "--non-interactive",
+            "--project",
+            str(project),
+            name,
+            "--",
+            *command,
+        ],
+        **kwargs,
+    )

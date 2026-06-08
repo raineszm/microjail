@@ -1,3 +1,5 @@
+import subprocess
+
 import pytest
 
 from microjail.adapters import workshop
@@ -59,6 +61,88 @@ def test_get_container_returns_container_if_launched(launched_workshop):
         launched_workshop.name, project=launched_workshop.path
     )
     assert container is not None
+
+
+def test_exec_executes_command_in_launched_workshop_container(launched_workshop):
+    marker = "/tmp/microjail-workshop-exec-marker"
+
+    workshop.exec_(
+        launched_workshop.name,
+        launched_workshop.path,
+        ["sh", "-c", f"echo ran > {marker}"],
+    )
+
+    container = workshop.get_container(
+        launched_workshop.name, project=launched_workshop.path
+    )
+    assert container is not None
+
+    result = subprocess.run(
+        [
+            "lxc",
+            "--project",
+            workshop.lxd_project(),
+            "exec",
+            container.name,
+            "--",
+            "cat",
+            marker,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout == "ran\n"
+
+
+def test_exec_returns_stdout_to_caller(launched_workshop):
+    result = workshop.exec_(
+        launched_workshop.name,
+        launched_workshop.path,
+        ["printf", "from stdout"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == "from stdout"
+
+
+def test_exec_passes_stdin_to_command(launched_workshop):
+    result = workshop.exec_(
+        launched_workshop.name,
+        launched_workshop.path,
+        ["cat"],
+        input="from stdin\n",
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout == "from stdin\n"
+
+
+def test_exec_fails_if_workshop_is_not_launched(initialized_workshop):
+    with pytest.raises(workshop.WorkshopNotLaunchedError) as exc_info:
+        workshop.exec_(
+            initialized_workshop.name,
+            initialized_workshop.path,
+            ["true"],
+        )
+
+    assert exc_info.value.name == initialized_workshop.name
+    assert exc_info.value.project == initialized_workshop.path
+
+
+def test_exec_fails_if_workshop_does_not_exist(tmp_workshop):
+    with pytest.raises(workshop.WorkshopNotFoundError) as exc_info:
+        workshop.exec_(
+            tmp_workshop.name,
+            tmp_workshop.path,
+            ["true"],
+        )
+
+    assert exc_info.value.name == tmp_workshop.name
+    assert exc_info.value.project == tmp_workshop.path
 
 
 def test_exists_returns_true_for_existing_workshop(initialized_workshop):
