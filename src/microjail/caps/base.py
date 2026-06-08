@@ -1,6 +1,10 @@
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from microjail.microjail import MicroJail
 
 
+@runtime_checkable
 class Capability(Protocol):
     """Protocol for microjail capabilities.
 
@@ -9,16 +13,16 @@ class Capability(Protocol):
 
     Lifecycle::
 
-        check()          # does the capability exist?
+        check(microjail)          # does the capability exist?
         if not present:
-            provide()    # create the capability
-        check()          # verify provisioning succeeded
+            provide(microjail)    # create the capability
+        check(microjail)          # verify provisioning succeeded
     """
 
     name: str
 
-    def check(self) -> bool: ...
+    def check(self, microjail: MicroJail) -> bool: ...
 
-    def provide(self) -> None: ...
+    def provide(self, microjail: MicroJail) -> None: ...
 
-    def revoke(self) -> None: ...
+    def revoke(self, microjail: MicroJail) -> None: ...

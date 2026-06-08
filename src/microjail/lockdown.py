@@ -1,10 +1,15 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import msgspec
 
 # These types are needed at runtime by msgspec
 from microjail.caps.base import Capability  # noqa: TC001
 from microjail.gates.base import Gate  # noqa: TC001
+from microjail.gates.network_drop import NetworkDrop
+
+if TYPE_CHECKING:
+    from microjail.microjail import MicroJail
 
 
 @dataclass(frozen=True)
@@ -37,7 +42,11 @@ class Lockdown(msgspec.Struct):
     caps: list[Capability]
     gates: list[Gate]
 
-    def ensure(self) -> None:
+    @classmethod
+    def default(cls) -> Lockdown:
+        return cls(caps=[], gates=[NetworkDrop()])
+
+    def ensure(self, microjail: MicroJail) -> None:
         """Bring the environment into the desired state.
 
         To play it safe we add capabilities first, then apply restrictions.
@@ -49,15 +58,15 @@ class Lockdown(msgspec.Struct):
 
         try:
             for cap in self.caps:
-                self.ensure_capability(cap, provided_caps)
+                self.ensure_capability(microjail, cap, provided_caps)
 
             for gate in self.gates:
-                self.ensure_gate(gate, enforced_gates)
+                self.ensure_gate(microjail, gate, enforced_gates)
         except Exception:
-            self.release_applied(provided_caps, enforced_gates)
+            self.release_applied(microjail, provided_caps, enforced_gates)
             raise
 
-    def release(self) -> None:
+    def release(self, microjail: MicroJail) -> None:
         """Explicitly tear down the lockdown in reverse dependency order.
 
         Errors from individual release/revoke calls are collected and re-raised
@@ -67,13 +76,13 @@ class Lockdown(msgspec.Struct):
 
         for gate in reversed(self.gates):
             try:
-                gate.release()
+                gate.release(microjail)
             except Exception as exc:
                 errors.append(exc)
 
         for cap in reversed(self.caps):
             try:
-                cap.revoke()
+                cap.revoke(microjail)
             except Exception as exc:
                 errors.append(exc)
 
@@ -81,20 +90,23 @@ class Lockdown(msgspec.Struct):
             raise ExceptionGroup("lockdown release failures", errors)
 
     def release_applied(
-        self, provided_caps: list[Capability], enforced_gates: list[Gate]
+        self,
+        microjail: MicroJail,
+        provided_caps: list[Capability],
+        enforced_gates: list[Gate],
     ) -> None:
         """Tear down only state that this ensure() call attempted to apply."""
         errors: list[Exception] = []
 
         for gate in reversed(enforced_gates):
             try:
-                gate.release()
+                gate.release(microjail)
             except Exception as exc:
                 errors.append(exc)
 
         for cap in reversed(provided_caps):
             try:
-                cap.revoke()
+                cap.revoke(microjail)
             except Exception as exc:
                 errors.append(exc)
 
@@ -102,19 +114,27 @@ class Lockdown(msgspec.Struct):
             raise ExceptionGroup("lockdown release failures", errors)
 
     def ensure_capability(
-        self, cap: Capability, provided_caps: list[Capability]
+        self,
+        microjail: MicroJail,
+        cap: Capability,
+        provided_caps: list[Capability],
     ) -> None:
         """check → provide if missing → verify for a single capability."""
-        if not cap.check():
+        if not cap.check(microjail):
             provided_caps.append(cap)
-            cap.provide()
-            if not cap.check():
+            cap.provide(microjail)
+            if not cap.check(microjail):
                 raise CapabilityError(name=cap.name)
 
-    def ensure_gate(self, gate: Gate, enforced_gates: list[Gate]) -> None:
+    def ensure_gate(
+        self,
+        microjail: MicroJail,
+        gate: Gate,
+        enforced_gates: list[Gate],
+    ) -> None:
         """check → enforce if unsatisfied → verify for a single gate."""
-        if not gate.check():
+        if not gate.check(microjail):
             enforced_gates.append(gate)
-            gate.enforce()
-            if not gate.check():
+            gate.enforce(microjail)
+            if not gate.check(microjail):
                 raise GateError(name=gate.name)

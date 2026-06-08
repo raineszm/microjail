@@ -28,7 +28,7 @@ def microjail_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def fail_lockdown(monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
-    def ensure(self: Lockdown) -> None:
+    def ensure(self: Lockdown, microjail) -> None:
         raise failure
 
     monkeypatch.setattr(Lockdown, "ensure", ensure)

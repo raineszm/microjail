@@ -6,6 +6,8 @@ from pathlib import Path
 import msgspec
 
 # Needed at runtime by msgspec for struct field resolution.
+from microjail.gates.base import Gate
+from microjail.gates.network_drop import NetworkDrop
 from microjail.lockdown import Lockdown  # noqa: TC001
 
 CONFIG_DIRNAME = ".microjail"
@@ -30,6 +32,8 @@ def dec_hook(expected: type, obj: object) -> object:
     """Deserialize types msgspec does not handle natively."""
     if expected is Path:
         return Path(str(obj))
+    if expected is Gate:
+        return msgspec.convert(obj, type=NetworkDrop)
     raise NotImplementedError(f"cannot decode object of type {expected.__name__}")
 
 

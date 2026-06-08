@@ -6,15 +6,13 @@ import pytest
 
 from microjail.caps.base import Capability
 from microjail.gates.base import Gate
+from microjail.gates.network_drop import NetworkDrop
 from microjail.lockdown import CapabilityError, GateError, Lockdown
+from microjail.microjail import MicroJail
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-
-# Expected lifecycle call sequences for a cap or gate.
-PROVISIONED_THEN_REVOKED = (call.check(), call.provide(), call.check(), call.revoke())
-ENFORCED_THEN_RELEASED = (call.check(), call.enforce(), call.check(), call.release())
-CHECKED_ONLY = (call.check(),)
+    from pathlib import Path
 
 
 class CapabilityMock(Capability, Protocol):
@@ -29,7 +27,7 @@ class GateMock(Gate, Protocol):
 class ComponentSpec:
     name: str
     checks: Sequence[bool] | None
-    expected_calls: tuple[object, ...]
+    expected_methods: tuple[str, ...]
 
 
 @pytest.fixture
@@ -60,6 +58,15 @@ def gate_factory() -> Callable[[ComponentSpec], GateMock]:
     return build
 
 
+@pytest.fixture
+def microjail(tmp_path: Path, project_name: str) -> MicroJail:
+    return MicroJail(
+        name=project_name,
+        project_path=tmp_path,
+        lockdown=Lockdown(caps=[], gates=[]),
+    )
+
+
 def lockdown_from_specs(
     cap_specs: Sequence[ComponentSpec],
     gate_specs: Sequence[ComponentSpec],
@@ -71,15 +78,22 @@ def lockdown_from_specs(
     return Lockdown(caps=[*cap_mocks], gates=[*gate_mocks]), cap_mocks, gate_mocks
 
 
+def expected_calls(method_names: Sequence[str], microjail: MicroJail) -> list[object]:
+    return [getattr(call, method_name)(microjail) for method_name in method_names]
+
+
 def assert_mock_calls(
     mocks: Sequence[CapabilityMock] | Sequence[GateMock],
     specs: Sequence[ComponentSpec],
+    microjail: MicroJail,
 ) -> None:
     for mock, spec in zip(mocks, specs, strict=True):
-        assert mock.mock_calls == list(spec.expected_calls)
+        assert mock.mock_calls == expected_calls(spec.expected_methods, microjail)
 
 
-def test_ensure_provisions_capabilities_before_enforcing_gates() -> None:
+def test_ensure_provisions_capabilities_before_enforcing_gates(
+    microjail: MicroJail,
+) -> None:
     capability = Mock(spec=Capability)
     capability.name = "proxy"
     capability.check.side_effect = [False, True]
@@ -90,24 +104,25 @@ def test_ensure_provisions_capabilities_before_enforcing_gates() -> None:
     calls.attach_mock(capability, "capability")
     calls.attach_mock(gate, "gate")
 
-    Lockdown(caps=[capability], gates=[gate]).ensure()
+    Lockdown(caps=[capability], gates=[gate]).ensure(microjail)
 
     assert calls.mock_calls == [
-        call.capability.check(),
-        call.capability.provide(),
-        call.capability.check(),
-        call.gate.check(),
-        call.gate.enforce(),
-        call.gate.check(),
+        call.capability.check(microjail),
+        call.capability.provide(microjail),
+        call.capability.check(microjail),
+        call.gate.check(microjail),
+        call.gate.enforce(microjail),
+        call.gate.check(microjail),
     ]
 
 
 def test_ensure_skips_satisfied_capabilities_and_gates(
+    microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
 ) -> None:
-    cap_specs = [ComponentSpec("proxy", [True], CHECKED_ONLY)]
-    gate_specs = [ComponentSpec("network", [True], CHECKED_ONLY)]
+    cap_specs = [ComponentSpec("proxy", [True], ("check",))]
+    gate_specs = [ComponentSpec("network", [True], ("check",))]
     lockdown, cap_mocks, gate_mocks = lockdown_from_specs(
         cap_specs=cap_specs,
         gate_specs=gate_specs,
@@ -115,17 +130,20 @@ def test_ensure_skips_satisfied_capabilities_and_gates(
         gate_factory=gate_factory,
     )
 
-    lockdown.ensure()
+    lockdown.ensure(microjail)
 
-    assert_mock_calls(cap_mocks, cap_specs)
-    assert_mock_calls(gate_mocks, gate_specs)
+    assert_mock_calls(cap_mocks, cap_specs, microjail)
+    assert_mock_calls(gate_mocks, gate_specs, microjail)
 
 
 def test_ensure_releases_applied_state_if_capability_verification_fails(
+    microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
 ) -> None:
-    cap_specs = [ComponentSpec("proxy", [False, False], PROVISIONED_THEN_REVOKED)]
+    cap_specs = [
+        ComponentSpec("proxy", [False, False], ("check", "provide", "check", "revoke"))
+    ]
     gate_specs = [ComponentSpec("network", None, ())]
     lockdown, cap_mocks, gate_mocks = lockdown_from_specs(
         cap_specs=cap_specs,
@@ -135,20 +153,27 @@ def test_ensure_releases_applied_state_if_capability_verification_fails(
     )
 
     with pytest.raises(CapabilityError):
-        lockdown.ensure()
+        lockdown.ensure(microjail)
 
-    assert_mock_calls(cap_mocks, cap_specs)
-    assert_mock_calls(gate_mocks, gate_specs)
+    assert_mock_calls(cap_mocks, cap_specs, microjail)
+    assert_mock_calls(gate_mocks, gate_specs, microjail)
 
 
 def test_ensure_releases_applied_state_if_gate_verification_fails(
+    microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
 ) -> None:
-    cap_specs = [ComponentSpec("proxy", [False, True], PROVISIONED_THEN_REVOKED)]
+    cap_specs = [
+        ComponentSpec("proxy", [False, True], ("check", "provide", "check", "revoke"))
+    ]
     gate_specs = [
-        ComponentSpec("network", [False, True], ENFORCED_THEN_RELEASED),
-        ComponentSpec("secrets", [False, False], ENFORCED_THEN_RELEASED),
+        ComponentSpec(
+            "network", [False, True], ("check", "enforce", "check", "release")
+        ),
+        ComponentSpec(
+            "secrets", [False, False], ("check", "enforce", "check", "release")
+        ),
     ]
     lockdown, cap_mocks, gate_mocks = lockdown_from_specs(
         cap_specs=cap_specs,
@@ -158,20 +183,23 @@ def test_ensure_releases_applied_state_if_gate_verification_fails(
     )
 
     with pytest.raises(GateError):
-        lockdown.ensure()
+        lockdown.ensure(microjail)
 
-    assert_mock_calls(cap_mocks, cap_specs)
-    assert_mock_calls(gate_mocks, gate_specs)
+    assert_mock_calls(cap_mocks, cap_specs, microjail)
+    assert_mock_calls(gate_mocks, gate_specs, microjail)
 
 
 def test_ensure_preserves_preexisting_state_if_later_gate_fails(
+    microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
 ) -> None:
-    cap_specs = [ComponentSpec("proxy", [True], CHECKED_ONLY)]
+    cap_specs = [ComponentSpec("proxy", [True], ("check",))]
     gate_specs = [
-        ComponentSpec("network", [True], CHECKED_ONLY),
-        ComponentSpec("secrets", [False, False], ENFORCED_THEN_RELEASED),
+        ComponentSpec("network", [True], ("check",)),
+        ComponentSpec(
+            "secrets", [False, False], ("check", "enforce", "check", "release")
+        ),
     ]
     lockdown, cap_mocks, gate_mocks = lockdown_from_specs(
         cap_specs=cap_specs,
@@ -181,19 +209,22 @@ def test_ensure_preserves_preexisting_state_if_later_gate_fails(
     )
 
     with pytest.raises(GateError):
-        lockdown.ensure()
+        lockdown.ensure(microjail)
 
-    assert_mock_calls(cap_mocks, cap_specs)
-    assert_mock_calls(gate_mocks, gate_specs)
+    assert_mock_calls(cap_mocks, cap_specs, microjail)
+    assert_mock_calls(gate_mocks, gate_specs, microjail)
 
 
 def test_ensure_aborts_remaining_gates_after_first_failure(
+    microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
 ) -> None:
     cap_specs: list[ComponentSpec] = []
     gate_specs = [
-        ComponentSpec("secrets", [False, False], ENFORCED_THEN_RELEASED),
+        ComponentSpec(
+            "secrets", [False, False], ("check", "enforce", "check", "release")
+        ),
         ComponentSpec("network", None, ()),
     ]
     lockdown, cap_mocks, gate_mocks = lockdown_from_specs(
@@ -204,7 +235,30 @@ def test_ensure_aborts_remaining_gates_after_first_failure(
     )
 
     with pytest.raises(GateError):
-        lockdown.ensure()
+        lockdown.ensure(microjail)
 
-    assert_mock_calls(cap_mocks, cap_specs)
-    assert_mock_calls(gate_mocks, gate_specs)
+    assert_mock_calls(cap_mocks, cap_specs, microjail)
+    assert_mock_calls(gate_mocks, gate_specs, microjail)
+
+
+def test_default_lockdown_drops_network() -> None:
+    lockdown = Lockdown.default()
+
+    assert lockdown.caps == []
+    assert len(lockdown.gates) == 1
+    assert isinstance(lockdown.gates[0], NetworkDrop)
+
+
+def test_default_lockdown_ensure_enforces_network_drop(
+    monkeypatch: pytest.MonkeyPatch, microjail: MicroJail
+) -> None:
+    check = Mock(side_effect=[False, True])
+    enforce = Mock()
+    monkeypatch.setattr(NetworkDrop, "check", check)
+    monkeypatch.setattr(NetworkDrop, "enforce", enforce)
+    lockdown = Lockdown.default()
+
+    lockdown.ensure(microjail)
+
+    assert check.mock_calls == [call(microjail), call(microjail)]
+    enforce.assert_called_once_with(microjail)

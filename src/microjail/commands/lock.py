@@ -20,7 +20,7 @@ def load_microjail_or_exit() -> MicroJail:
 
 def ensure_lockdown_or_exit(microjail: MicroJail) -> None:
     try:
-        microjail.lockdown.ensure()
+        microjail.lockdown.ensure(microjail)
     except* CapabilityError as eg:
         cap_names = ", ".join(
             cap.name for cap in eg.exceptions if isinstance(cap, CapabilityError)

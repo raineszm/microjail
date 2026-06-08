@@ -1,6 +1,10 @@
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from microjail.microjail import MicroJail
 
 
+@runtime_checkable
 class Gate(Protocol):
     """Protocol for microjail gates.
 
@@ -10,16 +14,16 @@ class Gate(Protocol):
 
     Lifecycle::
 
-        check()          # is the restriction currently satisfied?
+        check(microjail)          # is the restriction currently satisfied?
         if not satisfied:
-            enforce()    # establish the restriction
-        check()          # verify enforcement succeeded
+            enforce(microjail)    # establish the restriction
+        check(microjail)          # verify enforcement succeeded
     """
 
     name: str
 
-    def check(self) -> bool: ...
+    def check(self, microjail: MicroJail) -> bool: ...
 
-    def enforce(self) -> None: ...
+    def enforce(self, microjail: MicroJail) -> None: ...
 
-    def release(self) -> None: ...
+    def release(self, microjail: MicroJail) -> None: ...

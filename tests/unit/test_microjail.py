@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from microjail.gates.network_drop import NetworkDrop
 from microjail.lockdown import Lockdown
 from microjail.microjail import (
     ConfigNotFoundError,
@@ -38,6 +39,22 @@ def test_load_round_trips_saved_config(tmp_microjail: MicroJail) -> None:
     loaded = MicroJail.load(tmp_microjail.project_path)
 
     assert loaded == tmp_microjail
+
+
+def test_load_round_trips_default_network_drop_gate(
+    tmp_path: Path, project_name: str
+) -> None:
+    microjail = MicroJail(
+        name=project_name,
+        project_path=tmp_path,
+        lockdown=Lockdown.default(),
+    )
+    microjail.save()
+
+    loaded = MicroJail.load(tmp_path)
+
+    assert len(loaded.lockdown.gates) == 1
+    assert isinstance(loaded.lockdown.gates[0], NetworkDrop)
 
 
 def test_load_raises_when_config_missing(tmp_path: Path) -> None:
