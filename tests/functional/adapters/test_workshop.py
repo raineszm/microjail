@@ -1,6 +1,7 @@
 import pytest
 
 from microjail.adapters import workshop
+from microjail.adapters.workshop import WorkshopExistsError
 from tests.marks import requires_workshop
 
 pytestmark = [
@@ -22,6 +23,11 @@ def launched_workshop(initialized_workshop):
 
 def test_init_minimal_args(tmp_workshop):
     workshop.init(tmp_workshop.name)
+
+
+def test_init_throws_on_existing_workshop(initialized_workshop):
+    with pytest.raises(WorkshopExistsError):
+        workshop.init(initialized_workshop.name)
 
 
 def test_ready_after_launch(launched_workshop):

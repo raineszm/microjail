@@ -2,13 +2,12 @@ import getpass
 import pwd
 import re
 import subprocess
+from dataclasses import dataclass
 from functools import cache
-from typing import TYPE_CHECKING, Literal
+from pathlib import Path
+from typing import Literal
 
 import msgspec
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class WorkshopInfo(msgspec.Struct):
@@ -18,6 +17,12 @@ class WorkshopInfo(msgspec.Struct):
 
 class ContainerInfo(msgspec.Struct):
     name: str
+
+
+@dataclass
+class WorkshopExistsError(Exception):
+    name: str
+    project: Path
 
 
 _VALID_PROJECT_SUFFIX = re.compile(r"^[a-zA-Z][-a-zA-Z0-9.]{0,31}$")
@@ -42,7 +47,17 @@ def init(name: str, sdks: list[str] | None = None):
         sdks = []
     sdks = sdks.copy()
     sdks.append("direnv")
-    subprocess.run(["workshop", "init", name, "--sdks", ",".join(sdks)], check=True)
+
+    try:
+        subprocess.run(
+            ["workshop", "init", name, "--sdks", ",".join(sdks)],
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        if b"already exists" in exc.stderr:
+            raise WorkshopExistsError(name=name, project=Path.cwd()) from exc
+        raise
 
 
 def launch(name: str, project: Path):
