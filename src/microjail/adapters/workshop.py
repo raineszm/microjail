@@ -72,8 +72,10 @@ def init(name: str, sdks: list[str] | None = None):
         raise
 
 
-def launch(name: str, project: Path):
-    subprocess.run(["workshop", "launch", name, "--project", str(project)], check=True)
+def launch(name: str, project: Path, **kwargs):
+    subprocess.run(
+        ["workshop", "launch", name, "--project", str(project)], check=True, **kwargs
+    )
 
 
 def info(name: str, project: Path) -> WorkshopInfo | None:
