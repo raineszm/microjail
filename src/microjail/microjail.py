@@ -11,6 +11,7 @@ from microjail.adapters import workshop
 # Needed at runtime by msgspec for struct field resolution.
 from microjail.gates.base import Gate
 from microjail.gates.network_drop import NetworkDrop
+from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import CapabilityError, GateError, Lockdown
 
 if TYPE_CHECKING:
@@ -48,7 +49,14 @@ def dec_hook(expected: type, obj: object) -> object:
     if expected is Path:
         return Path(str(obj))
     if expected is Gate:
-        return msgspec.convert(obj, type=NetworkDrop)
+        if not isinstance(obj, dict):
+            raise NotImplementedError(f"cannot decode Gate from {type(obj).__name__}")
+        name = obj.get("name")
+        if name == "network-egress":
+            return msgspec.convert(obj, type=NetworkDrop)
+        if name == "readonly-config":
+            return msgspec.convert(obj, type=ReadonlyConfig)
+        raise NotImplementedError(f"unknown gate name: {name!r}")
     raise NotImplementedError(f"cannot decode object of type {expected.__name__}")
 
 

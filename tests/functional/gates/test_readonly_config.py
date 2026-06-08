@@ -1,0 +1,94 @@
+import os
+import subprocess
+import time
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
+from microjail.adapters import workshop
+from microjail.gates.readonly_config import ReadonlyConfig
+from microjail.lockdown import Lockdown
+from microjail.microjail import MicroJail
+from tests.marks import requires_lxd, requires_workshop
+
+pytestmark = [
+    requires_lxd(),
+    requires_workshop(),
+    pytest.mark.slow,
+]
+
+
+@dataclass(frozen=True)
+class SharedWorkshop:
+    name: str
+    path: Path
+
+
+LAUNCH_TIMEOUT = 30
+LAUNCH_RETRIES = 2
+LAUNCH_BACKOFF = 15
+
+
+def launch_with_retries(name: str, project: Path):
+    for attempt in range(LAUNCH_RETRIES + 1):
+        try:
+            workshop.launch(name, project=project, timeout=LAUNCH_TIMEOUT)
+            return
+        except subprocess.TimeoutExpired:
+            if attempt == LAUNCH_RETRIES:
+                raise
+            time.sleep(LAUNCH_BACKOFF)
+
+
+@pytest.fixture(scope="module")
+def launched_workshop(tmp_path_factory):
+    project = tmp_path_factory.mktemp("readonly-config-workshop")
+    name = f"mj-workshop-{uuid.uuid4().hex[:8]}"
+    cwd = Path.cwd()
+
+    try:
+        os.chdir(project)
+        workshop.init(name)
+        mj = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
+        mj.save()
+        launch_with_retries(name, project)
+        yield SharedWorkshop(name=name, path=project)
+    finally:
+        os.chdir(cwd)
+        subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
+
+
+def can_write_config(ws: SharedWorkshop) -> bool:
+    result = workshop.exec_(
+        ws.name,
+        ws.path,
+        ["bash", "-c", "echo x >> /project/.microjail/config.yaml"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def test_readonly_config_blocks_write_on_enforce_and_restores_on_release(
+    launched_workshop: SharedWorkshop,
+) -> None:
+    if not can_write_config(launched_workshop):
+        pytest.skip("workshop does not have baseline write access to config")
+
+    lockdown = Lockdown(caps=[], gates=[ReadonlyConfig()])
+    microjail = MicroJail(
+        name=launched_workshop.name,
+        project_path=launched_workshop.path,
+        lockdown=lockdown,
+    )
+
+    try:
+        microjail.ensure()
+        assert not can_write_config(launched_workshop)
+    finally:
+        microjail.release()
+
+    assert can_write_config(launched_workshop)

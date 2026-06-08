@@ -8,6 +8,7 @@ from microjail.adapters import workshop
 from microjail.caps.base import Capability
 from microjail.gates.base import Gate
 from microjail.gates.network_drop import NetworkDrop
+from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import CapabilityError, GateError, Lockdown
 from microjail.microjail import (
     ConfigNotFoundError,
@@ -127,9 +128,7 @@ def test_load_round_trips_saved_config(tmp_microjail: MicroJail) -> None:
     assert loaded == tmp_microjail
 
 
-def test_load_round_trips_default_network_drop_gate(
-    tmp_path: Path, project_name: str
-) -> None:
+def test_load_round_trips_default_gates(tmp_path: Path, project_name: str) -> None:
     microjail = MicroJail(
         name=project_name,
         project_path=tmp_path,
@@ -139,8 +138,9 @@ def test_load_round_trips_default_network_drop_gate(
 
     loaded = MicroJail.load(tmp_path)
 
-    assert len(loaded.lockdown.gates) == 1
+    assert len(loaded.lockdown.gates) == 2
     assert isinstance(loaded.lockdown.gates[0], NetworkDrop)
+    assert isinstance(loaded.lockdown.gates[1], ReadonlyConfig)
 
 
 def test_load_raises_when_config_missing(tmp_path: Path) -> None:
@@ -380,6 +380,9 @@ def test_default_lockdown_ensure_enforces_network_drop(
     enforce = Mock()
     monkeypatch.setattr(NetworkDrop, "check", check)
     monkeypatch.setattr(NetworkDrop, "enforce", enforce)
+    # ReadonlyConfig is also in default(); stub it as already satisfied so it
+    # doesn't reach the workshop adapter and pollute this test's scope.
+    monkeypatch.setattr(ReadonlyConfig, "check", Mock(return_value=True))
     microjail = MicroJail(
         name=tmp_microjail.name,
         project_path=tmp_microjail.project_path,

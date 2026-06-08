@@ -6,6 +6,7 @@ import msgspec
 from microjail.caps.base import Capability  # noqa: TC001
 from microjail.gates.base import Gate  # noqa: TC001
 from microjail.gates.network_drop import NetworkDrop
+from microjail.gates.readonly_config import ReadonlyConfig
 
 
 @dataclass(frozen=True)
@@ -30,4 +31,4 @@ class Lockdown(msgspec.Struct):
 
     @classmethod
     def default(cls) -> Lockdown:
-        return cls(caps=[], gates=[NetworkDrop()])
+        return cls(caps=[], gates=[NetworkDrop(), ReadonlyConfig()])
