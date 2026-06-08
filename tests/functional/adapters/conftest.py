@@ -32,3 +32,10 @@ def tmp_workshop(tmpdir, project_name, monkeypatch) -> Generator[TmpWorkshop]:
     # Don't check the return code since its possible the workshop was never
     # launched
     subprocess.run(["workshop", "remove", "--project", tmpdir], check=False)
+
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        # Launching a workshop is slow, so mark it as such
+        if "launched_workshop" in item.fixturenames:
+            item.add_marker(pytest.mark.slow)

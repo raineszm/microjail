@@ -12,22 +12,20 @@ def project_name():
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
-        "--run-long",
+        "--slow",
         action="store_true",
         default=False,
-        help="Include long-running tests (container creation, etc.).",
+        help="Include slow tests (container creation, etc.).",
     )
 
 
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    run_long = config.getoption("--run-long")
+    run_slow = config.getoption("--slow")
 
-    skip_long = pytest.mark.skip(
-        reason="long-running test skipped; pass --run-long to include"
-    )
+    skip_long = pytest.mark.skip(reason="slow test skipped; pass --slow to include")
 
     for item in items:
-        if not run_long and "long_running" in item.keywords:
+        if not run_slow and item.get_closest_marker("slow"):
             item.add_marker(skip_long)
