@@ -96,3 +96,23 @@ def get_container(name: str, project: Path) -> ContainerInfo | None:
         capture_output=True,
     )
     return msgspec.json.decode(result.stdout, type=ContainerInfo)
+
+
+def exists(name: str, project: Path) -> bool:
+    try:
+        for line in (
+            subprocess.run(
+                ["workshop", "list", "--project", str(project), "--no-headers"],
+                check=True,
+                capture_output=True,
+            )
+            .stdout.decode("utf-8")
+            .splitlines()
+        ):
+            if line.split()[0] == name:
+                return True
+    except subprocess.CalledProcessError as exc:
+        if b"not a project" in exc.stderr:
+            return False
+        raise
+    return False

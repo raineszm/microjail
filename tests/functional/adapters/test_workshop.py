@@ -59,3 +59,15 @@ def test_get_container_returns_container_if_launched(launched_workshop):
         launched_workshop.name, project=launched_workshop.path
     )
     assert container is not None
+
+
+def test_exists_returns_true_for_existing_workshop(initialized_workshop):
+    assert workshop.exists(initialized_workshop.name, project=initialized_workshop.path)
+
+
+def test_exists_returns_false_for_nonexistent_workshop(tmp_workshop):
+    assert not workshop.exists(tmp_workshop.name, project=tmp_workshop.path)
+
+
+def test_exists_returns_false_if_name_doesnt_match(initialized_workshop):
+    assert not workshop.exists("bad-name", project=initialized_workshop.path)

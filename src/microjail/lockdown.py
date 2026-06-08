@@ -1,11 +1,10 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import msgspec
 
-if TYPE_CHECKING:
-    from microjail.caps.base import Capability
-    from microjail.gates.base import Gate
+# These types are needed at runtime by msgspec
+from microjail.caps.base import Capability  # noqa: TC001
+from microjail.gates.base import Gate  # noqa: TC001
 
 
 @dataclass(frozen=True)
