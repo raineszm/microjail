@@ -90,9 +90,9 @@ def test_network_drop_blocks_egress_on_ensure_and_restores_it_on_release(
     )
 
     try:
-        lockdown.ensure(microjail)
+        microjail.ensure()
         assert not has_network_egress(launched_workshop)
     finally:
-        lockdown.release(microjail)
+        microjail.release()
 
     assert has_network_egress(launched_workshop)

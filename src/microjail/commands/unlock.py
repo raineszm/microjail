@@ -26,7 +26,7 @@ def unlock() -> None:
         raise typer.Exit(1) from exc
 
     try:
-        microjail.lockdown.release(microjail)
+        microjail.release()
         typer.echo("[color=green]Successfully unlocked microjail[/color]")
     except ExceptionGroup as exc:
         failures = ", ".join(exception_messages(exc))

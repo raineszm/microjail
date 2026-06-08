@@ -5,7 +5,8 @@ import pytest
 from typer.testing import CliRunner
 
 from microjail.cli import app
-from microjail.lockdown import GateError, Lockdown
+from microjail.lockdown import GateError
+from microjail.microjail import MicroJail
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -30,7 +31,7 @@ def microjail_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def fail_lockdown(monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
     ensure = MagicMock(side_effect=failure)
-    monkeypatch.setattr(Lockdown, "ensure", ensure)
+    monkeypatch.setattr(MicroJail, "ensure", ensure)
 
 
 def test_run_requires_workload_command(microjail_project: Path) -> None:

@@ -2,13 +2,17 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import msgspec
 
 # Needed at runtime by msgspec for struct field resolution.
 from microjail.gates.base import Gate
 from microjail.gates.network_drop import NetworkDrop
-from microjail.lockdown import Lockdown  # noqa: TC001
+from microjail.lockdown import CapabilityError, GateError, Lockdown
+
+if TYPE_CHECKING:
+    from microjail.caps.base import Capability
 
 CONFIG_DIRNAME = ".microjail"
 CONFIG_FILENAME = "config.yaml"
@@ -61,6 +65,87 @@ class MicroJail(msgspec.Struct):
     @property
     def config_path(self) -> Path:
         return self.config_dir / CONFIG_FILENAME
+
+    def ensure(self) -> None:
+        """Apply this microjail's lockdown policy."""
+        provided_caps: list[Capability] = []
+        enforced_gates: list[Gate] = []
+
+        try:
+            for cap in self.lockdown.caps:
+                self.ensure_capability(cap, provided_caps)
+
+            for gate in self.lockdown.gates:
+                self.ensure_gate(gate, enforced_gates)
+        except Exception:
+            self.release_applied(provided_caps, enforced_gates)
+            raise
+
+    def release(self) -> None:
+        """Release this microjail's lockdown policy."""
+        errors: list[Exception] = []
+
+        for gate in reversed(self.lockdown.gates):
+            try:
+                gate.release(self)
+            except Exception as exc:
+                errors.append(exc)
+
+        for cap in reversed(self.lockdown.caps):
+            try:
+                cap.revoke(self)
+            except Exception as exc:
+                errors.append(exc)
+
+        if errors:
+            raise ExceptionGroup("lockdown release failures", errors)
+
+    def release_applied(
+        self,
+        provided_caps: list[Capability],
+        enforced_gates: list[Gate],
+    ) -> None:
+        """Tear down only state that this ensure() call attempted to apply."""
+        errors: list[Exception] = []
+
+        for gate in reversed(enforced_gates):
+            try:
+                gate.release(self)
+            except Exception as exc:
+                errors.append(exc)
+
+        for cap in reversed(provided_caps):
+            try:
+                cap.revoke(self)
+            except Exception as exc:
+                errors.append(exc)
+
+        if errors:
+            raise ExceptionGroup("lockdown release failures", errors)
+
+    def ensure_capability(
+        self,
+        cap: Capability,
+        provided_caps: list[Capability],
+    ) -> None:
+        """check → provide if missing → verify for a single capability."""
+        if not cap.check(self):
+            provided_caps.append(cap)
+            cap.provide(self)
+            if not cap.check(self):
+                raise CapabilityError(name=cap.name)
+
+    def ensure_gate(
+        self,
+        gate: Gate,
+        enforced_gates: list[Gate],
+    ) -> None:
+        """check → enforce if unsatisfied → verify for a single gate."""
+        if not gate.check(self):
+            enforced_gates.append(gate)
+            gate.enforce(self)
+            if not gate.check(self):
+                raise GateError(name=gate.name)
 
     def save(self) -> None:
         """Persist this microjail to ``.microjail/config.yaml``."""

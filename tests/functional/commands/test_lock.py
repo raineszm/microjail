@@ -4,7 +4,8 @@ import pytest
 from typer.testing import CliRunner
 
 from microjail.cli import app
-from microjail.lockdown import CapabilityError, GateError, Lockdown
+from microjail.lockdown import CapabilityError, GateError
+from microjail.microjail import MicroJail
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -28,10 +29,10 @@ def microjail_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def fail_lockdown(monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
-    def ensure(self: Lockdown, microjail) -> None:
+    def ensure(self: MicroJail) -> None:
         raise failure
 
-    monkeypatch.setattr(Lockdown, "ensure", ensure)
+    monkeypatch.setattr(MicroJail, "ensure", ensure)
 
 
 def test_lock_reports_success(microjail_project: Path) -> None:

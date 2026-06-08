@@ -5,7 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from microjail.cli import app
-from microjail.lockdown import Lockdown
+from microjail.microjail import MicroJail
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -30,7 +30,7 @@ def microjail_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def fail_release(monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
     release = MagicMock(side_effect=failure)
-    monkeypatch.setattr(Lockdown, "release", release)
+    monkeypatch.setattr(MicroJail, "release", release)
 
 
 def test_unlock_reports_success(microjail_project: Path) -> None:
