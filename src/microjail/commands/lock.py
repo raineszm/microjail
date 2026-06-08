@@ -6,9 +6,9 @@ from microjail.lockdown import CapabilityError, GateError
 from microjail.microjail import ConfigNotFoundError, MicroJail
 
 
-def lock() -> None:
+def load_microjail_or_exit() -> MicroJail:
     try:
-        microjail = MicroJail.load(Path.cwd())
+        return MicroJail.load(Path.cwd())
     except ConfigNotFoundError as exc:
         typer.echo(
             f"No microjail config found for project {exc.project_path}. "
@@ -17,9 +17,10 @@ def lock() -> None:
         )
         raise typer.Exit(1) from exc
 
+
+def ensure_lockdown_or_exit(microjail: MicroJail) -> None:
     try:
         microjail.lockdown.ensure()
-        typer.echo("[color=green]Successfully locked down microjail[/color]")
     except* CapabilityError as eg:
         cap_names = ", ".join(
             cap.name for cap in eg.exceptions if isinstance(cap, CapabilityError)
@@ -37,3 +38,9 @@ def lock() -> None:
             err=True,
         )
         raise typer.Exit(1) from eg
+
+
+def lock() -> None:
+    microjail = load_microjail_or_exit()
+    ensure_lockdown_or_exit(microjail)
+    typer.echo("[color=green]Successfully locked down microjail[/color]")
