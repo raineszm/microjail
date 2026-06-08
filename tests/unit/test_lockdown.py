@@ -6,7 +6,7 @@ import pytest
 
 from microjail.caps.base import Capability
 from microjail.gates.base import Gate
-from microjail.lockdown import GateError, Lockdown
+from microjail.lockdown import CapabilityError, GateError, Lockdown
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -77,6 +77,68 @@ def assert_mock_calls(
 ) -> None:
     for mock, spec in zip(mocks, specs, strict=True):
         assert mock.mock_calls == list(spec.expected_calls)
+
+
+def test_ensure_provisions_capabilities_before_enforcing_gates() -> None:
+    capability = Mock(spec=Capability)
+    capability.name = "proxy"
+    capability.check.side_effect = [False, True]
+    gate = Mock(spec=Gate)
+    gate.name = "network"
+    gate.check.side_effect = [False, True]
+    calls = Mock()
+    calls.attach_mock(capability, "capability")
+    calls.attach_mock(gate, "gate")
+
+    Lockdown(caps=[capability], gates=[gate]).ensure()
+
+    assert calls.mock_calls == [
+        call.capability.check(),
+        call.capability.provide(),
+        call.capability.check(),
+        call.gate.check(),
+        call.gate.enforce(),
+        call.gate.check(),
+    ]
+
+
+def test_ensure_skips_satisfied_capabilities_and_gates(
+    capability_factory: Callable[[ComponentSpec], CapabilityMock],
+    gate_factory: Callable[[ComponentSpec], GateMock],
+) -> None:
+    cap_specs = [ComponentSpec("proxy", [True], CHECKED_ONLY)]
+    gate_specs = [ComponentSpec("network", [True], CHECKED_ONLY)]
+    lockdown, cap_mocks, gate_mocks = lockdown_from_specs(
+        cap_specs=cap_specs,
+        gate_specs=gate_specs,
+        capability_factory=capability_factory,
+        gate_factory=gate_factory,
+    )
+
+    lockdown.ensure()
+
+    assert_mock_calls(cap_mocks, cap_specs)
+    assert_mock_calls(gate_mocks, gate_specs)
+
+
+def test_ensure_releases_applied_state_if_capability_verification_fails(
+    capability_factory: Callable[[ComponentSpec], CapabilityMock],
+    gate_factory: Callable[[ComponentSpec], GateMock],
+) -> None:
+    cap_specs = [ComponentSpec("proxy", [False, False], PROVISIONED_THEN_REVOKED)]
+    gate_specs = [ComponentSpec("network", None, ())]
+    lockdown, cap_mocks, gate_mocks = lockdown_from_specs(
+        cap_specs=cap_specs,
+        gate_specs=gate_specs,
+        capability_factory=capability_factory,
+        gate_factory=gate_factory,
+    )
+
+    with pytest.raises(CapabilityError):
+        lockdown.ensure()
+
+    assert_mock_calls(cap_mocks, cap_specs)
+    assert_mock_calls(gate_mocks, gate_specs)
 
 
 def test_ensure_releases_applied_state_if_gate_verification_fails(
