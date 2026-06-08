@@ -35,7 +35,14 @@ def fail_lockdown(monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
     monkeypatch.setattr(MicroJail, "ensure", ensure)
 
 
-def test_lock_reports_success(microjail_project: Path) -> None:
+def test_lock_reports_success(
+    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
+) -> None:
+    def ensure(self: MicroJail) -> None:
+        assert self.project_path == microjail_project
+
+    monkeypatch.setattr(MicroJail, "ensure", ensure)
+
     result = CliRunner().invoke(app, ["lock"])
 
     assert result.exit_code == 0

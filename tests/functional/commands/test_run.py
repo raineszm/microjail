@@ -41,7 +41,14 @@ def test_run_requires_workload_command(microjail_project: Path) -> None:
     assert "command" in result.stderr.lower()
 
 
-def test_run_propagates_workload_exit_status(microjail_project: Path) -> None:
+def test_run_propagates_workload_exit_status(
+    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
+) -> None:
+    def ensure(self: MicroJail) -> None:
+        assert self.project_path == microjail_project
+
+    monkeypatch.setattr(MicroJail, "ensure", ensure)
+
     result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 7"])
 
     assert result.exit_code == 7

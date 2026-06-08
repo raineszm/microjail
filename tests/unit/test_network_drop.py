@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call
@@ -48,35 +49,31 @@ def test_network_drop_has_gate_name() -> None:
     assert gate().name == "network-egress"
 
 
-def test_check_returns_false_when_container_has_network_devices(
+def test_check_returns_false_when_egress_probe_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    get_container, lxd_project = patch_container_lookup(monkeypatch)
-    get_instance = patch_lxc_instance(
-        monkeypatch,
-        {
-            "root": {"type": "disk", "path": "/"},
-            "eth0": {"type": "nic", "nictype": "bridged", "parent": "lxdbr0"},
-        },
+    exec_ = Mock(return_value=subprocess.CompletedProcess(args=[], returncode=0))
+    monkeypatch.setattr(network_drop.workshop, "exec_", exec_)
+    context = microjail()
+
+    assert not gate().check(context)
+
+    exec_.assert_called_once_with(
+        WORKSHOP_NAME,
+        PROJECT,
+        ["bash", "-c", ": >/dev/tcp/1.1.1.1/443"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
 
-    assert not gate().check(microjail())
 
-    get_container.assert_called_once_with(WORKSHOP_NAME, project=PROJECT)
-    lxd_project.assert_called_once_with()
-    get_instance.assert_called_once_with(CONTAINER_NAME, project=LXD_PROJECT)
-
-
-def test_check_returns_true_when_container_has_no_network_devices(
+def test_check_returns_true_when_egress_probe_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    patch_container_lookup(monkeypatch)
-    patch_lxc_instance(
-        monkeypatch,
-        {
-            "root": {"type": "disk", "path": "/"},
-        },
-    )
+    exec_ = Mock(return_value=subprocess.CompletedProcess(args=[], returncode=1))
+    monkeypatch.setattr(network_drop.workshop, "exec_", exec_)
 
     assert gate().check(microjail())
 

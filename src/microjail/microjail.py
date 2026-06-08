@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import msgspec
 
+from microjail.adapters import workshop
+
 # Needed at runtime by msgspec for struct field resolution.
 from microjail.gates.base import Gate
 from microjail.gates.network_drop import NetworkDrop
@@ -23,6 +25,15 @@ class ConfigNotFoundError(Exception):
     """Raised when no microjail config exists for a project."""
 
     project_path: Path
+
+
+@dataclass(frozen=True)
+class WorkshopNotReadyError(Exception):
+    """Raised when a workshop exists but is not ready for lockdown."""
+
+    name: str
+    project: Path
+    status: str
 
 
 def enc_hook(obj: object) -> object:
@@ -68,6 +79,7 @@ class MicroJail(msgspec.Struct):
 
     def ensure(self) -> None:
         """Apply this microjail's lockdown policy."""
+        self.ensure_workshop_ready()
         provided_caps: list[Capability] = []
         enforced_gates: list[Gate] = []
 
@@ -80,6 +92,20 @@ class MicroJail(msgspec.Struct):
         except Exception:
             self.release_applied(provided_caps, enforced_gates)
             raise
+
+    def ensure_workshop_ready(self) -> None:
+        """Verify the associated workshop is launched and ready."""
+        info = workshop.info(self.name, project=self.project_path)
+        if info is None:
+            raise workshop.WorkshopNotLaunchedError(
+                name=self.name, project=self.project_path
+            )
+        if info.status != "ready":
+            raise WorkshopNotReadyError(
+                name=self.name,
+                project=self.project_path,
+                status=info.status,
+            )
 
     def release(self) -> None:
         """Release this microjail's lockdown policy."""

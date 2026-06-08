@@ -1,3 +1,4 @@
+import subprocess
 from typing import TYPE_CHECKING, Any
 
 import msgspec
@@ -7,6 +8,9 @@ from microjail.adapters import lxc, workshop
 if TYPE_CHECKING:
     from microjail.microjail import MicroJail
 
+EGRESS_PROBE = ["bash", "-c", ": >/dev/tcp/1.1.1.1/443"]
+EGRESS_PROBE_TIMEOUT = 10
+
 
 class NetworkDrop(msgspec.Struct):
     """Gate that removes network interfaces from the workshop container."""
@@ -15,8 +19,20 @@ class NetworkDrop(msgspec.Struct):
     removed_devices: dict[str, dict[str, Any]] = msgspec.field(default_factory=dict)
 
     def check(self, microjail: MicroJail) -> bool:
-        """Return true when the workshop container has no network devices."""
-        return not self.network_devices(microjail)
+        """Return true when egress from inside the workshop is blocked."""
+        try:
+            result = workshop.exec_(
+                microjail.name,
+                microjail.project_path,
+                EGRESS_PROBE,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=EGRESS_PROBE_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            return True
+        return result.returncode != 0
 
     def enforce(self, microjail: MicroJail) -> None:
         """Remove every network device from the workshop container."""

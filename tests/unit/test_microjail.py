@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Literal, Protocol, cast
 from unittest.mock import Mock, call
 
 import pytest
 
+from microjail.adapters import workshop
 from microjail.caps.base import Capability
 from microjail.gates.base import Gate
 from microjail.gates.network_drop import NetworkDrop
@@ -11,6 +12,7 @@ from microjail.lockdown import CapabilityError, GateError, Lockdown
 from microjail.microjail import (
     ConfigNotFoundError,
     MicroJail,
+    WorkshopNotReadyError,
 )
 
 if TYPE_CHECKING:
@@ -100,6 +102,12 @@ def assert_mock_calls(
         assert mock.mock_calls == expected_calls(spec.expected_methods, microjail)
 
 
+def mark_workshop_ready(monkeypatch: pytest.MonkeyPatch, microjail: MicroJail) -> Mock:
+    info = Mock(return_value=workshop.WorkshopInfo(name=microjail.name, status="ready"))
+    monkeypatch.setattr(workshop, "info", info)
+    return info
+
+
 def test_save_writes_config_under_microjail_dir(tmp_microjail: MicroJail) -> None:
     tmp_microjail.save()
     assert tmp_microjail.config_path.exists()
@@ -142,7 +150,59 @@ def test_load_raises_when_config_missing(tmp_path: Path) -> None:
     assert exc_info.value.project_path == tmp_path
 
 
+def test_ensure_fails_without_running_policy_if_workshop_is_not_launched(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    capability = Mock(spec=Capability)
+    gate = Mock(spec=Gate)
+    info = Mock(return_value=None)
+    monkeypatch.setattr(workshop, "info", info)
+    microjail = MicroJail(
+        name=tmp_microjail.name,
+        project_path=tmp_microjail.project_path,
+        lockdown=Lockdown(caps=[capability], gates=[gate]),
+    )
+
+    with pytest.raises(workshop.WorkshopNotLaunchedError):
+        microjail.ensure()
+
+    info.assert_called_once_with(microjail.name, project=microjail.project_path)
+    assert capability.mock_calls == []
+    assert gate.mock_calls == []
+
+
+@pytest.mark.parametrize("status", ["pending", "stopped"])
+def test_ensure_fails_without_running_policy_if_workshop_is_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_microjail: MicroJail,
+    status: Literal["pending", "stopped"],
+) -> None:
+    capability = Mock(spec=Capability)
+    gate = Mock(spec=Gate)
+    info = Mock(
+        return_value=workshop.WorkshopInfo(name=tmp_microjail.name, status=status)
+    )
+    monkeypatch.setattr(workshop, "info", info)
+    microjail = MicroJail(
+        name=tmp_microjail.name,
+        project_path=tmp_microjail.project_path,
+        lockdown=Lockdown(caps=[capability], gates=[gate]),
+    )
+
+    with pytest.raises(WorkshopNotReadyError) as exc_info:
+        microjail.ensure()
+
+    assert exc_info.value.name == microjail.name
+    assert exc_info.value.project == microjail.project_path
+    assert exc_info.value.status == status
+
+    info.assert_called_once_with(microjail.name, project=microjail.project_path)
+    assert capability.mock_calls == []
+    assert gate.mock_calls == []
+
+
 def test_ensure_provisions_capabilities_before_enforcing_gates(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_microjail: MicroJail,
 ) -> None:
     capability = Mock(spec=Capability)
@@ -159,6 +219,7 @@ def test_ensure_provisions_capabilities_before_enforcing_gates(
     calls = Mock()
     calls.attach_mock(capability, "capability")
     calls.attach_mock(gate, "gate")
+    mark_workshop_ready(monkeypatch, microjail)
 
     microjail.ensure()
 
@@ -173,6 +234,7 @@ def test_ensure_provisions_capabilities_before_enforcing_gates(
 
 
 def test_ensure_skips_satisfied_capabilities_and_gates(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
@@ -186,6 +248,7 @@ def test_ensure_skips_satisfied_capabilities_and_gates(
         capability_factory=capability_factory,
         gate_factory=gate_factory,
     )
+    mark_workshop_ready(monkeypatch, microjail)
 
     microjail.ensure()
 
@@ -194,6 +257,7 @@ def test_ensure_skips_satisfied_capabilities_and_gates(
 
 
 def test_ensure_releases_applied_state_if_capability_verification_fails(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
@@ -209,6 +273,7 @@ def test_ensure_releases_applied_state_if_capability_verification_fails(
         capability_factory=capability_factory,
         gate_factory=gate_factory,
     )
+    mark_workshop_ready(monkeypatch, microjail)
 
     with pytest.raises(CapabilityError):
         microjail.ensure()
@@ -218,6 +283,7 @@ def test_ensure_releases_applied_state_if_capability_verification_fails(
 
 
 def test_ensure_releases_applied_state_if_gate_verification_fails(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
@@ -240,6 +306,7 @@ def test_ensure_releases_applied_state_if_gate_verification_fails(
         capability_factory=capability_factory,
         gate_factory=gate_factory,
     )
+    mark_workshop_ready(monkeypatch, microjail)
 
     with pytest.raises(GateError):
         microjail.ensure()
@@ -249,6 +316,7 @@ def test_ensure_releases_applied_state_if_gate_verification_fails(
 
 
 def test_ensure_preserves_preexisting_state_if_later_gate_fails(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
@@ -267,6 +335,7 @@ def test_ensure_preserves_preexisting_state_if_later_gate_fails(
         capability_factory=capability_factory,
         gate_factory=gate_factory,
     )
+    mark_workshop_ready(monkeypatch, microjail)
 
     with pytest.raises(GateError):
         microjail.ensure()
@@ -276,6 +345,7 @@ def test_ensure_preserves_preexisting_state_if_later_gate_fails(
 
 
 def test_ensure_aborts_remaining_gates_after_first_failure(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_microjail: MicroJail,
     capability_factory: Callable[[ComponentSpec], CapabilityMock],
     gate_factory: Callable[[ComponentSpec], GateMock],
@@ -294,6 +364,7 @@ def test_ensure_aborts_remaining_gates_after_first_failure(
         capability_factory=capability_factory,
         gate_factory=gate_factory,
     )
+    mark_workshop_ready(monkeypatch, microjail)
 
     with pytest.raises(GateError):
         microjail.ensure()
@@ -314,6 +385,7 @@ def test_default_lockdown_ensure_enforces_network_drop(
         project_path=tmp_microjail.project_path,
         lockdown=Lockdown.default(),
     )
+    mark_workshop_ready(monkeypatch, microjail)
 
     microjail.ensure()
 
