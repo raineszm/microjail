@@ -16,7 +16,8 @@ class WorkshopInfo(msgspec.Struct):
     status: Literal["ready", "pending", "stopped"]
 
 
-class ContainerInfo(msgspec.Struct): ...
+class ContainerInfo(msgspec.Struct):
+    name: str
 
 
 _VALID_PROJECT_SUFFIX = re.compile(r"^[a-zA-Z][-a-zA-Z0-9.]{0,31}$")
@@ -62,5 +63,21 @@ def info(name: str, project: Path) -> WorkshopInfo | None:
     return msgspec.yaml.decode(result.stdout, type=WorkshopInfo)
 
 
-def get_container(name: str, project: Path) -> ContainerInfo | None:  # noqa: ARG001
-    return None
+def container_name(name: str, project: Path) -> str | None:
+    lock_file = project / ".workshop.lock"
+    if not lock_file.exists():
+        return None
+    return f"{name}-{lock_file.read_text(encoding='utf-8').strip()}"
+
+
+def get_container(name: str, project: Path) -> ContainerInfo | None:
+    c_name = container_name(name, project)
+    if c_name is None:
+        return None
+
+    result = subprocess.run(
+        ["lxc", "query", f"/1.0/instances/{c_name}?project={lxd_project()}"],
+        check=True,
+        capture_output=True,
+    )
+    return msgspec.json.decode(result.stdout, type=ContainerInfo)
