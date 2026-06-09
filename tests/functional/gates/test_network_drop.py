@@ -9,7 +9,7 @@ from microjail.microjail import MicroJail
 from tests.marks import requires_lxd, requires_workshop
 
 if TYPE_CHECKING:
-    from tests.functional._helpers import SharedWorkshop
+    from tests._helpers import SharedWorkshop
 
 pytestmark = [
     requires_lxd(),

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from microjail.adapters import workshop
-from tests.functional._helpers import SharedWorkshop, launch_with_retries
+from tests._helpers import SharedWorkshop, launch_with_retries
 
 
 @pytest.fixture(scope="module")

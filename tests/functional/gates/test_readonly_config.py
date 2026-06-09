@@ -9,7 +9,7 @@ from microjail.adapters import workshop
 from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
-from tests.functional._helpers import SharedWorkshop, launch_with_retries
+from tests._helpers import SharedWorkshop, launch_with_retries
 from tests.marks import requires_lxd, requires_workshop
 
 pytestmark = [

@@ -31,6 +31,11 @@ def test_run_propagates_workload_exit_status(
         assert self.project_path == microjail_project
 
     monkeypatch.setattr(MicroJail, "ensure", ensure)
+    monkeypatch.setattr(
+        MicroJail,
+        "exec_",
+        lambda _self, cmd, **_kw: __import__("subprocess").run(cmd, check=False),
+    )
 
     result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 7"])
 
