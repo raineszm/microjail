@@ -64,12 +64,14 @@ class TunnelEntry(msgspec.Struct):
     endpoint: str
 
 
-class WorkshopSdk(msgspec.Struct):
+class WorkshopSdk(msgspec.Struct, omit_defaults=True):
     name: str
     slots: dict[str, TunnelEntry] = msgspec.field(default_factory=dict)
 
 
-class WorkshopConfig(msgspec.Struct):
+class WorkshopConfig(msgspec.Struct, omit_defaults=True):
+    name: str
+    base: str = ""
     sdks: list[WorkshopSdk] = msgspec.field(default_factory=list)
 
 
@@ -315,7 +317,7 @@ def exec_(
 def read_workshop_yaml(name: str, project: Path) -> WorkshopConfig:
     path = project / _WORKSHOP_DIRNAME / f"{name}.yaml"
     if not path.exists():
-        return WorkshopConfig()
+        return WorkshopConfig(name=name)
     try:
         return msgspec.yaml.decode(
             path.read_bytes(),

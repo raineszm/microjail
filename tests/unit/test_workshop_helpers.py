@@ -163,6 +163,8 @@ def test_endpoint_reachable_returns_false_on_timeout() -> None:
 
 def test_read_and_write_workshop_yaml_round_trip(tmp_path: Path) -> None:
     data = WorkshopConfig(
+        name="mj-workshop",
+        base="ubuntu@24.04",
         sdks=[
             WorkshopSdk(
                 name="system",
@@ -170,7 +172,7 @@ def test_read_and_write_workshop_yaml_round_trip(tmp_path: Path) -> None:
                     "api": TunnelEntry(interface="tunnel", endpoint="127.0.0.1:8080")
                 },
             )
-        ]
+        ],
     )
 
     workshop.write_workshop_yaml("mj-workshop", tmp_path, data)
@@ -182,7 +184,9 @@ def test_read_and_write_workshop_yaml_round_trip(tmp_path: Path) -> None:
 
 
 def test_read_workshop_yaml_returns_default_for_missing_file(tmp_path: Path) -> None:
-    assert workshop.read_workshop_yaml("mj-workshop", tmp_path) == WorkshopConfig()
+    assert workshop.read_workshop_yaml("mj-workshop", tmp_path) == WorkshopConfig(
+        name="mj-workshop"
+    )
 
 
 def test_read_workshop_yaml_raises_for_invalid_existing_file(tmp_path: Path) -> None:
@@ -273,6 +277,7 @@ def test_add_tunnel_slot_updates_existing_endpoint_and_is_noop_when_unchanged(
     workshop.add_tunnel_slot("mj-workshop", tmp_path, "api", "127.0.0.1:9999")
 
     assert workshop.read_workshop_yaml("mj-workshop", tmp_path) == WorkshopConfig(
+        name="mj-workshop",
         sdks=[
             WorkshopSdk(name="project-microjail"),
             WorkshopSdk(
@@ -281,12 +286,12 @@ def test_add_tunnel_slot_updates_existing_endpoint_and_is_noop_when_unchanged(
                     "api": TunnelEntry(interface="tunnel", endpoint="127.0.0.1:9999")
                 },
             ),
-        ]
+        ],
     )
 
     workshop.add_tunnel_slot("mj-workshop", tmp_path, "api", "127.0.0.1:9999")
-
     assert workshop.read_workshop_yaml("mj-workshop", tmp_path) == WorkshopConfig(
+        name="mj-workshop",
         sdks=[
             WorkshopSdk(name="project-microjail"),
             WorkshopSdk(
@@ -295,7 +300,7 @@ def test_add_tunnel_slot_updates_existing_endpoint_and_is_noop_when_unchanged(
                     "api": TunnelEntry(interface="tunnel", endpoint="127.0.0.1:9999")
                 },
             ),
-        ]
+        ],
     )
 
 
@@ -320,10 +325,10 @@ def test_remove_tunnel_slot_can_drop_project_sdk_and_is_noop_when_missing(
     workshop.remove_tunnel_slot("mj-workshop", tmp_path, "api", remove_sdk=True)
 
     assert workshop.read_workshop_yaml("mj-workshop", tmp_path) == WorkshopConfig(
-        sdks=[WorkshopSdk(name="system")]
+        name="mj-workshop", sdks=[WorkshopSdk(name="system")]
     )
-
     workshop.remove_tunnel_slot("mj-workshop", tmp_path, "missing", remove_sdk=True)
+
     assert workshop.read_workshop_yaml("mj-workshop", tmp_path) == WorkshopConfig(
-        sdks=[WorkshopSdk(name="system")]
+        name="mj-workshop", sdks=[WorkshopSdk(name="system")]
     )
