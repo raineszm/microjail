@@ -209,20 +209,6 @@ uv run pytest --slow     # all tests, including container-based e2e tests
 
 Slow tests require `lxc` and `workshop` on `PATH`. Tests marked `lxd` and `workshop` are skipped automatically when those binaries are absent.
 
-______________________________________________________________________
-
-## CTF (Capture The Flag)
-
-`ctf` is internal-only adversarial harness tooling for containment regression testing. It is not part of the `microjail` CLI surface.
-
-Run it explicitly with:
-
-```bash
-python -m ctf
-```
-
-CTF result semantics and `error_kind` subtype values are alpha and may change during this port.
-
 **Lint and type-check:**
 
 ```bash
