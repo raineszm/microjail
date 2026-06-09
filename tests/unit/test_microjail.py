@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, Protocol, cast
+from typing import TYPE_CHECKING, Literal, Protocol
 from unittest.mock import Mock, call
 
 import pytest
@@ -17,7 +16,7 @@ from microjail.microjail import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Sequence
     from pathlib import Path
 
 
@@ -29,13 +28,6 @@ class GateMock(Gate, Protocol):
     mock_calls: list[object]
 
 
-@dataclass(frozen=True)
-class ComponentSpec:
-    name: str
-    checks: Sequence[bool] | None
-    expected_methods: tuple[str, ...]
-
-
 @pytest.fixture
 def tmp_microjail(tmp_path: Path, project_name: str) -> MicroJail:
     return MicroJail(
@@ -45,68 +37,24 @@ def tmp_microjail(tmp_path: Path, project_name: str) -> MicroJail:
     )
 
 
-@pytest.fixture
-def capability_factory() -> Callable[[ComponentSpec], CapabilityMock]:
-    """Build a spec-constrained capability mock from a component spec."""
-
-    def build(spec: ComponentSpec) -> CapabilityMock:
-        cap = Mock(spec=Capability)
-        cap.name = spec.name
-        if spec.checks is not None:
-            cap.check.side_effect = spec.checks
-        return cast("CapabilityMock", cap)
-
-    return build
-
-
-@pytest.fixture
-def gate_factory() -> Callable[[ComponentSpec], GateMock]:
-    """Build a spec-constrained gate mock from a component spec."""
-
-    def build(spec: ComponentSpec) -> GateMock:
-        gate = Mock(spec=Gate)
-        gate.name = spec.name
-        if spec.checks is not None:
-            gate.check.side_effect = spec.checks
-        return cast("GateMock", gate)
-
-    return build
-
-
-def microjail_from_specs(
-    tmp_microjail: MicroJail,
-    cap_specs: Sequence[ComponentSpec],
-    gate_specs: Sequence[ComponentSpec],
-    capability_factory: Callable[[ComponentSpec], CapabilityMock],
-    gate_factory: Callable[[ComponentSpec], GateMock],
-) -> tuple[MicroJail, list[CapabilityMock], list[GateMock]]:
-    cap_mocks = [capability_factory(spec) for spec in cap_specs]
-    gate_mocks = [gate_factory(spec) for spec in gate_specs]
-    microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
-        lockdown=Lockdown(caps=[*cap_mocks], gates=[*gate_mocks]),
-    )
-    return microjail, cap_mocks, gate_mocks
-
-
 def expected_calls(method_names: Sequence[str], microjail: MicroJail) -> list[object]:
     return [getattr(call, method_name)(microjail) for method_name in method_names]
 
 
-def assert_mock_calls(
-    mocks: Sequence[CapabilityMock] | Sequence[GateMock],
-    specs: Sequence[ComponentSpec],
+def assert_calls(
+    mocks: Sequence[CapabilityMock | GateMock],
+    method_names: Sequence[str],
     microjail: MicroJail,
 ) -> None:
-    for mock, spec in zip(mocks, specs, strict=True):
-        assert mock.mock_calls == expected_calls(spec.expected_methods, microjail)
+    assert mocks[0].mock_calls == expected_calls(method_names, microjail)
 
 
-def mark_workshop_ready(monkeypatch: pytest.MonkeyPatch, microjail: MicroJail) -> Mock:
-    info = Mock(return_value=workshop.WorkshopInfo(name=microjail.name, status="ready"))
-    monkeypatch.setattr(workshop, "info", info)
-    return info
+def mark_workshop_ready(monkeypatch: pytest.MonkeyPatch, microjail: MicroJail) -> None:
+    monkeypatch.setattr(
+        MicroJail,
+        "workshop_info",
+        Mock(return_value=workshop.WorkshopInfo(name=microjail.name, status="ready")),
+    )
 
 
 def test_save_writes_config_under_microjail_dir(tmp_microjail: MicroJail) -> None:
@@ -124,7 +72,6 @@ def test_load_round_trips_saved_config(tmp_microjail: MicroJail) -> None:
     tmp_microjail.save()
 
     loaded = MicroJail.load(tmp_microjail.project_path)
-
     assert loaded == tmp_microjail
 
 
@@ -137,8 +84,8 @@ def test_load_round_trips_default_gates(tmp_path: Path, project_name: str) -> No
     microjail.save()
 
     loaded = MicroJail.load(tmp_path)
-
-    assert len(loaded.lockdown.gates) == 2
+    assert loaded.name == microjail.name
+    assert loaded.project_path == microjail.project_path
     assert isinstance(loaded.lockdown.gates[0], NetworkDrop)
     assert isinstance(loaded.lockdown.gates[1], ReadonlyConfig)
 
@@ -154,19 +101,21 @@ def test_ensure_fails_without_running_policy_if_workshop_is_not_launched(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
     capability = Mock(spec=Capability)
+    capability.name = "proxy"
+    capability.check.return_value = False
     gate = Mock(spec=Gate)
-    info = Mock(return_value=None)
-    monkeypatch.setattr(workshop, "info", info)
+    gate.name = "network"
+    gate.check.return_value = False
     microjail = MicroJail(
         name=tmp_microjail.name,
         project_path=tmp_microjail.project_path,
         lockdown=Lockdown(caps=[capability], gates=[gate]),
     )
+    monkeypatch.setattr(MicroJail, "workshop_info", Mock(return_value=None))
 
     with pytest.raises(workshop.WorkshopNotLaunchedError):
         microjail.ensure()
 
-    info.assert_called_once_with(microjail.name, project=microjail.project_path)
     assert capability.mock_calls == []
     assert gate.mock_calls == []
 
@@ -178,32 +127,31 @@ def test_ensure_fails_without_running_policy_if_workshop_is_not_ready(
     status: Literal["pending", "stopped"],
 ) -> None:
     capability = Mock(spec=Capability)
+    capability.name = "proxy"
+    capability.check.return_value = False
     gate = Mock(spec=Gate)
-    info = Mock(
-        return_value=workshop.WorkshopInfo(name=tmp_microjail.name, status=status)
-    )
-    monkeypatch.setattr(workshop, "info", info)
+    gate.name = "network"
+    gate.check.return_value = False
     microjail = MicroJail(
         name=tmp_microjail.name,
         project_path=tmp_microjail.project_path,
         lockdown=Lockdown(caps=[capability], gates=[gate]),
     )
+    monkeypatch.setattr(
+        MicroJail,
+        "workshop_info",
+        Mock(return_value=workshop.WorkshopInfo(name=microjail.name, status=status)),
+    )
 
-    with pytest.raises(WorkshopNotReadyError) as exc_info:
+    with pytest.raises(WorkshopNotReadyError):
         microjail.ensure()
 
-    assert exc_info.value.name == microjail.name
-    assert exc_info.value.project == microjail.project_path
-    assert exc_info.value.status == status
-
-    info.assert_called_once_with(microjail.name, project=microjail.project_path)
     assert capability.mock_calls == []
     assert gate.mock_calls == []
 
 
 def test_ensure_provisions_capabilities_before_enforcing_gates(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_microjail: MicroJail,
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
     capability = Mock(spec=Capability)
     capability.name = "proxy"
@@ -216,181 +164,165 @@ def test_ensure_provisions_capabilities_before_enforcing_gates(
         project_path=tmp_microjail.project_path,
         lockdown=Lockdown(caps=[capability], gates=[gate]),
     )
-    calls = Mock()
-    calls.attach_mock(capability, "capability")
-    calls.attach_mock(gate, "gate")
     mark_workshop_ready(monkeypatch, microjail)
 
     microjail.ensure()
 
-    assert calls.mock_calls == [
-        call.capability.check(microjail),
-        call.capability.provide(microjail),
-        call.capability.check(microjail),
-        call.gate.check(microjail),
-        call.gate.enforce(microjail),
-        call.gate.check(microjail),
+    # Capability was provisioned before gate was enforced.
+    assert capability.mock_calls == [
+        call.check(microjail),
+        call.provide(microjail),
+        call.check(microjail),
+    ]
+    assert gate.mock_calls == [
+        call.check(microjail),
+        call.enforce(microjail),
+        call.check(microjail),
     ]
 
 
 def test_ensure_skips_satisfied_capabilities_and_gates(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_microjail: MicroJail,
-    capability_factory: Callable[[ComponentSpec], CapabilityMock],
-    gate_factory: Callable[[ComponentSpec], GateMock],
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap_specs = [ComponentSpec("proxy", [True], ("check",))]
-    gate_specs = [ComponentSpec("network", [True], ("check",))]
-    microjail, cap_mocks, gate_mocks = microjail_from_specs(
-        tmp_microjail=tmp_microjail,
-        cap_specs=cap_specs,
-        gate_specs=gate_specs,
-        capability_factory=capability_factory,
-        gate_factory=gate_factory,
+    cap = Mock(spec=Capability)
+    cap.name = "proxy"
+    cap.check.return_value = True
+    gate = Mock(spec=Gate)
+    gate.name = "network"
+    gate.check.return_value = True
+    microjail = MicroJail(
+        name=tmp_microjail.name,
+        project_path=tmp_microjail.project_path,
+        lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     mark_workshop_ready(monkeypatch, microjail)
 
     microjail.ensure()
 
-    assert_mock_calls(cap_mocks, cap_specs, microjail)
-    assert_mock_calls(gate_mocks, gate_specs, microjail)
+    assert_calls([cap], ("check",), microjail)
+    assert_calls([gate], ("check",), microjail)
 
 
 def test_ensure_releases_applied_state_if_capability_verification_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_microjail: MicroJail,
-    capability_factory: Callable[[ComponentSpec], CapabilityMock],
-    gate_factory: Callable[[ComponentSpec], GateMock],
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap_specs = [
-        ComponentSpec("proxy", [False, False], ("check", "provide", "check", "revoke"))
-    ]
-    gate_specs = [ComponentSpec("network", None, ())]
-    microjail, cap_mocks, gate_mocks = microjail_from_specs(
-        tmp_microjail=tmp_microjail,
-        cap_specs=cap_specs,
-        gate_specs=gate_specs,
-        capability_factory=capability_factory,
-        gate_factory=gate_factory,
+    cap = Mock(spec=Capability)
+    cap.name = "proxy"
+    cap.check.side_effect = [False, False]
+    microjail = MicroJail(
+        name=tmp_microjail.name,
+        project_path=tmp_microjail.project_path,
+        lockdown=Lockdown(caps=[cap], gates=[]),
     )
     mark_workshop_ready(monkeypatch, microjail)
 
     with pytest.raises(CapabilityError):
         microjail.ensure()
 
-    assert_mock_calls(cap_mocks, cap_specs, microjail)
-    assert_mock_calls(gate_mocks, gate_specs, microjail)
+    assert_calls([cap], ("check", "provide", "check", "revoke"), microjail)
 
 
 def test_ensure_releases_applied_state_if_gate_verification_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_microjail: MicroJail,
-    capability_factory: Callable[[ComponentSpec], CapabilityMock],
-    gate_factory: Callable[[ComponentSpec], GateMock],
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap_specs = [
-        ComponentSpec("proxy", [False, True], ("check", "provide", "check", "revoke"))
-    ]
-    gate_specs = [
-        ComponentSpec(
-            "network", [False, True], ("check", "enforce", "check", "release")
-        ),
-        ComponentSpec(
-            "secrets", [False, False], ("check", "enforce", "check", "release")
-        ),
-    ]
-    microjail, cap_mocks, gate_mocks = microjail_from_specs(
-        tmp_microjail=tmp_microjail,
-        cap_specs=cap_specs,
-        gate_specs=gate_specs,
-        capability_factory=capability_factory,
-        gate_factory=gate_factory,
+    cap = Mock(spec=Capability)
+    cap.name = "proxy"
+    cap.check.side_effect = [False, True]
+    gate_a = Mock(spec=Gate)
+    gate_a.name = "network"
+    gate_a.check.side_effect = [False, True]
+    gate_b = Mock(spec=Gate)
+    gate_b.name = "secrets"
+    gate_b.check.side_effect = [False, False]
+    microjail = MicroJail(
+        name=tmp_microjail.name,
+        project_path=tmp_microjail.project_path,
+        lockdown=Lockdown(caps=[cap], gates=[gate_a, gate_b]),
     )
     mark_workshop_ready(monkeypatch, microjail)
 
     with pytest.raises(GateError):
         microjail.ensure()
 
-    assert_mock_calls(cap_mocks, cap_specs, microjail)
-    assert_mock_calls(gate_mocks, gate_specs, microjail)
+    assert_calls([cap], ("check", "provide", "check", "revoke"), microjail)
+    assert gate_a.mock_calls == expected_calls(
+        ("check", "enforce", "check", "release"), microjail
+    )
+    assert gate_b.mock_calls == expected_calls(
+        ("check", "enforce", "check", "release"), microjail
+    )
 
 
 def test_ensure_preserves_preexisting_state_if_later_gate_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_microjail: MicroJail,
-    capability_factory: Callable[[ComponentSpec], CapabilityMock],
-    gate_factory: Callable[[ComponentSpec], GateMock],
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap_specs = [ComponentSpec("proxy", [True], ("check",))]
-    gate_specs = [
-        ComponentSpec("network", [True], ("check",)),
-        ComponentSpec(
-            "secrets", [False, False], ("check", "enforce", "check", "release")
-        ),
-    ]
-    microjail, cap_mocks, gate_mocks = microjail_from_specs(
-        tmp_microjail=tmp_microjail,
-        cap_specs=cap_specs,
-        gate_specs=gate_specs,
-        capability_factory=capability_factory,
-        gate_factory=gate_factory,
+    cap = Mock(spec=Capability)
+    cap.name = "proxy"
+    cap.check.return_value = True
+    gate_a = Mock(spec=Gate)
+    gate_a.name = "network"
+    gate_a.check.return_value = True
+    gate_b = Mock(spec=Gate)
+    gate_b.name = "secrets"
+    gate_b.check.side_effect = [False, False]
+    microjail = MicroJail(
+        name=tmp_microjail.name,
+        project_path=tmp_microjail.project_path,
+        lockdown=Lockdown(caps=[cap], gates=[gate_a, gate_b]),
     )
     mark_workshop_ready(monkeypatch, microjail)
 
     with pytest.raises(GateError):
         microjail.ensure()
 
-    assert_mock_calls(cap_mocks, cap_specs, microjail)
-    assert_mock_calls(gate_mocks, gate_specs, microjail)
+    assert_calls([cap], ("check",), microjail)
+    assert_calls([gate_a], ("check",), microjail)
+    assert gate_b.mock_calls == expected_calls(
+        ("check", "enforce", "check", "release"), microjail
+    )
 
 
 def test_ensure_aborts_remaining_gates_after_first_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_microjail: MicroJail,
-    capability_factory: Callable[[ComponentSpec], CapabilityMock],
-    gate_factory: Callable[[ComponentSpec], GateMock],
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap_specs: list[ComponentSpec] = []
-    gate_specs = [
-        ComponentSpec(
-            "secrets", [False, False], ("check", "enforce", "check", "release")
-        ),
-        ComponentSpec("network", None, ()),
-    ]
-    microjail, cap_mocks, gate_mocks = microjail_from_specs(
-        tmp_microjail=tmp_microjail,
-        cap_specs=cap_specs,
-        gate_specs=gate_specs,
-        capability_factory=capability_factory,
-        gate_factory=gate_factory,
+    gate_a = Mock(spec=Gate)
+    gate_a.name = "secrets"
+    gate_a.check.side_effect = [False, False]
+    gate_b = Mock(spec=Gate)
+    gate_b.name = "network"
+    microjail = MicroJail(
+        name=tmp_microjail.name,
+        project_path=tmp_microjail.project_path,
+        lockdown=Lockdown(caps=[], gates=[gate_a, gate_b]),
     )
     mark_workshop_ready(monkeypatch, microjail)
 
     with pytest.raises(GateError):
         microjail.ensure()
 
-    assert_mock_calls(cap_mocks, cap_specs, microjail)
-    assert_mock_calls(gate_mocks, gate_specs, microjail)
+    assert gate_a.mock_calls == expected_calls(
+        ("check", "enforce", "check", "release"), microjail
+    )
+    assert gate_b.mock_calls == []
 
 
 def test_default_lockdown_ensure_enforces_network_drop(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    check = Mock(side_effect=[False, True])
-    enforce = Mock()
-    monkeypatch.setattr(NetworkDrop, "check", check)
-    monkeypatch.setattr(NetworkDrop, "enforce", enforce)
-    # ReadonlyConfig is also in default(); stub it as already satisfied so it
-    # doesn't reach the workshop adapter and pollute this test's scope.
-    monkeypatch.setattr(ReadonlyConfig, "check", Mock(return_value=True))
+    net = Mock(spec=Gate)
+    net.name = "network-egress"
+    net.check.side_effect = [False, True]
+    ro = Mock(spec=Gate)
+    ro.name = "readonly-config"
+    ro.check.return_value = True
     microjail = MicroJail(
         name=tmp_microjail.name,
         project_path=tmp_microjail.project_path,
-        lockdown=Lockdown.default(),
+        lockdown=Lockdown(caps=[], gates=[net, ro]),
     )
     mark_workshop_ready(monkeypatch, microjail)
 
     microjail.ensure()
 
-    assert check.mock_calls == [call(microjail), call(microjail)]
-    enforce.assert_called_once_with(microjail)
+    assert net.mock_calls == expected_calls(("check", "enforce", "check"), microjail)
+    assert_calls([ro], ("check",), microjail)

@@ -1,6 +1,5 @@
 """The MicroJail configuration object and its on-disk persistence."""
 
-import subprocess  # noqa: TC003
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,6 +15,8 @@ from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import CapabilityError, GateError, Lockdown
 
 if TYPE_CHECKING:
+    import subprocess
+
     from microjail.caps.base import Capability
 
 CONFIG_DIRNAME = ".microjail"
@@ -102,9 +103,13 @@ class MicroJail(msgspec.Struct):
             self.release_applied(provided_caps, enforced_gates)
             raise
 
+    def workshop_info(self) -> workshop.WorkshopInfo | None:
+        """Return workshop info, or None if the workshop is not launched."""
+        return workshop.info(self.name, project=self.project_path)
+
     def ensure_workshop_ready(self) -> None:
         """Verify the associated workshop is launched and ready."""
-        info = workshop.info(self.name, project=self.project_path)
+        info = self.workshop_info()
         if info is None:
             raise workshop.WorkshopNotLaunchedError(
                 name=self.name, project=self.project_path
