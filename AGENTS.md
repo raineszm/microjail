@@ -8,10 +8,8 @@ Assisted-By: <harness> (<model>; <provider>)
 
 Examples:
 
-```
-Assisted-By: opencode (claude-sonnet-4-5; anthropic)
-Assisted-By: opencode (gpt-4o; openai)
-```
+Assisted-By: omp (claude-sonnet-4-5; anthropic)
+Assisted-By: omp (gpt-4o; openai)
 
 The trailer MUST appear in the commit message body, after a blank line separating it from the
 summary. If multiple models contributed, include one trailer per model.
@@ -29,6 +27,13 @@ is already internal. Use plain descriptive names instead.
 - Prefer `resolve_project(gate_name)` over `_resolve_project(gate_name)`
 - Prefer `load_state_or_exit(workspace)` over `_load_state_or_exit(workspace)` (already correct)
 
-Exception: the leading underscore on `_workshop_project()` and `_container_name()` in
-`wrappers/lxd.py` pre-dates this guidance. Leave existing names unchanged during unrelated
-refactors; rename only when a function is being touched for another reason.
+## Testing
+
+Run tests with `uv run pytest`. The default run skips slow tests (container creation, LXD,
+Workshop); pass `--slow` to include them.
+
+- `uv run pytest` — fast unit/functional tests only
+- `uv run pytest --slow` — all tests including e2e and container-based tests
+
+Markers `lxd` and `workshop` auto-skip when the required binaries (`lxc`, `workshop`) are
+not on `$PATH`.
