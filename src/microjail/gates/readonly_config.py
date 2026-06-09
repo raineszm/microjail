@@ -11,11 +11,14 @@ DEVICE_NAME = "microjail-config-ro"
 CONTAINER_CONFIG_PATH = "/project/.microjail/config.yaml"
 
 
-class ReadonlyConfig(msgspec.Struct):
+class ReadonlyConfig(msgspec.Struct, tag="readonly-config", tag_field="name"):
     """Gate that bind-mounts the microjail config read-only inside the container."""
 
-    name: str = "readonly-config"
     removed: bool = False
+
+    @property
+    def name(self) -> str:
+        return "readonly-config"
 
     def check(self, microjail: MicroJail) -> bool:
         """Return True when the config bind-mount device is present with readonly=true."""

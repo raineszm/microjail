@@ -10,11 +10,14 @@ EGRESS_PROBE = ["bash", "-c", ": >/dev/tcp/1.1.1.1/443"]
 EGRESS_PROBE_TIMEOUT = 10
 
 
-class NetworkDrop(msgspec.Struct):
+class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
     """Gate that removes network interfaces from the workshop container."""
 
-    name: str = "network-egress"
     removed_devices: dict[str, dict[str, Any]] = msgspec.field(default_factory=dict)
+
+    @property
+    def name(self) -> str:
+        return "network-egress"
 
     def check(self, microjail: MicroJail) -> bool:
         """Return true when egress from inside the workshop is blocked."""

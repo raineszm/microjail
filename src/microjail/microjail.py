@@ -7,17 +7,18 @@ from typing import TYPE_CHECKING
 import msgspec
 
 from microjail.adapters import lxc, workshop
-
-# Needed at runtime by msgspec for struct field resolution.
+from microjail.caps.base import Capability
+from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.gates.base import Gate
 from microjail.gates.network_drop import NetworkDrop
 from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import CapabilityError, GateError, Lockdown
 
+TaggedGate = NetworkDrop | ReadonlyConfig
+TaggedCapability = WorkshopEndpointCapability
+
 if TYPE_CHECKING:
     import subprocess
-
-    from microjail.caps.base import Capability
 
 CONFIG_DIRNAME = ".microjail"
 CONFIG_FILENAME = "config.yaml"
@@ -51,14 +52,9 @@ def dec_hook(expected: type, obj: object) -> object:
     if expected is Path:
         return Path(str(obj))
     if expected is Gate:
-        if not isinstance(obj, dict):
-            raise NotImplementedError(f"cannot decode Gate from {type(obj).__name__}")
-        name = obj.get("name")
-        if name == "network-egress":
-            return msgspec.convert(obj, type=NetworkDrop)
-        if name == "readonly-config":
-            return msgspec.convert(obj, type=ReadonlyConfig)
-        raise NotImplementedError(f"unknown gate name: {name!r}")
+        return msgspec.convert(obj, type=TaggedGate)
+    if expected is Capability:
+        return msgspec.convert(obj, type=TaggedCapability)
     raise NotImplementedError(f"cannot decode object of type {expected.__name__}")
 
 
