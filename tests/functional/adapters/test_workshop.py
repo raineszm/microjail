@@ -1,9 +1,4 @@
-import os
 import subprocess
-import time
-import uuid
-from dataclasses import dataclass
-from pathlib import Path
 
 import pytest
 
@@ -16,52 +11,10 @@ pytestmark = [
 ]
 
 
-@dataclass(frozen=True)
-class SharedWorkshop:
-    name: str
-    path: Path
-
-
-LAUNCH_TIMEOUT = 30
-LAUNCH_RETRIES = 2
-LAUNCH_BACKOFF = 15
-
-
-def launch_with_retries(name: str, project: Path):
-    """Launch a workshop, retrying if it times out.
-
-    Sometimes workshop just stalls on launch. Probably from us standing it up and tearing it down repeatedly in tests.
-    """
-    for attempt in range(LAUNCH_RETRIES + 1):
-        try:
-            workshop.launch(name, project=project, timeout=LAUNCH_TIMEOUT)
-            return
-        except subprocess.TimeoutExpired:
-            if attempt == LAUNCH_RETRIES:
-                raise
-            time.sleep(LAUNCH_BACKOFF)
-
-
 @pytest.fixture
 def initialized_workshop(tmp_workshop):
     workshop.init(tmp_workshop.name)
     return tmp_workshop
-
-
-@pytest.fixture(scope="module")
-def launched_workshop(tmp_path_factory):
-    project = tmp_path_factory.mktemp("launched-workshop")
-    name = f"mj-workshop-{uuid.uuid4().hex[:8]}"
-    cwd = Path.cwd()
-
-    try:
-        os.chdir(project)
-        workshop.init(name)
-        launch_with_retries(name, project)
-        yield SharedWorkshop(name=name, path=project)
-    finally:
-        os.chdir(cwd)
-        subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
 
 
 def test_init_minimal_args(tmp_workshop):

@@ -1,9 +1,4 @@
-import os
-import subprocess
-import time
-import uuid
-from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -13,50 +8,16 @@ from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
 from tests.marks import requires_lxd, requires_workshop
 
+if TYPE_CHECKING:
+    from tests.functional._helpers import SharedWorkshop
+
 pytestmark = [
     requires_lxd(),
     requires_workshop(),
     pytest.mark.slow,
 ]
 
-
-@dataclass(frozen=True)
-class SharedWorkshop:
-    name: str
-    path: Path
-
-
-LAUNCH_TIMEOUT = 30
-LAUNCH_RETRIES = 2
-LAUNCH_BACKOFF = 15
 NETWORK_PROBE_TIMEOUT = 10
-
-
-def launch_with_retries(name: str, project: Path):
-    for attempt in range(LAUNCH_RETRIES + 1):
-        try:
-            workshop.launch(name, project=project, timeout=LAUNCH_TIMEOUT)
-            return
-        except subprocess.TimeoutExpired:
-            if attempt == LAUNCH_RETRIES:
-                raise
-            time.sleep(LAUNCH_BACKOFF)
-
-
-@pytest.fixture(scope="module")
-def launched_workshop(tmp_path_factory):
-    project = tmp_path_factory.mktemp("network-drop-workshop")
-    name = f"mj-workshop-{uuid.uuid4().hex[:8]}"
-    cwd = Path.cwd()
-
-    try:
-        os.chdir(project)
-        workshop.init(name)
-        launch_with_retries(name, project)
-        yield SharedWorkshop(name=name, path=project)
-    finally:
-        os.chdir(cwd)
-        subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
 
 
 def has_network_egress(workshop_state: SharedWorkshop) -> bool:

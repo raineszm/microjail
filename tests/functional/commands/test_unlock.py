@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
-import pytest
+import pytest  # noqa: TC002
 from typer.testing import CliRunner
 
 from microjail.cli import app
@@ -9,23 +9,6 @@ from microjail.microjail import MicroJail
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-
-def create_microjail_config(project: Path) -> Path:
-    config = project / ".microjail" / "config.yaml"
-    config.parent.mkdir()
-    config.write_text(
-        f"name: test-jail\nproject_path: {project}\nlockdown:\n  caps: []\n  gates: []\n",
-        encoding="utf-8",
-    )
-    return config
-
-
-@pytest.fixture
-def microjail_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    create_microjail_config(tmp_path)
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
 
 
 def fail_release(monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:

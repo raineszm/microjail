@@ -1,8 +1,6 @@
 import os
 import subprocess
-import time
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -11,6 +9,7 @@ from microjail.adapters import workshop
 from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
+from tests.functional._helpers import SharedWorkshop, launch_with_retries
 from tests.marks import requires_lxd, requires_workshop
 
 pytestmark = [
@@ -18,28 +17,6 @@ pytestmark = [
     requires_workshop(),
     pytest.mark.slow,
 ]
-
-
-@dataclass(frozen=True)
-class SharedWorkshop:
-    name: str
-    path: Path
-
-
-LAUNCH_TIMEOUT = 30
-LAUNCH_RETRIES = 2
-LAUNCH_BACKOFF = 15
-
-
-def launch_with_retries(name: str, project: Path):
-    for attempt in range(LAUNCH_RETRIES + 1):
-        try:
-            workshop.launch(name, project=project, timeout=LAUNCH_TIMEOUT)
-            return
-        except subprocess.TimeoutExpired:
-            if attempt == LAUNCH_RETRIES:
-                raise
-            time.sleep(LAUNCH_BACKOFF)
 
 
 @pytest.fixture(scope="module")
