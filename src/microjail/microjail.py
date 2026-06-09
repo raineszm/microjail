@@ -1,12 +1,13 @@
 """The MicroJail configuration object and its on-disk persistence."""
 
+import subprocess  # noqa: TC003
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import msgspec
 
-from microjail.adapters import workshop
+from microjail.adapters import lxc, workshop
 
 # Needed at runtime by msgspec for struct field resolution.
 from microjail.gates.base import Gate
@@ -114,6 +115,37 @@ class MicroJail(msgspec.Struct):
                 project=self.project_path,
                 status=info.status,
             )
+
+    def exec_(self, command: list[str], **kwargs) -> subprocess.CompletedProcess:
+        """Execute *command* inside the associated workshop container."""
+        return workshop.exec_(self.name, self.project_path, command, **kwargs)
+
+    def container_name(self) -> str:
+        """Return the LXD container name, raising if the workshop is not launched."""
+        container = workshop.get_container(self.name, project=self.project_path)
+        if container is None:
+            raise workshop.WorkshopNotLaunchedError(
+                name=self.name, project=self.project_path
+            )
+        return container.name
+
+    def lxd_project(self) -> str:
+        """Return the workshop LXD project name."""
+        return workshop.lxd_project()
+
+    def lxc_instance(self) -> lxc.InstanceInfo:
+        """Return LXD instance information for this workshop's container."""
+        return lxc.get_instance(self.container_name(), project=self.lxd_project())
+
+    def remove_device(self, device: str) -> None:
+        """Remove *device* from the workshop container."""
+        lxc.remove_device(self.container_name(), device, project=self.lxd_project())
+
+    def add_device(self, device: str, config: dict[str, object]) -> None:
+        """Add *device* with *config* to the workshop container."""
+        lxc.add_device(
+            self.container_name(), device, config, project=self.lxd_project()
+        )
 
     def release(self) -> None:
         """Release this microjail's lockdown policy."""

@@ -1,145 +1,97 @@
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-import microjail.gates.readonly_config as readonly_config
-from microjail.adapters import workshop
+from microjail.adapters.workshop import WorkshopNotLaunchedError
 from microjail.gates.readonly_config import ReadonlyConfig
-from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
 
-PROJECT = Path("/project")
 WORKSHOP_NAME = "mj-workshop"
-CONTAINER_NAME = "mj-workshop-abc123"
-LXD_PROJECT = "workshop.test-user"
+PROJECT = "/project"
+CONTAINER_CONFIG_PATH = "/project/.microjail/config.yaml"
 
 
 def gate() -> ReadonlyConfig:
     return ReadonlyConfig()
 
 
-def microjail() -> MicroJail:
-    return MicroJail(
-        name=WORKSHOP_NAME,
-        project_path=PROJECT,
-        lockdown=Lockdown(caps=[], gates=[]),
-    )
-
-
-def patch_container_lookup(monkeypatch: pytest.MonkeyPatch):
-    get_container = Mock(return_value=workshop.ContainerInfo(name=CONTAINER_NAME))
-    lxd_project = Mock(return_value=LXD_PROJECT)
-    monkeypatch.setattr(readonly_config.workshop, "get_container", get_container)
-    monkeypatch.setattr(readonly_config.workshop, "lxd_project", lxd_project)
-    return get_container, lxd_project
-
-
-def patch_lxc_instance(
-    monkeypatch: pytest.MonkeyPatch, devices: dict[str, dict[str, str]]
-):
-    get_instance = Mock(return_value=SimpleNamespace(devices=devices))
-    monkeypatch.setattr(readonly_config.lxc, "get_instance", get_instance)
-    return get_instance
-
-
 def test_readonly_config_has_gate_name() -> None:
     assert gate().name == "readonly-config"
 
 
-def test_check_returns_false_when_device_absent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    patch_container_lookup(monkeypatch)
-    patch_lxc_instance(monkeypatch, {})
+def test_check_returns_false_when_device_absent() -> None:
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance.return_value = SimpleNamespace(devices={})
 
-    assert not gate().check(microjail())
+    assert not gate().check(mock_mj)
 
 
-def test_check_returns_true_when_device_present(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    patch_container_lookup(monkeypatch)
-    patch_lxc_instance(
-        monkeypatch,
-        {"microjail-config-ro": {"type": "disk", "readonly": "true"}},
+def test_check_returns_true_when_device_present() -> None:
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance.return_value = SimpleNamespace(
+        devices={"microjail-config-ro": {"type": "disk", "readonly": "true"}}
     )
 
-    assert gate().check(microjail())
+    assert gate().check(mock_mj)
 
 
-def test_enforce_adds_readonly_disk_device(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    patch_container_lookup(monkeypatch)
-    add_device = Mock()
-    monkeypatch.setattr(readonly_config.lxc, "add_device", add_device)
+def test_enforce_adds_readonly_disk_device() -> None:
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.config_path = "/project/.microjail/config.yaml"
 
-    gate().enforce(microjail())
+    gate().enforce(mock_mj)
 
-    add_device.assert_called_once_with(
-        CONTAINER_NAME,
+    mock_mj.add_device.assert_called_once_with(
         "microjail-config-ro",
         {
             "type": "disk",
-            "source": str(microjail().config_path),
-            "path": "/project/.microjail/config.yaml",
+            "source": "/project/.microjail/config.yaml",
+            "path": CONTAINER_CONFIG_PATH,
             "readonly": "true",
         },
-        project=LXD_PROJECT,
     )
 
 
-def test_release_removes_device_after_enforce(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    patch_container_lookup(monkeypatch)
-    monkeypatch.setattr(readonly_config.lxc, "add_device", Mock())
-    remove_device = Mock()
-    monkeypatch.setattr(readonly_config.lxc, "remove_device", remove_device)
+def test_release_removes_device_after_enforce() -> None:
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.config_path = "/project/.microjail/config.yaml"
 
     ro_gate = gate()
-    context = microjail()
+    ro_gate.enforce(mock_mj)
+    ro_gate.release(mock_mj)
 
-    ro_gate.enforce(context)
-    ro_gate.release(context)
+    mock_mj.remove_device.assert_called_once_with("microjail-config-ro")
 
-    remove_device.assert_called_once_with(
-        CONTAINER_NAME,
-        "microjail-config-ro",
-        project=LXD_PROJECT,
+
+def test_release_is_noop_when_not_enforced() -> None:
+    mock_mj = Mock(spec=MicroJail)
+
+    gate().release(mock_mj)
+
+    mock_mj.remove_device.assert_not_called()
+
+
+def test_enforce_fails_if_workshop_container_is_not_available() -> None:
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.config_path = "/project/.microjail/config.yaml"
+    mock_mj.add_device.side_effect = WorkshopNotLaunchedError(
+        name=WORKSHOP_NAME,
+        project=PROJECT,
     )
 
-
-def test_release_is_noop_when_not_enforced(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    remove_device = Mock()
-    monkeypatch.setattr(readonly_config.lxc, "remove_device", remove_device)
-
-    gate().release(microjail())
-
-    remove_device.assert_not_called()
-
-
-def test_enforce_fails_if_workshop_container_is_not_available(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    get_container = Mock(return_value=None)
-    monkeypatch.setattr(readonly_config.workshop, "get_container", get_container)
-
-    with pytest.raises(workshop.WorkshopNotLaunchedError) as exc_info:
-        gate().enforce(microjail())
+    with pytest.raises(WorkshopNotLaunchedError) as exc_info:
+        gate().enforce(mock_mj)
 
     assert exc_info.value.name == WORKSHOP_NAME
     assert exc_info.value.project == PROJECT
 
 
-def test_check_returns_false_when_container_is_not_available(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    get_container = Mock(return_value=None)
-    monkeypatch.setattr(readonly_config.workshop, "get_container", get_container)
+def test_check_returns_false_when_container_is_not_available() -> None:
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance.side_effect = WorkshopNotLaunchedError(
+        name=WORKSHOP_NAME,
+        project=PROJECT,
+    )
 
-    assert not gate().check(microjail())
+    assert not gate().check(mock_mj)
