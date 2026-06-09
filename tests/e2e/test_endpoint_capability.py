@@ -5,8 +5,6 @@ Verifies the core spec requirement: after ``provide()``, the declared
 """
 
 import socket
-import threading
-import time
 from typing import TYPE_CHECKING
 
 import pytest
@@ -28,143 +26,70 @@ pytestmark = [
 ]
 
 
-ENDPOINT_PROBE_RETRIES = 3
-ENDPOINT_PROBE_DELAY = 1.0
+@pytest.fixture(scope="function")
+def host_tcp_listener() -> Generator[tuple[str, int]]:
+    """A localhost TCP listener on a random port. Yields ``(host, port)``.
 
-
-def _find_free_port() -> int:
-    """Find a free TCP port on localhost."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
-def _wait_for_server(host: str, port: int, timeout: float = 5.0) -> bool:
-    """Block until *host:port* accepts connections, or *timeout* elapses."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            with socket.create_connection((host, port), timeout=0.5):
-                return True
-        except TimeoutError, ConnectionRefusedError:
-            time.sleep(0.1)
-    return False
+    ``WorkshopEndpointCapability.check()`` only verifies TCP connectability with
+    ``: >/dev/tcp/host/port``. A passive listener is enough for that handshake;
+    no accept loop or background thread is needed.
+    """
+    host = "127.0.0.1"
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind((host, 0))
+        listener.listen(16)
+        yield (host, listener.getsockname()[1])
 
 
 @pytest.fixture(scope="function")
-def host_echo_server() -> Generator[tuple[str, int]]:
-    """A TCP echo server on a random localhost port.  Yields ``(host, port)``.
-
-    The server accepts one connection at a time and echoes back whatever it
-    receives.  This is lightweight and proves the tunnel is forwarding real
-    TCP traffic, not just completing a handshake.
-    """
-    port = _find_free_port()
-
-    def handle(client: socket.socket) -> None:
-        try:
-            with client:
-                data = client.recv(1024)
-                if data:
-                    client.sendall(data)
-        except OSError:
-            pass
-
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(("127.0.0.1", port))
-    server.listen(1)
-    server.settimeout(1.0)
-
-    def serve() -> None:
-        while True:
-            try:
-                client, _ = server.accept()
-            except TimeoutError:
-                continue
-            except OSError:
-                return
-            t = threading.Thread(target=handle, args=(client,), daemon=True)
-            t.start()
-
-    thread = threading.Thread(target=serve, daemon=True)
-    thread.start()
-
-    if not _wait_for_server("127.0.0.1", port):
-        server.close()
-        thread.join(timeout=2)
-        pytest.fail(f"echo server did not start on 127.0.0.1:{port}")
-
-    try:
-        yield ("127.0.0.1", port)
-    finally:
-        server.close()
-        thread.join(timeout=5)
-
-
-def _endpoint_reachable_with_retry(mj: MicroJail, host: str, port: str) -> bool:
-    """Call ``endpoint_reachable`` with retries — tunnels may take a moment."""
-    for _ in range(ENDPOINT_PROBE_RETRIES):
-        if workshop.endpoint_reachable(mj, host, port):
-            return True
-        time.sleep(ENDPOINT_PROBE_DELAY)
-    return False
-
-
-# ------------------------------------------------------------------
+def endpoint_microjail(
+    e2e_workshop: SharedWorkshop,
+    host_tcp_listener: tuple[str, int],
+) -> MicroJail:
+    """A saved MicroJail config with one endpoint capability."""
+    host, port = host_tcp_listener
+    mj = MicroJail(
+        name=e2e_workshop.name,
+        project_path=e2e_workshop.path,
+        lockdown=Lockdown(
+            caps=[
+                WorkshopEndpointCapability(
+                    name="tcp-svc",
+                    endpoint=f"{host}:{port}",
+                )
+            ],
+            gates=Lockdown.default().gates,
+        ),
+    )
+    mj.save()
+    return mj
 
 
 def test_provide_makes_endpoint_reachable(
-    e2e_workshop: SharedWorkshop,
-    host_echo_server: tuple[str, int],
+    endpoint_microjail: MicroJail,
+    host_tcp_listener: tuple[str, int],
 ) -> None:
     """After ``provide()`` the endpoint is TCP-reachable from inside the container."""
-    host, port = host_echo_server
-    endpoint = f"{host}:{port}"
+    host, port = host_tcp_listener
+    cap = endpoint_microjail.lockdown.caps[0]
 
-    mj = MicroJail(
-        name=e2e_workshop.name,
-        project_path=e2e_workshop.path,
-        lockdown=Lockdown(
-            caps=[WorkshopEndpointCapability(name="echo-svc", endpoint=endpoint)],
-            gates=Lockdown.default().gates,
-        ),
-    )
-    mj.save()
-    cap = mj.lockdown.caps[0]
+    assert not cap.check(endpoint_microjail)
 
-    # Before provide, the endpoint should not be reachable.
-    assert not cap.check(mj)
+    cap.provide(endpoint_microjail)
 
-    cap.provide(mj)
-
-    # After provide, check() must return True …
-    assert cap.check(mj)
-    # … and the endpoint must actually accept a TCP connection.
-    assert _endpoint_reachable_with_retry(mj, host, str(port))
+    assert cap.check(endpoint_microjail)
+    assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
 
 
 def test_ensure_applies_endpoint_capability(
-    e2e_workshop: SharedWorkshop,
-    host_echo_server: tuple[str, int],
+    endpoint_microjail: MicroJail,
+    host_tcp_listener: tuple[str, int],
 ) -> None:
     """``ensure()`` provides the endpoint capability and the tunnel survives the
     network-egress gate applied by the same ``ensure()`` call."""
-    host, port = host_echo_server
-    endpoint = f"{host}:{port}"
+    host, port = host_tcp_listener
 
-    mj = MicroJail(
-        name=e2e_workshop.name,
-        project_path=e2e_workshop.path,
-        lockdown=Lockdown(
-            caps=[WorkshopEndpointCapability(name="echo-svc", endpoint=endpoint)],
-            gates=Lockdown.default().gates,
-        ),
-    )
-    mj.save()
+    endpoint_microjail.ensure()
 
-    mj.ensure()
-
-    # Tunnel must be reachable even after the network-egress gate has
-    # dropped all NICs (capabilities are applied before gates).
-    assert _endpoint_reachable_with_retry(mj, host, str(port))
+    assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
