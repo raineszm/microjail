@@ -51,3 +51,15 @@ _Avoid_: Workshop container, microjail instance, host process
 **Warden**:
 The runtime supervisor for a workload running under an applied Lockdown. It monitors policy invariants and terminates the workload on violation, but never releases policy.
 _Avoid_: unlocker, policy applier, cleanup manager
+
+**Destroy**:
+Explicit teardown of a microjail instance: stopping any running workload, releasing the Lockdown, and removing the Workshop environment. Requires user confirmation. Leaves the project directory on the host intact.
+_Avoid_: unlock, remove, clean up
+
+**Workshop adoption**:
+The act of bringing an existing Workshop project under microjail management. Microjail reads the existing workshop.yaml, requires the user to declare which tunnels and connections become Capabilities in the Lockdown, and takes ownership of the file going forward. Pre-existing tunnels not represented in the Lockdown are treated as unauthorized.
+_Avoid_: import, migration, takeover
+
+**Endpoint capability**:
+A declared Capability that authorizes a workload to reach a specific host service via a Workshop tunnel. Declared as `name=host:port` — where `name` becomes the Workshop plug/slot identifier and `host:port` is the address the workload sees inside the container, identical to the address on the host. Endpoint capabilities are the only authorized network paths through the network-egress Gate.
+_Avoid_: tunnel permission, proxy exception, port forwarding
