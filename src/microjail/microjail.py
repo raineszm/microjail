@@ -1,5 +1,6 @@
 """The MicroJail configuration object and its on-disk persistence."""
 
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -108,25 +109,23 @@ class MicroJail(msgspec.Struct):
         provided_caps: list[Capability] = []
         enforced_gates: list[Gate] = []
         capability_errors: list[CapabilityError] = []
-
         try:
             for cap in self.lockdown.caps:
                 try:
                     self.ensure_capability(cap, provided_caps)
                 except CapabilityError as exc:
                     capability_errors.append(exc)
-
             if len(capability_errors) == 1:
                 raise capability_errors[0]
             if capability_errors:
                 raise ExceptionGroup(
                     "capability application failures", capability_errors
                 )
-
             for gate in self.lockdown.gates:
                 self.ensure_gate(gate, enforced_gates)
         except Exception:
-            self.release_applied(provided_caps, enforced_gates)
+            with suppress(Exception):
+                self.release_applied(provided_caps, enforced_gates)
             raise
 
     def ensure_for_lock(self) -> LockApplicationResult:
