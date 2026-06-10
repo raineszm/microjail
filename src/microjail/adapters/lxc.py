@@ -9,6 +9,7 @@ import msgspec
 class InstanceInfo:
     name: str
     devices: dict[str, dict[str, Any]]
+    profiles: list[str]
 
 
 def get_instance(name: str, project: str) -> InstanceInfo:
@@ -21,7 +22,18 @@ def get_instance(name: str, project: str) -> InstanceInfo:
     return InstanceInfo(
         name=raw["name"],
         devices=raw.get("expanded_devices", raw.get("devices", {})),
+        profiles=raw.get("profiles", []),
     )
+
+
+def get_profile_devices(name: str, project: str) -> dict[str, dict[str, Any]]:
+    result = subprocess.run(
+        ["lxc", "query", f"/1.0/profiles/{name}?project={project}"],
+        check=True,
+        capture_output=True,
+    )
+    raw = msgspec.json.decode(result.stdout)
+    return raw.get("devices", {})
 
 
 def remove_device(container: str, device: str, project: str) -> None:

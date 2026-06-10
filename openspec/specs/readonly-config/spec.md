@@ -1,6 +1,6 @@
 ## Purpose
 
-The `readonly-config` capability ensures that the microjail config file (`.microjail/config.yaml`) cannot be overwritten by any process running inside the workshop container. It is implemented as a gate that bind-mounts the config file read-only via an LXC disk device, preventing a workload from modifying its own security policy.
+The `readonly-config` Gate ensures that the microjail config file (`.microjail/config.yaml`) cannot be overwritten by any process running inside the workshop container. It bind-mounts the config file read-only via an LXC disk device, preventing a workload from modifying its own security policy.
 
 ---
 

@@ -184,6 +184,14 @@ def refresh(name: str, project: Path) -> None:
     )
 
 
+def restore(name: str, project: Path) -> None:
+    subprocess.run(
+        ["workshop", "restore", name, "--project", str(project)],
+        check=True,
+        capture_output=True,
+    )
+
+
 def endpoint_reachable(microjail, host: str, port: int | str) -> bool:
     try:
         result = microjail.exec_(

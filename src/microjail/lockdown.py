@@ -23,6 +23,20 @@ class GateError(Exception):
     name: str
 
 
+@dataclass(frozen=True)
+class CapabilityReleaseError(Exception):
+    """Raised when a capability could not be revoked."""
+
+    name: str
+
+
+@dataclass(frozen=True)
+class GateReleaseError(Exception):
+    """Raised when a gate could not be released."""
+
+    name: str
+
+
 class Lockdown(msgspec.Struct):
     """Policy describing capabilities to provide and gates to enforce."""
 

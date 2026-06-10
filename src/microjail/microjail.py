@@ -12,7 +12,13 @@ from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.gates.base import Gate
 from microjail.gates.network_drop import NetworkDrop
 from microjail.gates.readonly_config import ReadonlyConfig
-from microjail.lockdown import CapabilityError, GateError, Lockdown
+from microjail.lockdown import (
+    CapabilityError,
+    CapabilityReleaseError,
+    GateError,
+    GateReleaseError,
+    Lockdown,
+)
 
 TaggedGate = NetworkDrop | ReadonlyConfig
 TaggedCapability = WorkshopEndpointCapability
@@ -38,6 +44,15 @@ class WorkshopNotReadyError(Exception):
     name: str
     project: Path
     status: str
+
+
+@dataclass(frozen=True)
+class LockApplicationResult:
+    """Result of applying policy for the `lock` command."""
+
+    capability_failures: list[CapabilityError]
+    gates_enforced: int
+    gate_failure: GateError | None = None
 
 
 def enc_hook(obj: object) -> object:
@@ -84,20 +99,63 @@ class MicroJail(msgspec.Struct):
         return self.config_dir / CONFIG_FILENAME
 
     def ensure(self) -> None:
-        """Apply this microjail's lockdown policy."""
+        """Apply this microjail's lockdown policy for a workload launch."""
+        self.ensure_for_run()
+
+    def ensure_for_run(self) -> None:
+        """Apply policy for `run`, rolling back if the workload will not start."""
         self.ensure_workshop_ready()
         provided_caps: list[Capability] = []
         enforced_gates: list[Gate] = []
+        capability_errors: list[CapabilityError] = []
 
         try:
             for cap in self.lockdown.caps:
-                self.ensure_capability(cap, provided_caps)
+                try:
+                    self.ensure_capability(cap, provided_caps)
+                except CapabilityError as exc:
+                    capability_errors.append(exc)
+
+            if len(capability_errors) == 1:
+                raise capability_errors[0]
+            if capability_errors:
+                raise ExceptionGroup(
+                    "capability application failures", capability_errors
+                )
 
             for gate in self.lockdown.gates:
                 self.ensure_gate(gate, enforced_gates)
         except Exception:
             self.release_applied(provided_caps, enforced_gates)
             raise
+
+    def ensure_for_lock(self) -> LockApplicationResult:
+        """Apply policy for `lock`, leaving the safest reachable posture in place."""
+        self.ensure_workshop_ready()
+        provided_caps: list[Capability] = []
+        enforced_gates: list[Gate] = []
+        capability_errors: list[CapabilityError] = []
+
+        for cap in self.lockdown.caps:
+            try:
+                self.ensure_capability(cap, provided_caps)
+            except CapabilityError as exc:
+                capability_errors.append(exc)
+
+        for gate in self.lockdown.gates:
+            try:
+                self.ensure_gate(gate, enforced_gates)
+            except GateError as exc:
+                return LockApplicationResult(
+                    capability_failures=capability_errors,
+                    gates_enforced=len(enforced_gates),
+                    gate_failure=exc,
+                )
+
+        return LockApplicationResult(
+            capability_failures=capability_errors,
+            gates_enforced=len(self.lockdown.gates),
+        )
 
     def workshop_info(self) -> workshop.WorkshopInfo | None:
         """Return workshop info, or None if the workshop is not launched."""
@@ -130,6 +188,10 @@ class MicroJail(msgspec.Struct):
             )
         return container.name
 
+    def restore_workshop(self) -> None:
+        """Restore the Workshop environment to its last launch/refresh point."""
+        workshop.restore(self.name, project=self.project_path)
+
     def lxd_project(self) -> str:
         """Return the workshop LXD project name."""
         return workshop.lxd_project()
@@ -137,6 +199,14 @@ class MicroJail(msgspec.Struct):
     def lxc_instance(self) -> lxc.InstanceInfo:
         """Return LXD instance information for this workshop's container."""
         return lxc.get_instance(self.container_name(), project=self.lxd_project())
+
+    def profile_devices(self) -> dict[str, dict[str, object]]:
+        """Return devices contributed by profiles attached to this instance."""
+        devices: dict[str, dict[str, object]] = {}
+        instance = self.lxc_instance()
+        for profile in instance.profiles:
+            devices.update(lxc.get_profile_devices(profile, project=self.lxd_project()))
+        return devices
 
     def remove_device(self, device: str) -> None:
         """Remove *device* from the workshop container."""
@@ -155,14 +225,14 @@ class MicroJail(msgspec.Struct):
         for gate in reversed(self.lockdown.gates):
             try:
                 gate.release(self)
-            except Exception as exc:
-                errors.append(exc)
+            except Exception:
+                errors.append(GateReleaseError(name=gate.name))
 
         for cap in reversed(self.lockdown.caps):
             try:
                 cap.revoke(self)
-            except Exception as exc:
-                errors.append(exc)
+            except Exception:
+                errors.append(CapabilityReleaseError(name=cap.name))
 
         if errors:
             raise ExceptionGroup("lockdown release failures", errors)
@@ -178,14 +248,14 @@ class MicroJail(msgspec.Struct):
         for gate in reversed(enforced_gates):
             try:
                 gate.release(self)
-            except Exception as exc:
-                errors.append(exc)
+            except Exception:
+                errors.append(GateReleaseError(name=gate.name))
 
         for cap in reversed(provided_caps):
             try:
                 cap.revoke(self)
-            except Exception as exc:
-                errors.append(exc)
+            except Exception:
+                errors.append(CapabilityReleaseError(name=cap.name))
 
         if errors:
             raise ExceptionGroup("lockdown release failures", errors)
@@ -196,11 +266,17 @@ class MicroJail(msgspec.Struct):
         provided_caps: list[Capability],
     ) -> None:
         """check → provide if missing → verify for a single capability."""
-        if not cap.check(self):
+        try:
+            if cap.check(self):
+                return
             provided_caps.append(cap)
             cap.provide(self)
             if not cap.check(self):
                 raise CapabilityError(name=cap.name)
+        except CapabilityError:
+            raise
+        except Exception as exc:
+            raise CapabilityError(name=cap.name) from exc
 
     def ensure_gate(
         self,
@@ -208,11 +284,17 @@ class MicroJail(msgspec.Struct):
         enforced_gates: list[Gate],
     ) -> None:
         """check → enforce if unsatisfied → verify for a single gate."""
-        if not gate.check(self):
+        try:
+            if gate.check(self):
+                return
             enforced_gates.append(gate)
             gate.enforce(self)
             if not gate.check(self):
                 raise GateError(name=gate.name)
+        except GateError:
+            raise
+        except Exception as exc:
+            raise GateError(name=gate.name) from exc
 
     def save(self) -> None:
         """Persist this microjail to ``.microjail/config.yaml``."""

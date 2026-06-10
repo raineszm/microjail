@@ -47,9 +47,23 @@ class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
 
     def release(self, microjail: MicroJail) -> None:
         """Restore network devices removed by enforce()."""
-        if not self.removed_devices:
+        profile_devices = microjail.profile_devices()
+        if not isinstance(profile_devices, dict):
+            profile_devices = {}
+        devices = self.removed_devices or {
+            name: config
+            for name, config in profile_devices.items()
+            if config.get("type") == "nic"
+        }
+        if not devices:
+            microjail.restore_workshop()
             return
-
-        for device, config in self.removed_devices.items():
-            microjail.add_device(device, config)
+        if self.removed_devices:
+            for device, config in devices.items():
+                microjail.add_device(device, config)
+        else:
+            current_devices = microjail.lxc_instance().devices
+            for device, config in devices.items():
+                if device not in current_devices:
+                    microjail.add_device(device, config)
         self.removed_devices = {}

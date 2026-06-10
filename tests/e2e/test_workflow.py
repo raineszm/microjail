@@ -1,12 +1,4 @@
-"""End-to-end tests for the CLI workflow against a real Workshop.
-
-Gate state (``removed_devices`` etc.) is ephemeral — it lives only in the
-process that called ``enforce()``. ``microjail unlock`` from a fresh CLI
-invocation cannot know what was removed, so unlock-via-CLI is untestable
-with the current gate model. Lock-via-CLI + verify-via-API is testable
-because each test destroys its workshop (function-scoped fixture), so no
-unlock is needed.
-"""
+"""End-to-end tests for the CLI workflow against a real Workshop."""
 
 from typing import TYPE_CHECKING
 
@@ -136,6 +128,30 @@ def test_lock_fails_without_config(
     monkeypatch.chdir(tmp_path)
 
     result = CliRunner().invoke(app, ["lock"])
+
+    assert result.exit_code == 1
+    assert "No microjail config found" in result.stderr
+
+
+def test_run_fails_without_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`microjail run` fails with a helpful message when no config exists."""
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["run", "--", "true"])
+
+    assert result.exit_code == 1
+    assert "No microjail config found" in result.stderr
+
+
+def test_unlock_fails_without_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`microjail unlock` fails with a helpful message when no config exists."""
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(app, ["unlock"])
 
     assert result.exit_code == 1
     assert "No microjail config found" in result.stderr

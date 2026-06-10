@@ -28,6 +28,10 @@ _Avoid_: capability, permission, feature
 Outbound network access from the workload to external network destinations. Network paths are authorized only when represented as declared Capabilities in the Lockdown.
 _Avoid_: all network access, endpoint capability
 
+**Readonly-config Gate**:
+A Gate that prevents a workload from modifying the Microjail configuration that defines its own Lockdown.
+_Avoid_: readonly-config capability, endpoint capability, config permission
+
 **Capability application failure**:
 A failure to establish or verify functionality or access that a Lockdown declared should be available to the workload. Capability application failures are collected so Microjail can report all missing capabilities together, then block workload launch by default.
 _Avoid_: gate failure, runtime violation

@@ -1,35 +1,45 @@
 from typing import TYPE_CHECKING
+from unittest.mock import Mock
 
-import pytest  # noqa: TC002
 from typer.testing import CliRunner
 
+from microjail import policy
 from microjail.cli import app
-from microjail.lockdown import CapabilityError, GateError
+from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
+from tests.functional.commands.helpers import RecordingCapability, RecordingGate
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-
-def fail_lockdown(monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
-    def ensure(self: MicroJail) -> None:
-        raise failure
-
-    monkeypatch.setattr(MicroJail, "ensure", ensure)
+    import pytest
 
 
-def test_lock_reports_success(
+def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(MicroJail, "load", Mock(return_value=microjail))
+    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
+
+
+def test_lock_reports_success_with_counts(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
-    def ensure(self: MicroJail) -> None:
-        assert self.project_path == microjail_project
-
-    monkeypatch.setattr(MicroJail, "ensure", ensure)
+    gates = [
+        RecordingGate("network-egress", checks=[True]),
+        RecordingGate("readonly-config", checks=[True]),
+    ]
+    microjail = MicroJail(
+        name="test-jail",
+        project_path=microjail_project,
+        lockdown=Lockdown(caps=[], gates=gates),
+    )
+    load_as(microjail, monkeypatch)
 
     result = CliRunner().invoke(app, ["lock"])
 
     assert result.exit_code == 0
-    assert "locked" in result.stdout.lower()
+    assert "lock applied" in result.stdout
+    assert "0 capabilities" in result.stdout
+    assert "2 gates" in result.stdout
 
 
 def test_lock_rejects_unexpected_arguments() -> None:
@@ -39,26 +49,60 @@ def test_lock_rejects_unexpected_arguments() -> None:
     assert "unexpected" in result.stderr.lower()
 
 
-def test_lock_warns_on_capability_failure_by_default(
+def test_lock_capability_failure_still_attempts_gate_enforcement(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
-    fail_lockdown(monkeypatch, CapabilityError(name="local-inference"))
+    cap = RecordingCapability("local-inference", checks=[False, False])
+    gate = RecordingGate("network-egress", checks=[False, True])
+    microjail = MicroJail(
+        name="test-jail",
+        project_path=microjail_project,
+        lockdown=Lockdown(caps=[cap], gates=[gate]),
+    )
+    load_as(microjail, monkeypatch)
 
     result = CliRunner().invoke(app, ["lock"])
 
-    assert result.exit_code == 0
-    assert "failed to provide capabilities" in result.stderr.lower()
-    assert "local-inference" in result.stderr
+    assert result.exit_code == policy.CAPABILITY_APPLICATION_FAILURE
+    assert "lock incomplete" in result.stderr
+    assert "1 capability failures" in result.stderr
+    assert "1 gates enforced" in result.stderr
+    assert gate.calls == ["check", "enforce", "check"]
 
 
-def test_lock_reports_gate_failure(
+def test_lock_gate_failure_reports_name_and_exit_code(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
-    fail_lockdown(monkeypatch, GateError(name="network-egress"))
+    gate = RecordingGate("network-egress", checks=[False, False])
+    microjail = MicroJail(
+        name="test-jail",
+        project_path=microjail_project,
+        lockdown=Lockdown(caps=[], gates=[gate]),
+    )
+    load_as(microjail, monkeypatch)
 
     result = CliRunner().invoke(app, ["lock"])
 
-    assert result.exit_code == 1
-    assert "failed to enforce gates" in result.stderr.lower()
+    assert result.exit_code == policy.GATE_APPLICATION_FAILURE
+    assert "lock failed" in result.stderr
     assert "network-egress" in result.stderr
     assert "GateError" not in result.stderr
+
+
+def test_lock_does_not_rollback_successfully_applied_policy_after_failure(
+    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
+) -> None:
+    cap = RecordingCapability("endpoint", checks=[False, True])
+    gate = RecordingGate("network-egress", checks=[False, False])
+    microjail = MicroJail(
+        name="test-jail",
+        project_path=microjail_project,
+        lockdown=Lockdown(caps=[cap], gates=[gate]),
+    )
+    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
+
+    result = microjail.ensure_for_lock()
+
+    assert result.gate_failure is not None
+    assert cap.calls == ["check", "provide", "check"]
+    assert gate.calls == ["check", "enforce", "check"]

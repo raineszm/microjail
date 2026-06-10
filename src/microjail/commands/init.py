@@ -3,6 +3,12 @@ from pathlib import Path
 import typer
 
 from microjail.adapters import workshop
+from microjail.lockdown import Lockdown
+from microjail.microjail import MicroJail
+
+
+def save_microjail_config(name: str) -> None:
+    MicroJail(name=name, project_path=Path.cwd(), lockdown=Lockdown.default()).save()
 
 
 def init(name: str, overwrite: bool = False, adopt: bool = False) -> None:
@@ -15,12 +21,16 @@ def init(name: str, overwrite: bool = False, adopt: bool = False) -> None:
         workshop.init(name)
     except workshop.WorkshopExistsError as exc:
         typer.echo(
-            f"Workshop '{exc.name}' already exists in {exc.project}"
-            "use --modify to inject microjail config into this workshop"
-            "or --adopt to configure that existing workshop with microjail",
+            f"Workshop '{exc.name}' already exists in {exc.project}. "
+            "Use --overwrite to replace this workshop definition "
+            "or --adopt to configure that existing workshop with microjail.",
             err=True,
         )
         raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        typer.echo(f"Failed to initialize Workshop '{name}': {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    save_microjail_config(name)
 
 
 def overwrite_workshop(name: str) -> None:
@@ -30,7 +40,7 @@ def overwrite_workshop(name: str) -> None:
     else:
         typer.echo(
             f"WARN: Workshop '{name}' does not exist in {Path.cwd()}"
-            "override not needed",
+            " overwrite not needed",
             err=True,
         )
     init(name)
@@ -44,5 +54,5 @@ def adopt_workshop(name: str) -> None:
             err=True,
         )
         raise typer.Exit(code=1)
+    save_microjail_config(name)
     typer.echo(f"Adopted workshop {name}")
-    return

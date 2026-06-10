@@ -46,7 +46,6 @@ class ReadonlyConfig(msgspec.Struct, tag="readonly-config", tag_field="name"):
 
     def release(self, microjail: MicroJail) -> None:
         """Remove the read-only disk device added by enforce()."""
-        if not self.removed:
-            return
-        microjail.remove_device(DEVICE_NAME)
+        if self.removed or self.check(microjail):
+            microjail.remove_device(DEVICE_NAME)
         self.removed = False

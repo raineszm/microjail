@@ -135,6 +135,19 @@ def test_refresh_builds_expected_command(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
 
+def test_restore_builds_expected_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = Mock(return_value=CompletedProcess(args=["workshop"], returncode=0))
+    monkeypatch.setattr(workshop.subprocess, "run", run)
+
+    workshop.restore("mj-workshop", Path("/tmp/project"))
+
+    run.assert_called_once_with(
+        ["workshop", "restore", "mj-workshop", "--project", "/tmp/project"],
+        check=True,
+        capture_output=True,
+    )
+
+
 @pytest.mark.parametrize("returncode,expected", [(0, True), (1, False)])
 def test_endpoint_reachable_returns_probe_result(
     returncode: int, expected: bool

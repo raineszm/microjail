@@ -79,6 +79,19 @@ def test_release_restores_network_devices_removed_by_enforce() -> None:
     )
 
 
+def test_release_restores_workshop_when_removed_network_device_cannot_be_derived() -> (
+    None
+):
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.profile_devices.return_value = {}
+
+    network_gate = gate()
+    network_gate.release(mock_mj)
+
+    mock_mj.restore_workshop.assert_called_once_with()
+    mock_mj.add_device.assert_not_called()
+
+
 def test_enforce_fails_if_workshop_container_is_not_available() -> None:
     mock_mj = Mock(spec=MicroJail)
     mock_mj.lxc_instance.side_effect = WorkshopNotLaunchedError(
