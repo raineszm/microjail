@@ -56,7 +56,7 @@ def endpoint_microjail(
             caps=[
                 WorkshopEndpointCapability(
                     name="tcp-svc",
-                    endpoint=f"{host}:{port}",
+                    host_endpoint=f"{host}:{port}",
                 )
             ],
             gates=Lockdown.default().gates,
@@ -134,7 +134,7 @@ def test_run_does_not_start_workload_when_endpoint_capability_cannot_be_applied(
         lockdown=Lockdown(
             caps=[
                 WorkshopEndpointCapability(
-                    name="bad-endpoint", endpoint="not-an-endpoint"
+                    name="bad-endpoint", host_endpoint="not-an-endpoint"
                 )
             ],
             gates=Lockdown.default().gates,

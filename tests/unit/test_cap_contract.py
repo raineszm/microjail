@@ -96,7 +96,7 @@ class CapSpec(NamedTuple):
         pytest.param(
             CapSpec(
                 cap=WorkshopEndpointCapability(
-                    name="inference", endpoint="127.0.0.1:8080"
+                    name="inference", host_endpoint="127.0.0.1:8080"
                 ),
                 setup_unsatisfied=setup_endpoint_unsatisfied,
                 setup_satisfied=setup_endpoint_satisfied,

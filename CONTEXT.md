@@ -69,5 +69,5 @@ The act of bringing an existing Workshop project under microjail management. Mic
 _Avoid_: import, migration, takeover
 
 **Endpoint capability**:
-A declared Capability that authorizes a workload to reach a specific host service via a Workshop tunnel. Declared as `name=host:port` — where `name` becomes the Workshop plug/slot identifier and `host:port` is the address the workload sees inside the container, identical to the address on the host. Endpoint capabilities are the only authorized network paths through the network-egress Gate.
+A declared Capability that authorizes a workload to reach a specific host service via a Workshop tunnel. Declared with `host_endpoint` (the host-side address the tunnel forwards from) and an optional `container_endpoint` (the address the workload sees inside the container; defaults to `host_endpoint`). The `name` field becomes the Workshop plug/slot identifier. Endpoint capabilities are the only authorized network paths through the network-egress Gate.
 _Avoid_: tunnel permission, proxy exception, port forwarding

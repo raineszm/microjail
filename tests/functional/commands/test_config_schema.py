@@ -23,7 +23,7 @@ lockdown:
   caps:
     - type: endpoint-proxy
       name: inference
-      endpoint: 127.0.0.1:8080
+      host_endpoint: 127.0.0.1:8080
   gates:
     - name: network-egress
     - name: readonly-config
@@ -50,7 +50,7 @@ def test_cli_loads_documented_endpoint_capability_config_shape(
     assert result.exit_code == 0
     assert isinstance(seen["cap"], WorkshopEndpointCapability)
     assert seen["cap"].name == "inference"
-    assert seen["cap"].endpoint == "127.0.0.1:8080"
+    assert seen["cap"].host_endpoint == "127.0.0.1:8080"
 
 
 def test_cli_loads_documented_default_gate_config_shape(

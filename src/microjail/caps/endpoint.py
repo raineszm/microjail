@@ -12,11 +12,20 @@ class WorkshopEndpointCapability(
     msgspec.Struct, tag="endpoint-proxy", tag_field="type"
 ):
     name: str
-    endpoint: str
+    host_endpoint: str
+    container_endpoint: str | None = None
 
     @property
     def type(self) -> str:
         return "endpoint-proxy"
+
+    @property
+    def resolved_endpoint(self) -> str:
+        return (
+            self.container_endpoint
+            if self.container_endpoint is not None
+            else self.host_endpoint
+        )
 
     def check(self, microjail: MicroJail) -> bool:
         try:
@@ -26,7 +35,7 @@ class WorkshopEndpointCapability(
                 f"{microjail.name}/system:{self.name}",
             ) not in rows:
                 return False
-            host, port = self.endpoint.rsplit(":", 1)
+            host, port = self.resolved_endpoint.rsplit(":", 1)
             return workshop.endpoint_reachable(microjail, host, port)
         except Exception:
             return False
@@ -34,9 +43,11 @@ class WorkshopEndpointCapability(
     def provide(self, microjail: MicroJail) -> None:
         if self.check(microjail):
             return
-        workshop.add_tunnel_plug(microjail.project_path, self.name, self.endpoint)
+        workshop.add_tunnel_plug(
+            microjail.project_path, self.name, self.resolved_endpoint
+        )
         workshop.add_tunnel_slot(
-            microjail.name, microjail.project_path, self.name, self.endpoint
+            microjail.name, microjail.project_path, self.name, self.host_endpoint
         )
         workshop.refresh(microjail.name, project=microjail.project_path)
         workshop.connect(
