@@ -23,7 +23,7 @@ def tmp_microjail(tmp_path: Path) -> MicroJail:
 
 
 def capability() -> WorkshopEndpointCapability:
-    return WorkshopEndpointCapability(name="inference", endpoint="127.0.0.1:8080")
+    return WorkshopEndpointCapability(name="inference", host_endpoint="127.0.0.1:8080")
 
 
 def test_check_returns_false_when_connection_row_is_absent(
@@ -104,6 +104,36 @@ def test_check_returns_false_when_endpoint_is_unreachable(
     )
 
 
+def test_check_probes_container_endpoint_when_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    cap = WorkshopEndpointCapability(
+        name="inference",
+        host_endpoint="127.0.0.1:8080",
+        container_endpoint="10.0.0.1:9090",
+    )
+    monkeypatch.setattr(
+        workshop,
+        "connections",
+        Mock(
+            return_value=[
+                ("mj-workshop/microjail:inference", "mj-workshop/system:inference")
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        workshop,
+        "endpoint_reachable",
+        Mock(return_value=True),
+    )
+
+    assert cap.check(tmp_microjail)
+
+    workshop.endpoint_reachable.assert_called_once_with(
+        tmp_microjail, "10.0.0.1", "9090"
+    )
+
+
 def test_provide_is_idempotent_when_check_already_returns_true(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
@@ -177,7 +207,7 @@ lockdown:
   caps:
     - type: endpoint-proxy
       name: inference
-      endpoint: localhost:8080
+      host_endpoint: localhost:8080
   gates: []
 """
 
@@ -185,4 +215,37 @@ lockdown:
 
     assert isinstance(loaded.lockdown.caps[0], WorkshopEndpointCapability)
     assert loaded.lockdown.caps[0].name == "inference"
-    assert loaded.lockdown.caps[0].endpoint == "localhost:8080"
+    assert loaded.lockdown.caps[0].host_endpoint == "localhost:8080"
+    assert loaded.lockdown.caps[0].container_endpoint is None
+
+
+def test_config_round_trip_deserializes_with_container_endpoint() -> None:
+    raw = b"""name: mj-workshop
+project_path: /project
+lockdown:
+  caps:
+    - type: endpoint-proxy
+      name: inference
+      host_endpoint: 127.0.0.1:8080
+      container_endpoint: 127.0.0.1:9090
+  gates: []
+"""
+
+    loaded = msgspec.yaml.decode(raw, type=MicroJail, dec_hook=dec_hook)
+
+    assert isinstance(loaded.lockdown.caps[0], WorkshopEndpointCapability)
+    assert loaded.lockdown.caps[0].name == "inference"
+    assert loaded.lockdown.caps[0].host_endpoint == "127.0.0.1:8080"
+    assert loaded.lockdown.caps[0].container_endpoint == "127.0.0.1:9090"
+
+
+def test_resolved_endpoint_returns_container_endpoint_when_set() -> None:
+    cap = WorkshopEndpointCapability(
+        name="svc", host_endpoint="127.0.0.1:8080", container_endpoint="10.0.0.1:9090"
+    )
+    assert cap.resolved_endpoint == "10.0.0.1:9090"
+
+
+def test_resolved_endpoint_returns_host_endpoint_when_container_is_none() -> None:
+    cap = WorkshopEndpointCapability(name="svc", host_endpoint="localhost:8080")
+    assert cap.resolved_endpoint == "localhost:8080"

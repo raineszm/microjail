@@ -21,8 +21,8 @@ def microjail(tmp_path: Path) -> MicroJail:
     )
 
 
-def cap(name: str, endpoint: str) -> WorkshopEndpointCapability:
-    return WorkshopEndpointCapability(name=name, endpoint=endpoint)
+def cap(name: str, host_endpoint: str) -> WorkshopEndpointCapability:
+    return WorkshopEndpointCapability(name=name, host_endpoint=host_endpoint)
 
 
 def test_provide_calls_adapter_sequence_in_order(
@@ -40,6 +40,40 @@ def test_provide_calls_adapter_sequence_in_order(
 
     assert parent.mock_calls == [
         call.add_tunnel_plug(microjail.project_path, "inference", "127.0.0.1:8080"),
+        call.add_tunnel_slot(
+            microjail.name, microjail.project_path, "inference", "127.0.0.1:8080"
+        ),
+        call.refresh(microjail.name, project=microjail.project_path),
+        call.connect(
+            microjail.name,
+            project=microjail.project_path,
+            plug_sdk="microjail",
+            plug="inference",
+            slot_sdk="system",
+            slot="inference",
+        ),
+    ]
+
+
+def test_provide_passes_container_endpoint_to_plug_and_host_endpoint_to_slot(
+    monkeypatch: pytest.MonkeyPatch, microjail: MicroJail
+) -> None:
+    capability = WorkshopEndpointCapability(
+        name="inference",
+        host_endpoint="127.0.0.1:8080",
+        container_endpoint="10.0.0.1:9090",
+    )
+    parent = Mock()
+    monkeypatch.setattr(workshop, "connections", Mock(return_value=[]))
+    monkeypatch.setattr(workshop, "add_tunnel_plug", parent.add_tunnel_plug)
+    monkeypatch.setattr(workshop, "add_tunnel_slot", parent.add_tunnel_slot)
+    monkeypatch.setattr(workshop, "refresh", parent.refresh)
+    monkeypatch.setattr(workshop, "connect", parent.connect)
+
+    capability.provide(microjail)
+
+    assert parent.mock_calls == [
+        call.add_tunnel_plug(microjail.project_path, "inference", "10.0.0.1:9090"),
         call.add_tunnel_slot(
             microjail.name, microjail.project_path, "inference", "127.0.0.1:8080"
         ),
