@@ -26,6 +26,7 @@ TaggedCapability = WorkshopEndpointCapability
 
 if TYPE_CHECKING:
     import subprocess
+    from collections.abc import Callable
 
 CONFIG_DIRNAME = ".microjail"
 CONFIG_FILENAME = "config.yaml"
@@ -111,6 +112,7 @@ class MicroJail(msgspec.Struct):
     name: str
     project_path: Path
     lockdown: Lockdown
+    purge_path: str = "data"
 
     @property
     def config_dir(self) -> Path:
@@ -266,6 +268,45 @@ class MicroJail(msgspec.Struct):
         """Persist this microjail to ``.microjail/config.yaml``."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.config_path.write_bytes(msgspec.yaml.encode(self, enc_hook=enc_hook))
+
+    def destroy(
+        self,
+        *,
+        delete_project: bool = False,
+        echo: Callable[[str], None] | None = None,
+    ) -> None:
+        """Tear down workshop infrastructure and purge data.
+
+        If delete_project is True, delete the entire project directory.
+        """
+        import shutil
+        import time
+
+        while True:
+            info = workshop.info(self.name, self.project_path)
+            if not info:
+                break
+            if info.status == "pending":
+                if echo:
+                    echo("Workshop is pending, waiting...")
+                time.sleep(2)
+                continue
+            elif info.status == "off":
+                if echo:
+                    echo("Workshop is off, starting before removal...")
+                workshop.start(self.name, self.project_path)
+                break
+            else:
+                break
+
+        workshop.remove(self.name, self.project_path)
+
+        if delete_project:
+            shutil.rmtree(self.project_path)
+        elif self.purge_path:
+            purge_dir = self.project_path / self.purge_path
+            if purge_dir.exists():
+                shutil.rmtree(purge_dir)
 
     @classmethod
     def load(cls, project_path: Path) -> MicroJail:

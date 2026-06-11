@@ -19,6 +19,13 @@ pytestmark = [
 ]
 
 
+def clean_up_project(project: Path, name: str) -> None:
+    try:
+        MicroJail.load(project).destroy()
+    except Exception:
+        subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
+
+
 @pytest.fixture
 def e2e_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A fresh project path/name pair with Workshop teardown."""
@@ -32,7 +39,7 @@ def e2e_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         yield SharedWorkshop(name=name, path=project)
     finally:
         os.chdir(cwd)
-        subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
+        clean_up_project(project, name)
 
 
 @pytest.fixture
@@ -61,7 +68,7 @@ def e2e_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         yield SharedWorkshop(name=name, path=project)
     finally:
         os.chdir(cwd)
-        subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
+        clean_up_project(project, name)
 
 
 @pytest.fixture
@@ -81,7 +88,7 @@ def endpoint_e2e_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         yield SharedWorkshop(name=name, path=project)
     finally:
         os.chdir(cwd)
-        subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
+        clean_up_project(project, name)
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
