@@ -20,7 +20,7 @@ def launched_workshop(tmp_path_factory):
 
     try:
         os.chdir(project)
-        workshop.init(name)
+        workshop.init(name, project=project)
         launch_with_retries(name, project)
         yield SharedWorkshop(name=name, path=project)
     finally:

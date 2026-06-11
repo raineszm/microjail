@@ -1,4 +1,6 @@
 import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,17 +15,17 @@ pytestmark = [
 
 @pytest.fixture
 def initialized_workshop(tmp_workshop):
-    workshop.init(tmp_workshop.name)
+    workshop.init(tmp_workshop.name, project=tmp_workshop.path)
     return tmp_workshop
 
 
 def test_init_minimal_args(tmp_workshop):
-    workshop.init(tmp_workshop.name)
+    workshop.init(tmp_workshop.name, project=tmp_workshop.path)
 
 
 def test_init_throws_on_existing_workshop(initialized_workshop):
     with pytest.raises(WorkshopExistsError):
-        workshop.init(initialized_workshop.name)
+        workshop.init(initialized_workshop.name, project=initialized_workshop.path)
 
 
 def test_ready_after_launch(launched_workshop):
@@ -149,3 +151,25 @@ def test_exists_returns_false_for_nonexistent_workshop(tmp_workshop):
 
 def test_exists_returns_false_if_name_doesnt_match(initialized_workshop):
     assert not workshop.exists("bad-name", project=initialized_workshop.path)
+
+
+@patch("subprocess.run")
+def test_workshop_init_subprocess_receives_project_flag(mock_run: MagicMock) -> None:
+    workshop.init("myproj", project=Path("/tmp/myproject"))
+
+    args, _ = mock_run.call_args
+    cmd = args[0]
+    assert "--project" in cmd
+    project_idx = cmd.index("--project")
+    assert cmd[project_idx + 1] == "/tmp/myproject"
+
+
+@patch("subprocess.run")
+def test_workshop_launch_subprocess_receives_project_flag(mock_run: MagicMock) -> None:
+    workshop.launch("myproj", project=Path("/tmp/myproject"))
+
+    args, _ = mock_run.call_args
+    cmd = args[0]
+    assert "--project" in cmd
+    project_idx = cmd.index("--project")
+    assert cmd[project_idx + 1] == "/tmp/myproject"
