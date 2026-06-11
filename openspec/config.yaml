@@ -1,4 +1,4 @@
-schema: spec-driven
+schema: spec-test-driven
 
 # Project context (optional)
 # This is shown to AI when creating artifacts.
@@ -12,10 +12,10 @@ schema: spec-driven
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
 # Example:
-rules:
+# rules:
 #     proposal:
 #       - Keep proposals under 500 words
 #       - Always include a "Non-goals" section
-tasks:
-  - Use the tdd skill to implement task items
-  - Implement only one task at a time
+# tasks:
+#   - Use the tdd skill to implement task items
+#   - Implement only one task at a time
