@@ -21,8 +21,8 @@ def mock_microjail(tmp_path: Path):
     return mj
 
 
-@patch("microjail.commands.destroy.workshop.info")
-@patch("microjail.commands.destroy.workshop.remove")
+@patch("microjail.microjail.workshop.info")
+@patch("microjail.microjail.workshop.remove")
 @patch("time.sleep")
 def test_destroy_pending_workshop(
     mock_sleep, mock_remove, mock_info, mock_microjail, tmp_path
@@ -41,9 +41,9 @@ def test_destroy_pending_workshop(
     mock_remove.assert_called_once_with("test-jail", tmp_path)
 
 
-@patch("microjail.commands.destroy.workshop.info")
-@patch("microjail.commands.destroy.workshop.start")
-@patch("microjail.commands.destroy.workshop.remove")
+@patch("microjail.microjail.workshop.info")
+@patch("microjail.microjail.workshop.start")
+@patch("microjail.microjail.workshop.remove")
 def test_destroy_off_workshop(
     mock_remove, mock_start, mock_info, mock_microjail, tmp_path
 ):

@@ -20,8 +20,8 @@ def mock_microjail(tmp_path: Path):
     return mj
 
 
-@patch("microjail.commands.destroy.workshop.remove")
-@patch("microjail.commands.destroy.workshop.info")
+@patch("microjail.microjail.workshop.remove")
+@patch("microjail.microjail.workshop.info")
 def test_destroy_infrastructure_failure(
     mock_info, mock_remove, mock_microjail, tmp_path
 ):

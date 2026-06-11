@@ -20,8 +20,8 @@ def mock_microjail(tmp_path: Path):
     return mj
 
 
-@patch("microjail.commands.destroy.workshop.remove")
-@patch("microjail.commands.destroy.workshop.info")
+@patch("microjail.microjail.workshop.remove")
+@patch("microjail.microjail.workshop.info")
 @patch("microjail.commands.destroy.typer.confirm")
 def test_destroy_all_interactive_yes(
     mock_confirm, mock_info, mock_remove, mock_microjail, tmp_path
@@ -36,8 +36,8 @@ def test_destroy_all_interactive_yes(
     assert not tmp_path.exists()
 
 
-@patch("microjail.commands.destroy.workshop.remove")
-@patch("microjail.commands.destroy.workshop.info")
+@patch("microjail.microjail.workshop.remove")
+@patch("microjail.microjail.workshop.info")
 @patch("microjail.commands.destroy.typer.confirm")
 def test_destroy_all_interactive_no(
     mock_confirm, mock_info, mock_remove, mock_microjail, tmp_path
@@ -52,8 +52,8 @@ def test_destroy_all_interactive_no(
     assert tmp_path.exists()  # project is kept
 
 
-@patch("microjail.commands.destroy.workshop.remove")
-@patch("microjail.commands.destroy.workshop.info")
+@patch("microjail.microjail.workshop.remove")
+@patch("microjail.microjail.workshop.info")
 def test_destroy_all_bypass(mock_info, mock_remove, mock_microjail, tmp_path):
     mock_info.return_value = None
 
