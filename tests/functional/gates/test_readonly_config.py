@@ -31,7 +31,7 @@ def launched_workshop(tmp_path_factory):
 
     try:
         os.chdir(project)
-        workshop.init(name)
+        workshop.init(name, project=project)
         mj = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
         mj.save()
         launch_with_retries(name, project)

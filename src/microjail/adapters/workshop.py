@@ -220,21 +220,34 @@ def lxd_project() -> str:
     return f"workshop.{project_suffix()}"
 
 
-def init(name: str, sdks: list[str] | None = None):
+def init(
+    name: str,
+    project: Path,
+    sdks: list[str] | None = None,
+    base: str | None = None,
+):
     if sdks is None:
         sdks = []
     sdks = sdks.copy()
     sdks.append("direnv")
 
+    cmd = [
+        "workshop",
+        "init",
+        name,
+        "--project",
+        str(project),
+        "--sdks",
+        ",".join(sdks),
+    ]
+    if base is not None:
+        cmd.extend(["--base", base])
+
     try:
-        subprocess.run(
-            ["workshop", "init", name, "--sdks", ",".join(sdks)],
-            check=True,
-            capture_output=True,
-        )
+        subprocess.run(cmd, check=True, capture_output=True)
     except subprocess.CalledProcessError as exc:
         if b"already exists" in exc.stderr:
-            raise WorkshopExistsError(name=name, project=Path.cwd()) from exc
+            raise WorkshopExistsError(name=name, project=project) from exc
         raise
 
 

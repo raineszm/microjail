@@ -1,8 +1,9 @@
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
 from microjail import policy
+from microjail.commands.init import get_project
 from microjail.microjail import (
     ApplicationIntent,
     ApplicationStatus,
@@ -10,10 +11,13 @@ from microjail.microjail import (
     MicroJail,
 )
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
-def load_microjail_or_exit() -> MicroJail:
+
+def load_microjail_or_exit(project: Path) -> MicroJail:
     try:
-        return MicroJail.load(Path.cwd())
+        return MicroJail.load(project)
     except ConfigNotFoundError as exc:
         typer.echo(
             f"No microjail config found for project {exc.project_path}. "
@@ -58,8 +62,9 @@ def ensure_lockdown(microjail: MicroJail) -> None:
     raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE)
 
 
-def lock() -> None:
-    microjail = load_microjail_or_exit()
+def lock(ctx: typer.Context) -> None:
+    project = get_project(ctx)
+    microjail = load_microjail_or_exit(project)
     result = microjail.ensure(ApplicationIntent.LOCK)
     cap_count = len(microjail.lockdown.caps)
 

@@ -69,6 +69,32 @@ To bring an existing Workshop project under microjail management:
 microjail init my-project --adopt
 ```
 
+#### `--sdks`
+
+Pass additional Workshop SDKs as a comma-separated list. The `direnv` SDK is always included by default.
+
+```bash
+microjail init my-project --sdks golang,java
+```
+
+#### `--base`
+
+Specify a Workshop base image (defaults to Workshop's own default if omitted).
+
+```bash
+microjail init my-project --base ubuntu@22.04
+```
+
+#### `--project` / `-p`
+
+Run the command against a specific project directory instead of the current working directory. Accepted on all commands.
+
+```bash
+microjail --project /path/to/project init my-project
+microjail --project /path/to/project lock
+microjail --project /path/to/project unlock
+```
+
 ### `microjail lock`
 
 Apply the configured Lockdown without running a workload. Capabilities are provisioned first; gates are enforced second. Use this to verify the environment is sealed before doing anything else, or to reach the safest reachable posture after a partial failure.

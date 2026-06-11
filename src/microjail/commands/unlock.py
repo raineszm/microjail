@@ -1,8 +1,7 @@
-from pathlib import Path
-
 import typer
 
 from microjail import policy
+from microjail.commands.init import get_project
 from microjail.lockdown import CapabilityReleaseError, GateReleaseError
 from microjail.microjail import ConfigNotFoundError, MicroJail
 
@@ -42,9 +41,10 @@ def release_exit_code(exc: ExceptionGroup) -> int:
     return policy.GENERIC_ERROR
 
 
-def unlock() -> None:
+def unlock(ctx: typer.Context) -> None:
+    project = get_project(ctx)
     try:
-        microjail = MicroJail.load(Path.cwd())
+        microjail = MicroJail.load(project)
     except ConfigNotFoundError as exc:
         typer.echo(
             f"No microjail config found for project {exc.project_path}. "

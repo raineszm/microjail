@@ -38,7 +38,7 @@ def e2e_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture
 def e2e_raw_workshop(e2e_project: SharedWorkshop, monkeypatch: pytest.MonkeyPatch):
     """A launched Workshop without a Microjail config."""
-    workshop.init(e2e_project.name)
+    workshop.init(e2e_project.name, project=e2e_project.path)
     launch_with_retries(e2e_project.name, e2e_project.path)
     monkeypatch.chdir(e2e_project.path)
     yield e2e_project
@@ -54,7 +54,7 @@ def e2e_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     try:
         os.chdir(project)
-        workshop.init(name)
+        workshop.init(name, project=project)
         MicroJail(name=name, project_path=project, lockdown=Lockdown.default()).save()
         launch_with_retries(name, project)
         monkeypatch.chdir(project)
@@ -74,7 +74,7 @@ def endpoint_e2e_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     try:
         os.chdir(project)
-        workshop.init(name)
+        workshop.init(name, project=project)
         MicroJail(name=name, project_path=project, lockdown=Lockdown.default()).save()
         launch_with_retries(name, project)
         monkeypatch.chdir(project)
