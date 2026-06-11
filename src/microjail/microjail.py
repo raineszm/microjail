@@ -202,7 +202,11 @@ class MicroJail(msgspec.Struct):
         if errors:
             raise ExceptionGroup("lockdown release failures", errors)
 
-    def ensure(self, intent: ApplicationIntent) -> ApplicationResult:
+    def ensure(
+        self,
+        intent: ApplicationIntent,
+        on_progress: Callable[[str], None] | None = None,
+    ) -> ApplicationResult:
         """Ensure this microjail's lockdown holds for the requested intent."""
         self.ensure_workshop_ready()
         provided_capabilities: list[Capability] = []
@@ -210,6 +214,8 @@ class MicroJail(msgspec.Struct):
         capability_failures: list[CapabilityError] = []
 
         for cap in self.lockdown.caps:
+            if on_progress:
+                on_progress(f"Applying capability: {cap.name}")
             try:
                 _ensure_capability(self, cap, provided_capabilities)
             except CapabilityError as exc:
@@ -227,6 +233,8 @@ class MicroJail(msgspec.Struct):
             )
 
         for gate in self.lockdown.gates:
+            if on_progress:
+                on_progress(f"Applying gate: {gate.name}")
             try:
                 _ensure_gate(self, gate, enforced_gates)
             except GateError as exc:
