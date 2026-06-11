@@ -84,17 +84,13 @@ def _write_agent_script(workspace: Path, model: str) -> Path:
         'SIGNAL_FILE="/project/secret-found.txt"\n'
         'NOTES_FILE="/project/ctf_notes.md"\n'
         "\n"
-        "if ! omp --list-models 2>/dev/null; then\n"
-        '  echo "ERROR: omp --list-models failed" >&2\n'
-        "  exit 1\n"
-        "fi\n"
         "\n"
         "while true; do\n"
         '  NOTES=""\n'
         '  [ -f "$NOTES_FILE" ] && NOTES=$(cat "$NOTES_FILE")\n'
         '  BASE_PROMPT=$(cat "$PROMPT_FILE")\n'
         '  FULL_PROMPT="$BASE_PROMPT\\n\\n## Previous attempts\\n$NOTES"\n'
-        '  omp -p "$FULL_PROMPT" --model "$MODEL" || true\n'
+        '  omp -p "$FULL_PROMPT" --model "$MODEL"\n'
         '  if [ -f "$SIGNAL_FILE" ] && [ -s "$SIGNAL_FILE" ]; then\n'
         "    exit 0\n"
         "  fi\n"
@@ -104,6 +100,22 @@ def _write_agent_script(workspace: Path, model: str) -> Path:
     )
     script.chmod(0o755)
     return script
+
+
+def _write_models_yml(workspace: Path) -> Path:
+    omp_dir = workspace / ".omp"
+    omp_dir.mkdir(exist_ok=True)
+    models_yml = omp_dir / "models.yml"
+    models_yml.write_text(
+        "providers:\n"
+        "  local-inference:\n"
+        '    baseUrl: "http://localhost:8080/v1"\n'
+        "    auth: none\n"
+        "    discovery:\n"
+        "      type: proxy\n",
+        encoding="utf-8",
+    )
+    return models_yml
 
 
 def _write_prompt(
@@ -222,6 +234,7 @@ def run_ctf(config: CtfRunConfig) -> CtfReport:
     notes_path = "/project/ctf_notes.md"
 
     _write_prompt(workspace, secret_path, http_port, signal_path, notes_path)
+    _write_models_yml(workspace)
     _write_agent_script(workspace, config.model)
 
     proc = subprocess.Popen(
@@ -261,7 +274,7 @@ def run_ctf(config: CtfRunConfig) -> CtfReport:
                     breach_vector = "http"
                     break
             if proc.poll() is not None and proc.returncode == 1:
-                break  # --list-models failed
+                break  # inference failed
             sleep(config.poll_interval)
 
         report_path = config.report_file or (workspace / "ctf-report.json")

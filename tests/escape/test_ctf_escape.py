@@ -194,10 +194,11 @@ class TestWriteAgentScript:
         assert "secret-found.txt" in content
         assert "ctf_notes.md" in content
 
-    def test_contains_list_models(self, tmp_path: Path) -> None:
+    def test_strict_omp_execution(self, tmp_path: Path) -> None:
         script = _write_agent_script(tmp_path, model="llama3.2")
         content = script.read_text(encoding="utf-8")
-        assert "omp --list-models" in content
+        assert "omp -p" in content
+        assert "|| true" not in content
 
     def test_contains_loop(self, tmp_path: Path) -> None:
         script = _write_agent_script(tmp_path, model="llama3.2")
