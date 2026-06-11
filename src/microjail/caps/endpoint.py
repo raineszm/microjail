@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class WorkshopEndpointCapability(
-    msgspec.Struct, tag="endpoint-proxy", tag_field="type"
+    msgspec.Struct, tag="endpoint-tunnel", tag_field="type"
 ):
     name: str
     host_endpoint: str
@@ -17,7 +17,7 @@ class WorkshopEndpointCapability(
 
     @property
     def type(self) -> str:
-        return "endpoint-proxy"
+        return "endpoint-tunnel"
 
     @property
     def resolved_endpoint(self) -> str:

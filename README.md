@@ -146,7 +146,7 @@ By default the Lockdown grants **zero capabilities**: no network paths are open.
 # .microjail/config.yaml
 lockdown:
   caps:
-    - type: endpoint-proxy
+    - type: endpoint-tunnel
       name: inference
       endpoint: localhost:8080
   gates:

@@ -61,7 +61,7 @@ def _build_config_yaml(endpoint: str) -> dict:
     return {
         "capabilities": [
             {
-                "type": "endpoint-proxy",
+                "type": "endpoint-tunnel",
                 "name": "inference",
                 "endpoint": f"{endpoint}",
                 "application_failure": "fatal",

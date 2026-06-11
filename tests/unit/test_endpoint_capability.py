@@ -205,7 +205,7 @@ def test_config_round_trip_deserializes_endpoint_proxy_capability() -> None:
 project_path: /project
 lockdown:
   caps:
-    - type: endpoint-proxy
+    - type: endpoint-tunnel
       name: inference
       host_endpoint: localhost:8080
   gates: []
@@ -224,7 +224,7 @@ def test_config_round_trip_deserializes_with_container_endpoint() -> None:
 project_path: /project
 lockdown:
   caps:
-    - type: endpoint-proxy
+    - type: endpoint-tunnel
       name: inference
       host_endpoint: 127.0.0.1:8080
       container_endpoint: 127.0.0.1:9090

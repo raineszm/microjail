@@ -423,7 +423,7 @@ Example:
 
 ```yaml
 capabilities:
-  - type: endpoint-proxy
+  - type: endpoint-tunnel
     name: openai
     application_failure: fatal
     runtime_violation: warning

@@ -32,6 +32,10 @@ _Avoid_: capability, permission, feature
 Outbound network access from the workload to external network destinations. Network paths are authorized only when represented as declared Capabilities in the Lockdown.
 _Avoid_: all network access, endpoint capability
 
+**Network-drop Gate**:
+A Gate that prevents a workload from establishing network egress. It enforces that all outbound network paths are blocked by default, requiring specific Endpoint capabilities to authorize exceptions.
+_Avoid_: network block, egress drop
+
 **Readonly-config Gate**:
 A Gate that prevents a workload from modifying the Microjail configuration that defines its own Lockdown.
 _Avoid_: readonly-config capability, endpoint capability, config permission
@@ -45,7 +49,7 @@ A failure to establish or verify a restriction that a Lockdown declared must hol
 _Avoid_: capability failure, runtime violation
 
 **Capability policy violation**:
-Runtime loss of functionality or access that a Lockdown declared should remain available to the workload, including failure to verify that the functionality or access still exists. Capability policy violations are warnings by default and can be configured as fatal.
+Runtime loss of functionality or access that a Lockdown declared should remain available to the workload, including failure to verify that the functionality or access still exists. Capability policy violations are fatal because the workload is operating outside its declared capability bounds.
 _Avoid_: gate violation, setup failure
 
 **Gate policy violation**:
@@ -59,6 +63,10 @@ _Avoid_: Workshop container, microjail instance, host process
 **Warden**:
 The runtime supervisor for a workload running under an applied Lockdown. It monitors policy invariants and terminates the workload on violation, but never releases policy.
 _Avoid_: unlocker, policy applier, cleanup manager
+
+**Release**:
+The act of revoking all applied Capabilities and releasing all enforced Gates from a Microjail instance, returning the environment to its baseline state. Unlike Destroy, Release does not stop running workloads or remove the Workshop environment.
+_Avoid_: unlock (as a domain concept, though the CLI command is `unlock`), teardown
 
 **Destroy**:
 Explicit teardown of a microjail instance: stopping any running workload, releasing the Lockdown, and removing the Workshop environment. Requires user confirmation. Leaves the project directory on the host intact.

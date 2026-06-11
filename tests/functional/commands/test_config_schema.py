@@ -21,7 +21,7 @@ def write_config(project: Path) -> None:
 project_path: {project}
 lockdown:
   caps:
-    - type: endpoint-proxy
+    - type: endpoint-tunnel
       name: inference
       host_endpoint: 127.0.0.1:8080
   gates:
