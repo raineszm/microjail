@@ -16,6 +16,10 @@ _Avoid_: Microjail product, active lockdown
 A declarative security policy describing the capabilities that should be available and the gates that should hold for a workload. It is not a record of whether the environment is currently locked.
 _Avoid_: locked state, active lockdown, runtime state
 
+**Lockdown application**:
+The act of applying a Lockdown to a Microjail instance: verifying the Workshop environment, establishing declared Capabilities, enforcing Gates, recording what changed, and reporting Capability application failures or Gate application failures without releasing the Lockdown unless the caller requested rollback.
+_Avoid_: policy execution, sandbox setup, runtime lock state
+
 **Capability**:
 Functionality or access intentionally made available to a workload that would otherwise be unavailable.
 _Avoid_: permission, exception, restriction

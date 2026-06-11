@@ -1,7 +1,7 @@
 """The MicroJail configuration object and its on-disk persistence."""
 
-from contextlib import suppress
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -47,13 +47,34 @@ class WorkshopNotReadyError(Exception):
     status: str
 
 
-@dataclass(frozen=True)
-class LockApplicationResult:
-    """Result of applying policy for the `lock` command."""
+class ApplicationIntent(StrEnum):
+    LOCK = "lock"
+    RUN = "run"
 
-    capability_failures: list[CapabilityError]
-    gates_enforced: int
+
+class ApplicationStatus(StrEnum):
+    SUCCESS = "success"
+    CAPABILITY_APPLICATION_FAILURE = "capability-application-failure"
+    GATE_APPLICATION_FAILURE = "gate-application-failure"
+
+
+RollbackFailure = CapabilityReleaseError | GateReleaseError
+
+
+@dataclass(frozen=True)
+class ApplicationResult:
+    intent: ApplicationIntent
+    status: ApplicationStatus
+    capability_failures: tuple[CapabilityError, ...] = ()
     gate_failure: GateError | None = None
+    rollback_failures: tuple[RollbackFailure, ...] = ()
+    provided_capabilities: tuple[Capability, ...] = ()
+    enforced_gates: tuple[Gate, ...] = ()
+    gates_enforced: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status is ApplicationStatus.SUCCESS
 
 
 def enc_hook(obj: object) -> object:
@@ -98,63 +119,6 @@ class MicroJail(msgspec.Struct):
     @property
     def config_path(self) -> Path:
         return self.config_dir / CONFIG_FILENAME
-
-    def ensure(self) -> None:
-        """Apply this microjail's lockdown policy for a workload launch."""
-        self.ensure_for_run()
-
-    def ensure_for_run(self) -> None:
-        """Apply policy for `run`, rolling back if the workload will not start."""
-        self.ensure_workshop_ready()
-        provided_caps: list[Capability] = []
-        enforced_gates: list[Gate] = []
-        capability_errors: list[CapabilityError] = []
-        try:
-            for cap in self.lockdown.caps:
-                try:
-                    self.ensure_capability(cap, provided_caps)
-                except CapabilityError as exc:
-                    capability_errors.append(exc)
-            if len(capability_errors) == 1:
-                raise capability_errors[0]
-            if capability_errors:
-                raise ExceptionGroup(
-                    "capability application failures", capability_errors
-                )
-            for gate in self.lockdown.gates:
-                self.ensure_gate(gate, enforced_gates)
-        except Exception:
-            with suppress(Exception):
-                self.release_applied(provided_caps, enforced_gates)
-            raise
-
-    def ensure_for_lock(self) -> LockApplicationResult:
-        """Apply policy for `lock`, leaving the safest reachable posture in place."""
-        self.ensure_workshop_ready()
-        provided_caps: list[Capability] = []
-        enforced_gates: list[Gate] = []
-        capability_errors: list[CapabilityError] = []
-
-        for cap in self.lockdown.caps:
-            try:
-                self.ensure_capability(cap, provided_caps)
-            except CapabilityError as exc:
-                capability_errors.append(exc)
-
-        for gate in self.lockdown.gates:
-            try:
-                self.ensure_gate(gate, enforced_gates)
-            except GateError as exc:
-                return LockApplicationResult(
-                    capability_failures=capability_errors,
-                    gates_enforced=len(enforced_gates),
-                    gate_failure=exc,
-                )
-
-        return LockApplicationResult(
-            capability_failures=capability_errors,
-            gates_enforced=len(self.lockdown.gates),
-        )
 
     def workshop_info(self) -> workshop.WorkshopInfo | None:
         """Return workshop info, or None if the workshop is not launched."""
@@ -236,64 +200,67 @@ class MicroJail(msgspec.Struct):
         if errors:
             raise ExceptionGroup("lockdown release failures", errors)
 
-    def release_applied(
-        self,
-        provided_caps: list[Capability],
-        enforced_gates: list[Gate],
-    ) -> None:
-        """Tear down only state that this ensure() call attempted to apply."""
-        errors: list[Exception] = []
+    def ensure(self, intent: ApplicationIntent) -> ApplicationResult:
+        """Ensure this microjail's lockdown holds for the requested intent."""
+        self.ensure_workshop_ready()
+        provided_capabilities: list[Capability] = []
+        enforced_gates: list[Gate] = []
+        capability_failures: list[CapabilityError] = []
 
-        for gate in reversed(enforced_gates):
+        for cap in self.lockdown.caps:
             try:
-                gate.release(self)
-            except Exception:
-                errors.append(GateReleaseError(name=gate.name))
+                _ensure_capability(self, cap, provided_capabilities)
+            except CapabilityError as exc:
+                capability_failures.append(exc)
 
-        for cap in reversed(provided_caps):
+        if capability_failures and intent is ApplicationIntent.RUN:
+            rollback_failures = _rollback(self, provided_capabilities, enforced_gates)
+            return ApplicationResult(
+                intent=intent,
+                status=ApplicationStatus.CAPABILITY_APPLICATION_FAILURE,
+                capability_failures=tuple(capability_failures),
+                rollback_failures=tuple(rollback_failures),
+                provided_capabilities=tuple(provided_capabilities),
+                enforced_gates=tuple(enforced_gates),
+            )
+
+        for gate in self.lockdown.gates:
             try:
-                cap.revoke(self)
-            except Exception:
-                errors.append(CapabilityReleaseError(name=cap.name))
+                _ensure_gate(self, gate, enforced_gates)
+            except GateError as exc:
+                rollback_failures: list[RollbackFailure] = []
+                if intent is ApplicationIntent.RUN:
+                    rollback_failures = _rollback(
+                        self, provided_capabilities, enforced_gates
+                    )
+                return ApplicationResult(
+                    intent=intent,
+                    status=ApplicationStatus.GATE_APPLICATION_FAILURE,
+                    capability_failures=tuple(capability_failures),
+                    gate_failure=exc,
+                    rollback_failures=tuple(rollback_failures),
+                    provided_capabilities=tuple(provided_capabilities),
+                    enforced_gates=tuple(enforced_gates),
+                    gates_enforced=len(enforced_gates),
+                )
 
-        if errors:
-            raise ExceptionGroup("lockdown release failures", errors)
+        if capability_failures:
+            return ApplicationResult(
+                intent=intent,
+                status=ApplicationStatus.CAPABILITY_APPLICATION_FAILURE,
+                capability_failures=tuple(capability_failures),
+                provided_capabilities=tuple(provided_capabilities),
+                enforced_gates=tuple(enforced_gates),
+                gates_enforced=len(self.lockdown.gates),
+            )
 
-    def ensure_capability(
-        self,
-        cap: Capability,
-        provided_caps: list[Capability],
-    ) -> None:
-        """check → provide if missing → verify for a single capability."""
-        try:
-            if cap.check(self):
-                return
-            provided_caps.append(cap)
-            cap.provide(self)
-            if not cap.check(self):
-                raise CapabilityError(name=cap.name)
-        except CapabilityError:
-            raise
-        except Exception as exc:
-            raise CapabilityError(name=cap.name) from exc
-
-    def ensure_gate(
-        self,
-        gate: Gate,
-        enforced_gates: list[Gate],
-    ) -> None:
-        """check → enforce if unsatisfied → verify for a single gate."""
-        try:
-            if gate.check(self):
-                return
-            enforced_gates.append(gate)
-            gate.enforce(self)
-            if not gate.check(self):
-                raise GateError(name=gate.name)
-        except GateError:
-            raise
-        except Exception as exc:
-            raise GateError(name=gate.name) from exc
+        return ApplicationResult(
+            intent=intent,
+            status=ApplicationStatus.SUCCESS,
+            provided_capabilities=tuple(provided_capabilities),
+            enforced_gates=tuple(enforced_gates),
+            gates_enforced=len(self.lockdown.gates),
+        )
 
     def save(self) -> None:
         """Persist this microjail to ``.microjail/config.yaml``."""
@@ -316,3 +283,64 @@ class MicroJail(msgspec.Struct):
             raise ConfigNotFoundError(project_path=project_path) from exc
 
         return msgspec.yaml.decode(raw, type=cls, dec_hook=dec_hook)
+
+
+def _ensure_capability(
+    microjail: MicroJail,
+    cap: Capability,
+    provided_capabilities: list[Capability],
+) -> None:
+    """check → provide if missing → verify for one Capability."""
+    try:
+        if cap.check(microjail):
+            return
+        provided_capabilities.append(cap)
+        cap.provide(microjail)
+        if not cap.check(microjail):
+            raise CapabilityError(name=cap.name)
+    except CapabilityError:
+        raise
+    except Exception as exc:
+        raise CapabilityError(name=cap.name) from exc
+
+
+def _ensure_gate(
+    microjail: MicroJail,
+    gate: Gate,
+    enforced_gates: list[Gate],
+) -> None:
+    """check → enforce if unsatisfied → verify for one Gate."""
+    try:
+        if gate.check(microjail):
+            return
+        enforced_gates.append(gate)
+        gate.enforce(microjail)
+        if not gate.check(microjail):
+            raise GateError(name=gate.name)
+    except GateError:
+        raise
+    except Exception as exc:
+        raise GateError(name=gate.name) from exc
+
+
+def _rollback(
+    microjail: MicroJail,
+    provided_capabilities: list[Capability],
+    enforced_gates: list[Gate],
+) -> list[RollbackFailure]:
+    """Release only state touched by this lockdown ensure call."""
+    failures: list[RollbackFailure] = []
+
+    for gate in reversed(enforced_gates):
+        try:
+            gate.release(microjail)
+        except Exception:
+            failures.append(GateReleaseError(name=gate.name))
+
+    for cap in reversed(provided_capabilities):
+        try:
+            cap.revoke(microjail)
+        except Exception:
+            failures.append(CapabilityReleaseError(name=cap.name))
+
+    return failures

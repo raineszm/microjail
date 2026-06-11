@@ -6,7 +6,11 @@ from typer.testing import CliRunner
 from microjail import policy
 from microjail.cli import app
 from microjail.lockdown import Lockdown
-from microjail.microjail import MicroJail
+from microjail.microjail import (
+    ApplicationIntent,
+    ApplicationStatus,
+    MicroJail,
+)
 from tests.functional.commands.helpers import RecordingCapability, RecordingGate
 
 if TYPE_CHECKING:
@@ -101,8 +105,9 @@ def test_lock_does_not_rollback_successfully_applied_policy_after_failure(
     )
     monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
 
-    result = microjail.ensure_for_lock()
+    result = microjail.ensure(ApplicationIntent.LOCK)
 
+    assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
     assert result.gate_failure is not None
     assert cap.calls == ["check", "provide", "check"]
     assert gate.calls == ["check", "enforce", "check"]

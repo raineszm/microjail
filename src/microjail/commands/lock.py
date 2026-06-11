@@ -3,8 +3,12 @@ from pathlib import Path
 import typer
 
 from microjail import policy
-from microjail.lockdown import CapabilityError, GateError
-from microjail.microjail import ConfigNotFoundError, MicroJail
+from microjail.microjail import (
+    ApplicationIntent,
+    ApplicationStatus,
+    ConfigNotFoundError,
+    MicroJail,
+)
 
 
 def load_microjail_or_exit() -> MicroJail:
@@ -19,60 +23,63 @@ def load_microjail_or_exit() -> MicroJail:
         raise typer.Exit(policy.GENERIC_ERROR) from exc
 
 
-def exception_group_members(
-    exc: BaseException, kind: type[Exception]
-) -> list[Exception]:
-    if isinstance(exc, ExceptionGroup):
-        members: list[Exception] = []
-        for nested in exc.exceptions:
-            members.extend(exception_group_members(nested, kind))
-        return members
-    if isinstance(exc, kind):
-        return [exc]
-    return []
-
-
-def names(errors: list[Exception]) -> str:
+def names(errors: tuple[Exception, ...]) -> str:
     return ", ".join(getattr(error, "name", str(error)) for error in errors)
 
 
-def ensure_lockdown_for_run_or_exit(microjail: MicroJail) -> None:
-    try:
-        microjail.ensure_for_run()
-    except ExceptionGroup as exc:
-        cap_errors = exception_group_members(exc, CapabilityError)
-        gate_errors = exception_group_members(exc, GateError)
-        if cap_errors:
-            typer.echo(f"run failed: capability {names(cap_errors)} failed", err=True)
-            raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE) from exc
-        if gate_errors:
-            typer.echo(f"run failed: gate {names(gate_errors)} failed", err=True)
-            raise typer.Exit(policy.GATE_APPLICATION_FAILURE) from exc
-        raise
-    except GateError as exc:
-        typer.echo(f"run failed: gate {exc.name} failed", err=True)
-        raise typer.Exit(policy.GATE_APPLICATION_FAILURE) from exc
-    except CapabilityError as exc:
-        typer.echo(f"run failed: capability {exc.name} failed", err=True)
-        raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE) from exc
+def report_rollback_failures(command: str, result) -> None:
+    if result.rollback_failures:
+        typer.echo(
+            f"{command} rollback failed: {names(result.rollback_failures)}",
+            err=True,
+        )
+
+
+def ensure_lockdown(microjail: MicroJail) -> None:
+    result = microjail.ensure(ApplicationIntent.RUN)
+    if result.status is ApplicationStatus.SUCCESS:
+        return
+
+    if result.status is ApplicationStatus.GATE_APPLICATION_FAILURE:
+        typer.echo(f"run failed: gate {result.gate_failure.name} failed", err=True)
+        if result.capability_failures:
+            typer.echo(
+                f"run also had capability failures: {names(result.capability_failures)}",
+                err=True,
+            )
+        report_rollback_failures("run", result)
+        raise typer.Exit(policy.GATE_APPLICATION_FAILURE)
+
+    typer.echo(
+        f"run failed: capability {names(result.capability_failures)} failed",
+        err=True,
+    )
+    report_rollback_failures("run", result)
+    raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE)
 
 
 def lock() -> None:
     microjail = load_microjail_or_exit()
-    result = microjail.ensure_for_lock()
+    result = microjail.ensure(ApplicationIntent.LOCK)
     cap_count = len(microjail.lockdown.caps)
 
-    if result.gate_failure is not None:
+    if result.status is ApplicationStatus.GATE_APPLICATION_FAILURE:
         typer.echo(
             f"lock failed: gate {result.gate_failure.name} failed",
             err=True,
         )
+        if result.capability_failures:
+            typer.echo(
+                f"lock also had capability failures: {names(result.capability_failures)}",
+                err=True,
+            )
         raise typer.Exit(policy.GATE_APPLICATION_FAILURE)
 
-    if result.capability_failures:
+    if result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE:
         typer.echo(
             "lock incomplete: "
-            f"{len(result.capability_failures)} capability failures, "
+            f"{len(result.capability_failures)} capability failures "
+            f"({names(result.capability_failures)}), "
             f"{result.gates_enforced} gates enforced",
             err=True,
         )

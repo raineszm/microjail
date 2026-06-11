@@ -5,7 +5,11 @@ import pytest
 from microjail.adapters import workshop
 from microjail.gates.network_drop import NetworkDrop
 from microjail.lockdown import Lockdown
-from microjail.microjail import MicroJail
+from microjail.microjail import (
+    ApplicationIntent,
+    ApplicationStatus,
+    MicroJail,
+)
 from tests.marks import requires_lxd, requires_workshop
 
 if TYPE_CHECKING:
@@ -37,7 +41,7 @@ def has_network_egress(workshop_state: SharedWorkshop) -> bool:
     return result.returncode == 0
 
 
-def test_network_drop_blocks_egress_on_ensure_and_restores_it_on_release(
+def test_network_drop_blocks_egress_on_application_and_restores_it_on_release(
     launched_workshop: SharedWorkshop,
 ) -> None:
     if not has_network_egress(launched_workshop):
@@ -51,7 +55,8 @@ def test_network_drop_blocks_egress_on_ensure_and_restores_it_on_release(
     )
 
     try:
-        microjail.ensure()
+        result = microjail.ensure(ApplicationIntent.RUN)
+        assert result.status is ApplicationStatus.SUCCESS
         assert not has_network_egress(launched_workshop)
     finally:
         microjail.release()

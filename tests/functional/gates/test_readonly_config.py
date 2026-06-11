@@ -8,7 +8,11 @@ import pytest
 from microjail.adapters import workshop
 from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import Lockdown
-from microjail.microjail import MicroJail
+from microjail.microjail import (
+    ApplicationIntent,
+    ApplicationStatus,
+    MicroJail,
+)
 from tests._helpers import SharedWorkshop, launch_with_retries
 from tests.marks import requires_lxd, requires_workshop
 
@@ -49,7 +53,7 @@ def can_write_config(ws: SharedWorkshop) -> bool:
     return result.returncode == 0
 
 
-def test_readonly_config_blocks_write_on_enforce_and_restores_on_release(
+def test_readonly_config_blocks_write_on_application_and_restores_on_release(
     launched_workshop: SharedWorkshop,
 ) -> None:
     if not can_write_config(launched_workshop):
@@ -63,7 +67,8 @@ def test_readonly_config_blocks_write_on_enforce_and_restores_on_release(
     )
 
     try:
-        microjail.ensure()
+        result = microjail.ensure(ApplicationIntent.RUN)
+        assert result.status is ApplicationStatus.SUCCESS
         assert not can_write_config(launched_workshop)
     finally:
         microjail.release()

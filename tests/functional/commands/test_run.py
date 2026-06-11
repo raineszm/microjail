@@ -1,13 +1,16 @@
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
-import pytest
 from typer.testing import CliRunner
 
 from microjail import policy
 from microjail.cli import app
-from microjail.lockdown import GateError, Lockdown
-from microjail.microjail import MicroJail
+from microjail.lockdown import Lockdown
+from microjail.microjail import (
+    ApplicationIntent,
+    ApplicationStatus,
+    MicroJail,
+)
 from tests.functional.commands.helpers import (
     RecordingCapability,
     RecordingGate,
@@ -16,6 +19,8 @@ from tests.functional.commands.helpers import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import pytest
 
 
 def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,8 +109,9 @@ def test_run_rolls_back_applied_policy_on_pre_workload_failure(
     )
     monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
 
-    with pytest.raises(GateError):
-        microjail.ensure_for_run()
+    result = microjail.ensure(ApplicationIntent.RUN)
+
+    assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
 
     assert cap.calls == ["check", "provide", "check", "revoke"]
     assert gate.calls == ["check", "enforce", "check", "release"]

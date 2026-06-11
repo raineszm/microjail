@@ -7,7 +7,7 @@ from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.cli import app
 from microjail.gates.network_drop import NetworkDrop
 from microjail.gates.readonly_config import ReadonlyConfig
-from microjail.microjail import MicroJail
+from microjail.microjail import ApplicationStatus, MicroJail
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -38,12 +38,12 @@ def test_cli_loads_documented_endpoint_capability_config_shape(
     write_config(tmp_path)
     seen = {}
 
-    def ensure_for_lock(self: MicroJail):
-        seen["cap"] = self.lockdown.caps[0]
-        return Mock(capability_failures=[], gates_enforced=2, gate_failure=None)
+    def ensure_lockdown(microjail: MicroJail, _intent):
+        seen["cap"] = microjail.lockdown.caps[0]
+        return Mock(status=ApplicationStatus.SUCCESS, gates_enforced=2)
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(MicroJail, "ensure_for_lock", ensure_for_lock)
+    monkeypatch.setattr(MicroJail, "ensure", ensure_lockdown)
 
     result = CliRunner().invoke(app, ["lock"])
 
@@ -59,12 +59,12 @@ def test_cli_loads_documented_default_gate_config_shape(
     write_config(tmp_path)
     seen = {}
 
-    def ensure_for_lock(self: MicroJail):
-        seen["gates"] = self.lockdown.gates
-        return Mock(capability_failures=[], gates_enforced=2, gate_failure=None)
+    def ensure_lockdown(microjail: MicroJail, _intent):
+        seen["gates"] = microjail.lockdown.gates
+        return Mock(status=ApplicationStatus.SUCCESS, gates_enforced=2)
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(MicroJail, "ensure_for_lock", ensure_for_lock)
+    monkeypatch.setattr(MicroJail, "ensure", ensure_lockdown)
 
     result = CliRunner().invoke(app, ["lock"])
 

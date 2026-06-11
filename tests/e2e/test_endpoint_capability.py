@@ -14,7 +14,11 @@ from microjail.adapters import workshop
 from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.cli import app
 from microjail.lockdown import Lockdown
-from microjail.microjail import MicroJail
+from microjail.microjail import (
+    ApplicationIntent,
+    ApplicationStatus,
+    MicroJail,
+)
 from tests._helpers import (
     SharedWorkshop,
     has_network_egress,
@@ -78,15 +82,17 @@ def test_provide_makes_endpoint_reachable(
     assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
 
 
-def test_ensure_applies_endpoint_capability(
+def test_lockdown_application_applies_endpoint_capability(
     endpoint_microjail: MicroJail,
     host_tcp_listener: tuple[str, int],
 ) -> None:
-    """``ensure()`` provides the endpoint capability and the tunnel survives the
-    network-egress gate applied by the same ``ensure()`` call."""
+    """Lockdown application provides the endpoint capability and the tunnel survives
+    the network-egress Gate applied by the same run intent."""
     host, port = host_tcp_listener
 
-    endpoint_microjail.ensure()
+    result = endpoint_microjail.ensure(ApplicationIntent.RUN)
+
+    assert result.status is ApplicationStatus.SUCCESS
 
     assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
 
