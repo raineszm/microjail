@@ -111,6 +111,7 @@ class MicroJail(msgspec.Struct):
     name: str
     project_path: Path
     lockdown: Lockdown
+    purge_path: str = "data"
 
     @property
     def config_dir(self) -> Path:

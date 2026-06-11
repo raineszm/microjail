@@ -4,6 +4,7 @@ from pathlib import Path
 
 import typer
 
+from microjail.commands.destroy import destroy
 from microjail.commands.init import init
 from microjail.commands.lock import lock
 from microjail.commands.run import run
@@ -32,3 +33,4 @@ app.command("init")(init)
 app.command("lock")(lock)
 app.command("run")(run)
 app.command("unlock")(unlock)
+app.command("destroy")(destroy)

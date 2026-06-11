@@ -14,7 +14,7 @@ import msgspec
 
 class WorkshopInfo(msgspec.Struct):
     name: str
-    status: Literal["ready", "pending", "stopped"]
+    status: Literal["ready", "pending", "stopped", "off"]
 
 
 class ContainerInfo(msgspec.Struct):
@@ -254,6 +254,18 @@ def init(
 def launch(name: str, project: Path, **kwargs):
     subprocess.run(
         ["workshop", "launch", name, "--project", str(project)], check=True, **kwargs
+    )
+
+
+def remove(name: str, project: Path, **kwargs) -> None:
+    subprocess.run(
+        ["workshop", "remove", name, "--project", str(project)], check=True, **kwargs
+    )
+
+
+def start(name: str, project: Path, **kwargs) -> None:
+    subprocess.run(
+        ["workshop", "start", name, "--project", str(project)], check=True, **kwargs
     )
 
 

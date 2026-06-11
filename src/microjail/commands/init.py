@@ -15,7 +15,10 @@ def get_project(ctx: typer.Context) -> Path:
 
 
 def save_microjail_config(name: str, project: Path) -> None:
-    MicroJail(name=name, project_path=project, lockdown=Lockdown.default()).save()
+    config = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
+    config.save()
+    if config.purge_path:
+        (project / config.purge_path).mkdir(parents=True, exist_ok=True)
 
 
 def create_workshop(
