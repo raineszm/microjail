@@ -9,7 +9,7 @@ from ctf.runner import (
     PROMPT_TEMPLATE,
     CtfRunConfig,
     PreflightError,
-    _build_config_yaml,
+    _build_lockdown,
     _determine_verdict,
     _preflight,
 )
@@ -49,32 +49,30 @@ class TestPreflight:
 
 
 # ---------------------------------------------------------------------------
-# _build_config_yaml
+# _build_lockdown
 # ---------------------------------------------------------------------------
 
 
-class TestBuildConfigYaml:
-    def test_has_capabilities_and_gates_keys(self):
-        result = _build_config_yaml("myhost:9090")
-        assert "capabilities" in result
-        assert "gates" in result
+class TestBuildLockdown:
+    def test_has_capabilities_and_gates(self):
+        result = _build_lockdown("myhost:9090")
+        assert len(result.caps) == 1
+        assert len(result.gates) == 2
 
-    def test_capability_type_and_name(self):
-        result = _build_config_yaml("myhost:9090")
-        cap = result["capabilities"][0]
-        assert cap["type"] == "endpoint-tunnel"
-        assert cap["name"] == "inference"
+    def test_capability_properties(self):
+        result = _build_lockdown("myhost:9090")
+        cap = result.caps[0]
+        assert cap.name == "inference"
+        assert cap.host_endpoint == "myhost:9090"
 
-    def test_endpoint_from_argument(self):
-        result = _build_config_yaml("myhost:9090")
-        cap = result["capabilities"][0]
-        assert cap["endpoint"] == "myhost:9090"
+    def test_gates_include_network_drop_and_readonly_config(self):
+        from microjail.gates.network_drop import NetworkDrop
+        from microjail.gates.readonly_config import ReadonlyConfig
 
-    def test_gates_include_network_egress_and_readonly_config(self):
-        result = _build_config_yaml("myhost:9090")
-        gate_types = [g["type"] for g in result["gates"]]
-        assert "network-egress" in gate_types
-        assert "readonly-config" in gate_types
+        result = _build_lockdown("myhost:9090")
+        gate_types = [type(g) for g in result.gates]
+        assert NetworkDrop in gate_types
+        assert ReadonlyConfig in gate_types
 
 
 # ---------------------------------------------------------------------------

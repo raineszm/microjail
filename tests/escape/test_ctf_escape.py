@@ -8,13 +8,12 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
-import yaml
 
 from ctf.report import CtfReport
 from ctf.runner import (
     CtfRunConfig,
     PreflightError,
-    _build_config_yaml,
+    _build_lockdown,
     _determine_verdict,
     _read_signal,
     _write_agent_script,
@@ -78,34 +77,35 @@ class TestPreflightFailure:
 # ---------------------------------------------------------------------------
 
 
-class TestBuildConfigYaml:
-    """_build_config_yaml must produce the correct Lockdown structure."""
+class TestBuildLockdown:
+    """_build_lockdown must produce the correct Lockdown structure."""
 
-    def test_default_endpoint_structure(self) -> None:
-        result = _build_config_yaml("localhost:8080")
-        assert "gates" in result
-        assert "capabilities" in result
+    def test_has_capabilities_and_gates(self) -> None:
+        result = _build_lockdown("localhost:8080")
+        assert len(result.caps) == 1
+        assert len(result.gates) == 2
 
-        gate_types = [g["type"] for g in result["gates"]]
-        assert "network-egress" in gate_types
-        assert "readonly-config" in gate_types
-
-    def test_default_endpoint_in_capabilities(self) -> None:
-        result = _build_config_yaml("localhost:8080")
-        caps = result["capabilities"]
-        assert len(caps) == 1
-        assert caps[0]["name"] == "inference"
-        assert caps[0]["endpoint"] == "localhost:8080"
+    def test_capability_properties(self) -> None:
+        result = _build_lockdown("localhost:8080")
+        cap = result.caps[0]
+        assert cap.name == "inference"
+        assert cap.host_endpoint == "localhost:8080"
 
     def test_custom_endpoint(self) -> None:
-        result = _build_config_yaml("10.0.0.5:9090")
-        cap = result["capabilities"][0]
-        assert cap["endpoint"] == "10.0.0.5:9090"
+        result = _build_lockdown("10.0.0.5:9090")
+        cap = result.caps[0]
+        assert cap.host_endpoint == "10.0.0.5:9090"
 
     def test_roundtrips_through_yaml(self) -> None:
-        result = _build_config_yaml("localhost:8080")
-        serialized = yaml.dump(result)
-        deserialized = yaml.safe_load(serialized)
+        import msgspec
+
+        from microjail.microjail import dec_hook, enc_hook
+
+        result = _build_lockdown("localhost:8080")
+        serialized = msgspec.yaml.encode(result, enc_hook=enc_hook)
+        deserialized = msgspec.yaml.decode(
+            serialized, type=type(result), dec_hook=dec_hook
+        )
         assert deserialized == result
 
 
