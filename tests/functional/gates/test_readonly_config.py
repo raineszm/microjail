@@ -13,7 +13,7 @@ from microjail.microjail import (
     ApplicationStatus,
     MicroJail,
 )
-from tests._helpers import SharedWorkshop, launch_with_retries
+from tests._helpers import SharedWorkshop
 from tests.marks import requires_lxd, requires_workshop
 
 pytestmark = [
@@ -34,7 +34,7 @@ def launched_workshop(tmp_path_factory):
         workshop.init(name, project=project)
         mj = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
         mj.save()
-        launch_with_retries(name, project)
+        workshop.launch(name, project=project)
         yield SharedWorkshop(name=name, path=project)
     finally:
         os.chdir(cwd)

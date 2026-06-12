@@ -1,8 +1,13 @@
+from typing import TYPE_CHECKING
+
 from typer.testing import CliRunner
 
+from microjail.adapters import workshop
 from microjail.cli import app
 from microjail.microjail import MicroJail
-from tests._helpers import SharedWorkshop, launch_with_retries
+
+if TYPE_CHECKING:
+    from tests._helpers import SharedWorkshop
 
 
 def test_destroy_default_behavior(e2e_project: SharedWorkshop) -> None:
@@ -17,7 +22,7 @@ def test_destroy_default_behavior(e2e_project: SharedWorkshop) -> None:
     (data_dir / "secret.txt").write_text("hello")
 
     # Launch workshop
-    launch_with_retries(e2e_project.name, e2e_project.path)
+    workshop.launch(e2e_project.name, project=e2e_project.path)
 
     # Act
     result = CliRunner().invoke(app, ["--project", str(e2e_project.path), "destroy"])

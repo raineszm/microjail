@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from microjail.adapters import workshop
-from tests._helpers import SharedWorkshop, launch_with_retries
+from tests._helpers import SharedWorkshop
 
 
 @pytest.fixture(scope="module")
@@ -21,7 +21,7 @@ def launched_workshop(tmp_path_factory):
     try:
         os.chdir(project)
         workshop.init(name, project=project)
-        launch_with_retries(name, project)
+        workshop.launch(name, project=project)
         yield SharedWorkshop(name=name, path=project)
     finally:
         os.chdir(cwd)

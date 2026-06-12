@@ -1,13 +1,9 @@
 """Shared test helpers — importable by all test layers."""
 
 import socket
-import subprocess
-import time
 from dataclasses import dataclass
 from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING
-
-import pytest
 
 from microjail.adapters import workshop
 
@@ -15,33 +11,10 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 
-LAUNCH_TIMEOUT = 30
-LAUNCH_RETRIES = 2
-LAUNCH_BACKOFF = 15
-
-
 @dataclass(frozen=True)
 class SharedWorkshop:
     name: str
     path: Path
-
-
-def launch_with_retries(name: str, project: Path) -> None:
-    """Launch a workshop, retrying if it times out.
-
-    Sometimes workshop stalls on launch when tests repeatedly create/remove
-    containers.
-    """
-    for attempt in range(LAUNCH_RETRIES + 1):
-        try:
-            workshop.launch(name, project=project, timeout=LAUNCH_TIMEOUT)
-            return
-        except subprocess.TimeoutExpired:
-            if attempt == LAUNCH_RETRIES:
-                raise
-            time.sleep(LAUNCH_BACKOFF)
-        except subprocess.CalledProcessError as exc:
-            pytest.skip(f"workshop launch failed in this environment: {exc}")
 
 
 def has_network_egress(ws: SharedWorkshop) -> bool:
