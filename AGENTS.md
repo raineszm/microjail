@@ -1,4 +1,14 @@
-## Commit Trailers
+## Committing
+
+### Linters and Formatters
+
+Before committing a change run `prek run` to run all pre-commit hooks. Fix any issues that arise, then stage the changes and commit. Prefer using fixes built into the tools over manual fixes, for exmaple:
+
+```
+uv run ruff check --fix
+```
+
+### Commit Trailers
 
 Every AI-assisted commit MUST include an `Assisted-By` trailer:
 
@@ -26,6 +36,11 @@ is already internal. Use plain descriptive names instead.
 - Prefer `terminate_proc(proc)` over `_terminate_proc(proc)`
 - Prefer `resolve_project(gate_name)` over `_resolve_project(gate_name)`
 - Prefer `load_state_or_exit(workspace)` over `_load_state_or_exit(workspace)` (already correct)
+
+## Python Environment
+
+Use `uv` for managinge the Python environment. This includes installing dependencies, running tests, and executing scripts.
+If `uv` is not installed, STOP. You MUST inform the user and wait for feedback before proceeding.
 
 ## Testing
 

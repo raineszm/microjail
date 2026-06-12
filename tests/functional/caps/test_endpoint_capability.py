@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import Mock, call
 
 import pytest
@@ -173,11 +173,12 @@ def test_check_parses_workshop_connections_column_positions(
         "run",
         Mock(return_value=Mock(stdout=output)),
     )
-    monkeypatch.setattr(workshop, "endpoint_reachable", Mock(return_value=True))
+    mock_endpoint_reachable = Mock(return_value=True)
+    monkeypatch.setattr(workshop, "endpoint_reachable", mock_endpoint_reachable)
 
     assert capability.check(microjail)
 
-    workshop.endpoint_reachable.assert_called_once_with(microjail, "127.0.0.1", "8080")
+    mock_endpoint_reachable.assert_called_once_with(microjail, "127.0.0.1", "8080")
 
 
 def test_provide_does_not_duplicate_project_microjail_entry(
@@ -185,8 +186,8 @@ def test_provide_does_not_duplicate_project_microjail_entry(
 ) -> None:
     first = cap("inference-a", "127.0.0.1:8080")
     second = cap("inference-b", "127.0.0.1:8081")
-    workshop_yaml = {"sdks": ["direnv"]}
-    sdk_yaml = {"name": "microjail", "plugs": {}}
+    workshop_yaml: dict[str, Any] = {"sdks": ["direnv"]}
+    sdk_yaml: dict[str, Any] = {"name": "microjail", "plugs": {}}
 
     monkeypatch.setattr(workshop, "connections", Mock(return_value=[]))
     monkeypatch.setattr(workshop, "read_microjail_sdk", Mock(return_value=sdk_yaml))

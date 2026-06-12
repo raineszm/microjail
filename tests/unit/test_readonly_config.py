@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -8,7 +9,7 @@ from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.microjail import MicroJail
 
 WORKSHOP_NAME = "mj-workshop"
-PROJECT = "/project"
+PROJECT = Path("/project")
 CONTAINER_CONFIG_PATH = "/project/.microjail/config.yaml"
 
 

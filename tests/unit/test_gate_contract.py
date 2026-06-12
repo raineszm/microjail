@@ -1,4 +1,5 @@
 import subprocess
+from collections.abc import Callable  # noqa: TC003
 from types import SimpleNamespace
 from typing import NamedTuple
 from unittest.mock import Mock
@@ -38,8 +39,8 @@ def setup_readonly_config_satisfied(mj: Mock) -> None:
 
 class GateSpec(NamedTuple):
     gate: Gate
-    setup_unsatisfied: object  # Callable[[Mock], None]
-    setup_satisfied: object
+    setup_unsatisfied: Callable[[Mock], None]
+    setup_satisfied: Callable[[Mock], None]
 
 
 @pytest.fixture(

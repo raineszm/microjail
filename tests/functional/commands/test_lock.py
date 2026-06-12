@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
     import pytest
 
+    from microjail.gates.base import Gate
+
 
 def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(MicroJail, "load", Mock(return_value=microjail))
@@ -27,7 +29,7 @@ def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_lock_reports_success_with_counts(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
-    gates = [
+    gates: list[Gate] = [
         RecordingGate("network-egress", checks=[True]),
         RecordingGate("readonly-config", checks=[True]),
     ]

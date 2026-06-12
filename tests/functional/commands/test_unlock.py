@@ -20,13 +20,15 @@ def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class FailingReleaseGate(RecordingGate):
-    def release(self, _microjail: MicroJail) -> None:
+    def release(self, microjail: MicroJail) -> None:
+        del microjail
         self.calls.append("release")
         raise RuntimeError(self.name)
 
 
 class FailingRevokeCapability(RecordingCapability):
-    def revoke(self, _microjail: MicroJail) -> None:
+    def revoke(self, microjail: MicroJail) -> None:
+        del microjail
         self.calls.append("revoke")
         raise RuntimeError(self.name)
 

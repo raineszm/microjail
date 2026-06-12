@@ -45,7 +45,9 @@ def ensure_lockdown(microjail: MicroJail) -> None:
         return
 
     if result.status is ApplicationStatus.GATE_APPLICATION_FAILURE:
-        typer.echo(f"run failed: gate {result.gate_failure.name} failed", err=True)
+        gate_failure = result.gate_failure
+        assert gate_failure is not None
+        typer.echo(f"run failed: gate {gate_failure.name} failed", err=True)
         if result.capability_failures:
             typer.echo(
                 f"run also had capability failures: {names(result.capability_failures)}",
@@ -69,8 +71,10 @@ def lock(ctx: typer.Context) -> None:
     cap_count = len(microjail.lockdown.caps)
 
     if result.status is ApplicationStatus.GATE_APPLICATION_FAILURE:
+        gate_failure = result.gate_failure
+        assert gate_failure is not None
         typer.echo(
-            f"lock failed: gate {result.gate_failure.name} failed",
+            f"lock failed: gate {gate_failure.name} failed",
             err=True,
         )
         if result.capability_failures:

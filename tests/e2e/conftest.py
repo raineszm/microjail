@@ -90,10 +90,11 @@ def endpoint_e2e_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
-        if {
+        fixturenames = getattr(item, "fixturenames", None)
+        if fixturenames and {
             "e2e_project",
             "e2e_raw_workshop",
             "e2e_workshop",
             "endpoint_e2e_workshop",
-        } & set(item.fixturenames):
+        } & set(fixturenames):
             item.add_marker(pytest.mark.slow)

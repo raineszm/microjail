@@ -35,21 +35,26 @@ def save_config(
 
 
 class RecordingCapability:
+    fatal: bool = False
+
     def __init__(self, name: str, checks: list[bool] | None = None) -> None:
         self.name = name
         self.checks = checks or [True]
         self.calls: list[str] = []
 
-    def check(self, _microjail: MicroJail) -> bool:
+    def check(self, microjail: MicroJail) -> bool:
+        del microjail
         self.calls.append("check")
         if len(self.checks) > 1:
             return self.checks.pop(0)
         return self.checks[0]
 
-    def provide(self, _microjail: MicroJail) -> None:
+    def provide(self, microjail: MicroJail) -> None:
+        del microjail
         self.calls.append("provide")
 
-    def revoke(self, _microjail: MicroJail) -> None:
+    def revoke(self, microjail: MicroJail) -> None:
+        del microjail
         self.calls.append("revoke")
 
 
@@ -59,16 +64,19 @@ class RecordingGate:
         self.checks = checks or [True]
         self.calls: list[str] = []
 
-    def check(self, _microjail: MicroJail) -> bool:
+    def check(self, microjail: MicroJail) -> bool:
+        del microjail
         self.calls.append("check")
         if len(self.checks) > 1:
             return self.checks.pop(0)
         return self.checks[0]
 
-    def enforce(self, _microjail: MicroJail) -> None:
+    def enforce(self, microjail: MicroJail) -> None:
+        del microjail
         self.calls.append("enforce")
 
-    def release(self, _microjail: MicroJail) -> None:
+    def release(self, microjail: MicroJail) -> None:
+        del microjail
         self.calls.append("release")
 
 

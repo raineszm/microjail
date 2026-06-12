@@ -20,15 +20,16 @@ class TestCapability:
     """
 
     name = "test-cap"
+    fatal = False
 
     def check(self, microjail: MicroJail) -> bool:
-        return microjail.cap_is_satisfied
+        return getattr(microjail, "cap_is_satisfied", False)
 
     def provide(self, microjail: MicroJail) -> None:
-        microjail.cap_provide_called = True
+        setattr(microjail, "cap_provide_called", True)  # noqa: B010
 
     def revoke(self, microjail: MicroJail) -> None:
-        microjail.cap_revoke_called = True
+        setattr(microjail, "cap_revoke_called", True)  # noqa: B010
 
 
 def setup_test_cap_unsatisfied(mj: Mock, monkeypatch: pytest.MonkeyPatch) -> None:

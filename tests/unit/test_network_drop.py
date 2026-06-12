@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call
 
@@ -9,7 +10,7 @@ from microjail.gates.network_drop import NetworkDrop
 from microjail.microjail import MicroJail
 
 WORKSHOP_NAME = "mj-workshop"
-PROJECT = "/project"
+PROJECT = Path("/project")
 
 
 def gate() -> NetworkDrop:
