@@ -68,3 +68,28 @@ def test_lock_then_run_succeeds_without_clean_baseline(
 
     result = CliRunner().invoke(app, ["run", "--", "true"])
     assert result.exit_code == 0, result.stderr
+
+
+def test_run_auto_launches_workshop_e2e(
+    e2e_unlaunched_workshop: SharedWorkshop,
+) -> None:
+    from microjail.adapters import workshop
+
+    # Assert that workshop is NOT launched before running
+    assert (
+        workshop.info(
+            e2e_unlaunched_workshop.name, project=e2e_unlaunched_workshop.path
+        )
+        is None
+    )
+
+    # Act: Run microjail run
+    result = CliRunner().invoke(app, ["run", "--", "true"])
+
+    # Assert
+    assert result.exit_code == 0, result.stderr
+    info = workshop.info(
+        e2e_unlaunched_workshop.name, project=e2e_unlaunched_workshop.path
+    )
+    assert info is not None
+    assert info.status == "ready"

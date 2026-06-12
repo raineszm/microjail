@@ -70,6 +70,24 @@ def e2e_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
+def e2e_unlaunched_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """An unlaunched Workshop with fresh Microjail state per test."""
+    project = tmp_path / "workshop"
+    project.mkdir()
+    name = f"mj-e2e-{uuid.uuid4().hex[:8]}"
+    cwd = Path.cwd()
+
+    try:
+        os.chdir(project)
+        MicroJail.init(name, project_path=project)
+        monkeypatch.chdir(project)
+        yield SharedWorkshop(name=name, path=project)
+    finally:
+        os.chdir(cwd)
+        clean_up_project(project, name)
+
+
+@pytest.fixture
 def endpoint_e2e_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A launched Workshop with fresh Microjail state for Endpoint capability e2e tests."""
     project = tmp_path / "workshop"

@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(MicroJail, "load", Mock(return_value=microjail))
     monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
+    monkeypatch.setattr(
+        MicroJail, "workshop_info", Mock(return_value=Mock(status="ready"))
+    )
 
 
 def test_run_requires_workload_command(microjail_project: Path) -> None:
@@ -189,3 +192,32 @@ def test_run_exits_with_82_on_fatal_capability_violation(
     result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 0"])
 
     assert result.exit_code == 82
+
+
+def test_run_launches_workshop_if_not_launched(
+    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
+) -> None:
+    microjail = MicroJail(
+        name="test-jail",
+        project_path=microjail_project,
+        lockdown=Lockdown(caps=[], gates=[]),
+    )
+    monkeypatch.setattr(MicroJail, "load", Mock(return_value=microjail))
+
+    mock_workshop_info = Mock(return_value=None)
+    monkeypatch.setattr(MicroJail, "workshop_info", mock_workshop_info)
+
+    mock_launch = Mock()
+    monkeypatch.setattr("microjail.adapters.workshop.launch", mock_launch)
+
+    # Mock popen, Warden supervise, ensure_lockdown to do nothing/success
+    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
+    monkeypatch.setattr("microjail.commands.run.ensure_lockdown", Mock())
+    monkeypatch.setattr(MicroJail, "popen", Mock())
+    monkeypatch.setattr(Warden, "supervise", Mock(return_value=0))
+
+    result = CliRunner().invoke(app, ["run", "--", "true"])
+
+    assert result.exit_code == 0
+    mock_workshop_info.assert_called_once()
+    mock_launch.assert_called_once_with("test-jail", project=microjail_project)

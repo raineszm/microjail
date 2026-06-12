@@ -78,7 +78,7 @@ def test_lock_makes_config_readonly(e2e_workshop: SharedWorkshop) -> None:
 # -- run --
 
 
-def test_run_propagates_exit_code(e2e_workshop: SharedWorkshop) -> None:
+def test_run_propagates_exit_code(e2e_unlaunched_workshop: SharedWorkshop) -> None:
     """`microjail run -- <cmd>` returns the workload's exit code."""
     result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 7"])
 
@@ -107,7 +107,7 @@ def test_run_enforces_lockdown_before_workload(e2e_workshop: SharedWorkshop) -> 
     assert result.exit_code != 0
 
 
-def test_run_workload_succeeds(e2e_workshop: SharedWorkshop) -> None:
+def test_run_workload_succeeds(e2e_unlaunched_workshop: SharedWorkshop) -> None:
     """`microjail run` executes the workload and returns its exit code (0 on success).
 
     ``CliRunner`` cannot capture ``subprocess.run`` stdout, so we only check

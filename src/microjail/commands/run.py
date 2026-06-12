@@ -3,6 +3,7 @@ from typing import Annotated
 import typer
 
 from microjail import policy
+from microjail.adapters import workshop
 from microjail.commands.init import get_project
 from microjail.commands.lock import (
     ensure_lockdown,
@@ -14,6 +15,10 @@ from microjail.warden import CapabilityPolicyViolation, GatePolicyViolation, War
 def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) -> None:
     project = get_project(ctx)
     microjail = load_microjail_or_exit(project)
+    if microjail.workshop_info() is None:
+        typer.echo(f"Launching workshop {microjail.name}...")
+        workshop.launch(microjail.name, project=microjail.project_path)
+
     ensure_lockdown(microjail)
 
     process = microjail.popen(command, interactive=False)
