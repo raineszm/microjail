@@ -14,24 +14,6 @@ def get_project(ctx: typer.Context) -> Path:
     return ctx.obj
 
 
-def save_microjail_config(name: str, project: Path) -> None:
-    config = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
-    config.save()
-    if config.purge_path:
-        (project / config.purge_path).mkdir(parents=True, exist_ok=True)
-
-
-def create_workshop(
-    name: str,
-    project: Path,
-    sdks: list[str] | None = None,
-    base: str | None = None,
-) -> None:
-    """Initialize a Workshop and write the microjail config."""
-    workshop.init(name, project=project, sdks=sdks, base=base)
-    save_microjail_config(name, project)
-
-
 def init(
     ctx: typer.Context,
     name: str,
@@ -56,7 +38,7 @@ def init(
         return adopt_workshop(name, project=project, base=base)
 
     try:
-        create_workshop(name, project=project, sdks=sdks_list, base=base)
+        MicroJail.init(name, project_path=project, sdks=sdks_list, base=base)
     except workshop.WorkshopExistsError as exc:
         typer.echo(
             f"Workshop '{exc.name}' already exists in {exc.project}. "
@@ -84,7 +66,7 @@ def overwrite_workshop(
             f"WARN: Workshop '{name}' does not exist in {project} overwrite not needed",
             err=True,
         )
-    create_workshop(name, project=project, sdks=sdks, base=base)
+    MicroJail.init(name, project_path=project, sdks=sdks, base=base)
 
 
 def adopt_workshop(name: str, project: Path, base: str | None = None) -> None:
@@ -97,5 +79,8 @@ def adopt_workshop(name: str, project: Path, base: str | None = None) -> None:
             err=True,
         )
         raise typer.Exit(code=1)
-    save_microjail_config(name, project)
+    config = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
+    config.save()
+    if config.purge_path:
+        (project / config.purge_path).mkdir(parents=True, exist_ok=True)
     typer.echo(f"Adopted workshop {name}")

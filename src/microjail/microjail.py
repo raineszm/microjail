@@ -325,6 +325,28 @@ class MicroJail(msgspec.Struct):
 
         return msgspec.yaml.decode(raw, type=cls, dec_hook=dec_hook)
 
+    @classmethod
+    def init(
+        cls,
+        name: str,
+        project_path: Path,
+        sdks: list[str] | None = None,
+        base: str | None = None,
+    ) -> MicroJail:
+        """Initialize a new microjail: create Workshop and persist config.
+
+        Raises
+        ------
+        WorkshopExistsError:
+            If a Workshop with *name* already exists at *project_path*.
+        """
+        workshop.init(name, project=project_path, sdks=sdks, base=base)
+        config = cls(name=name, project_path=project_path, lockdown=Lockdown.default())
+        config.save()
+        if config.purge_path:
+            (project_path / config.purge_path).mkdir(parents=True, exist_ok=True)
+        return config
+
 
 def _ensure_capability(
     microjail: MicroJail,

@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from microjail.adapters import workshop
-from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
 from tests._helpers import SharedWorkshop, launch_with_retries
 from tests.marks import requires_lxd, requires_workshop
@@ -61,8 +60,7 @@ def e2e_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     try:
         os.chdir(project)
-        workshop.init(name, project=project)
-        MicroJail(name=name, project_path=project, lockdown=Lockdown.default()).save()
+        MicroJail.init(name, project_path=project)
         launch_with_retries(name, project)
         monkeypatch.chdir(project)
         yield SharedWorkshop(name=name, path=project)
@@ -81,8 +79,7 @@ def endpoint_e2e_workshop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     try:
         os.chdir(project)
-        workshop.init(name, project=project)
-        MicroJail(name=name, project_path=project, lockdown=Lockdown.default()).save()
+        MicroJail.init(name, project_path=project)
         launch_with_retries(name, project)
         monkeypatch.chdir(project)
         yield SharedWorkshop(name=name, path=project)
