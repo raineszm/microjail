@@ -20,6 +20,7 @@ class Capability(Protocol):
     """
 
     name: str
+    fatal: bool = False
 
     def check(self, microjail: MicroJail) -> bool: ...
 

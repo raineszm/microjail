@@ -2,11 +2,13 @@ from typing import Annotated
 
 import typer
 
+from microjail import policy
 from microjail.commands.init import get_project
 from microjail.commands.lock import (
     ensure_lockdown,
     load_microjail_or_exit,
 )
+from microjail.warden import CapabilityPolicyViolation, GatePolicyViolation, Warden
 
 
 def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) -> None:
@@ -14,5 +16,15 @@ def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) 
     microjail = load_microjail_or_exit(project)
     ensure_lockdown(microjail)
 
-    result = microjail.exec_(command, check=False)
-    raise typer.Exit(result.returncode)
+    process = microjail.popen(command, interactive=False)
+    warden = Warden(microjail, process)
+    try:
+        exit_code = warden.supervise()
+    except GatePolicyViolation as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(policy.RUNTIME_GATE_POLICY_VIOLATION) from exc
+    except CapabilityPolicyViolation as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(policy.FATAL_RUNTIME_CAPABILITY_VIOLATION) from exc
+
+    raise typer.Exit(exit_code)

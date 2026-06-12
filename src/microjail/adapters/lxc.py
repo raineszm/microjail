@@ -61,3 +61,10 @@ def add_device(
         ],
         check=True,
     )
+
+
+def stop_instance(name: str, project: str, force: bool = False) -> None:
+    cmd = ["lxc", "--project", project, "stop", name]
+    if force:
+        cmd.append("--force")
+    subprocess.run(cmd, check=True)

@@ -14,6 +14,7 @@ class WorkshopEndpointCapability(
     name: str
     host_endpoint: str
     container_endpoint: str | None = None
+    fatal: bool = False
 
     @property
     def type(self) -> str:

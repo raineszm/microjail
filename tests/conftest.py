@@ -1,5 +1,6 @@
 """Pytest configuration and shared fixtures."""
 
+import shutil
 import uuid
 from pathlib import Path  # noqa: TC003
 
@@ -43,9 +44,15 @@ def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
     run_slow = config.getoption("--slow")
-
     skip_long = pytest.mark.skip(reason="slow test skipped; pass --slow to include")
-
+    skip_lxc = pytest.mark.skip(reason="lxc not installed")
+    skip_workshop = pytest.mark.skip(reason="workshop not installed")
+    has_lxc = shutil.which("lxc") is not None
+    has_workshop = shutil.which("workshop") is not None
     for item in items:
         if not run_slow and item.get_closest_marker("slow"):
             item.add_marker(skip_long)
+        if not has_lxc and item.get_closest_marker("lxd"):
+            item.add_marker(skip_lxc)
+        if not has_workshop and item.get_closest_marker("workshop"):
+            item.add_marker(skip_workshop)

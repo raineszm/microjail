@@ -5,3 +5,5 @@ sdks:
     channel: 14/edge
   - name: skills
     channel: latest/edge
+  - name: project-mise
+  - name: uv

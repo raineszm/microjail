@@ -4,7 +4,12 @@ from typer.testing import CliRunner
 
 from microjail.cli import app
 from microjail.microjail import MicroJail
+from tests.marks import requires_lxd, requires_workshop
 
+pytestmark = [
+    requires_lxd(),
+    requires_workshop(),
+]
 if TYPE_CHECKING:
     from pathlib import Path
 

@@ -1,0 +1,4 @@
+snap install mise --classic
+cat <<'EOF' > /etc/profile.d/99-mise.sh
+eval "$(mise activate bash)"
+EOF
