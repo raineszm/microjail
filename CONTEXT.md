@@ -60,6 +60,10 @@ _Avoid_: capability violation, setup failure
 The command and process tree executed inside the Workshop environment under an applied Lockdown.
 _Avoid_: Workshop container, microjail instance, host process
 
+**Workload process handle**:
+The host-side control handle (specifically a `subprocess.Popen` instance) representing the asynchronously executing Workload, used by the Warden or caller to monitor, communicate with, or terminate the Workload.
+_Avoid_: Popen object, container process, background process
+
 **Warden**:
 The runtime supervisor for a workload running under an applied Lockdown. It monitors policy invariants and terminates the workload on violation, but never releases policy.
 _Avoid_: unlocker, policy applier, cleanup manager

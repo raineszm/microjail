@@ -323,20 +323,49 @@ def exists(name: str, project: Path) -> bool:
     return False
 
 
-def exec_(
-    name: str, project: Path, command: list[str], **kwargs
-) -> subprocess.CompletedProcess:
+def ensure_exists_and_launched(name: str, project: Path) -> None:
     if not exists(name, project):
         raise WorkshopNotFoundError(name=name, project=project)
 
     if info(name, project) is None:
         raise WorkshopNotLaunchedError(name=name, project=project)
 
+
+def exec_(
+    name: str, project: Path, command: list[str], **kwargs
+) -> subprocess.CompletedProcess:
+    ensure_exists_and_launched(name, project)
+
     return subprocess.run(
         [
             "workshop",
             "exec",
             "--non-interactive",
+            "--project",
+            str(project),
+            name,
+            "--",
+            *command,
+        ],
+        **kwargs,
+    )
+
+
+def popen(
+    name: str,
+    project: Path,
+    command: list[str],
+    *,
+    interactive: bool = False,
+    **kwargs,
+) -> subprocess.Popen:
+    ensure_exists_and_launched(name, project)
+    mode_flag = "--interactive" if interactive else "--non-interactive"
+    return subprocess.Popen(
+        [
+            "workshop",
+            "exec",
+            mode_flag,
             "--project",
             str(project),
             name,
