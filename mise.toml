@@ -1,3 +1,5 @@
 [tools]
 "github:can1357/oh-my-pi" = "latest"
 "npm:@fission-ai/openspec" = "latest"
+ttyd = "latest"
+vhs = "latest"
