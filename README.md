@@ -6,6 +6,9 @@
 
 Built for running AI coding agents in a controlled environment. Let an agent loose on a codebase; with network egress removed and policy continuously enforced, it cannot phone home, exfiltrate code, or reach services you have not explicitly authorised. But any workload you would rather run without a route off the box fits the same model.
 
+[demo.webm](https://github.com/user-attachments/assets/c6e361ff-9e28-43c0-9f7b-0b1489edd941)
+
+
 ______________________________________________________________________
 
 ## Goals
