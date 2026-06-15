@@ -130,7 +130,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         if fixturenames and any(
             name
             in (
-                "launched_workshop",
+                "e2e_project",
                 "e2e_raw_workshop",
                 "e2e_workshop",
                 "endpoint_e2e_workshop",

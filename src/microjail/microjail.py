@@ -242,6 +242,8 @@ class MicroJail(msgspec.Struct):
         async with anyio.create_task_group() as tg:
             for gate in reversed(self.lockdown.gates):
                 tg.start_soon(release_gate, gate)
+
+        async with anyio.create_task_group() as tg:
             for cap in reversed(self.lockdown.caps):
                 tg.start_soon(revoke_cap, cap)
 
@@ -278,36 +280,25 @@ class MicroJail(msgspec.Struct):
                 enforced_gates=tuple(enforced_gates),
             )
 
-        gate_failure = None
-
-        async def run_gate(gate):
-            nonlocal gate_failure
+        for gate in self.lockdown.gates:
             try:
                 await _ensure_gate(self, gate, enforced_gates)
             except GateError as exc:
-                if gate_failure is None:
-                    gate_failure = exc
-
-        async with anyio.create_task_group() as tg:
-            for gate in self.lockdown.gates:
-                tg.start_soon(run_gate, gate)
-
-        if gate_failure is not None:
-            rollback_failures: list[RollbackFailure] = []
-            if intent is ApplicationIntent.RUN:
-                rollback_failures = await _rollback(
-                    self, provided_capabilities, enforced_gates
+                rollback_failures: list[RollbackFailure] = []
+                if intent is ApplicationIntent.RUN:
+                    rollback_failures = await _rollback(
+                        self, provided_capabilities, enforced_gates
+                    )
+                return ApplicationResult(
+                    intent=intent,
+                    status=ApplicationStatus.GATE_APPLICATION_FAILURE,
+                    capability_failures=tuple(capability_failures),
+                    gate_failure=exc,
+                    rollback_failures=tuple(rollback_failures),
+                    provided_capabilities=tuple(provided_capabilities),
+                    enforced_gates=tuple(enforced_gates),
+                    gates_enforced=len(enforced_gates),
                 )
-            return ApplicationResult(
-                intent=intent,
-                status=ApplicationStatus.GATE_APPLICATION_FAILURE,
-                capability_failures=tuple(capability_failures),
-                gate_failure=gate_failure,
-                rollback_failures=tuple(rollback_failures),
-                provided_capabilities=tuple(provided_capabilities),
-                enforced_gates=tuple(enforced_gates),
-                gates_enforced=len(enforced_gates),
-            )
 
         if capability_failures:
             return ApplicationResult(
@@ -471,6 +462,8 @@ async def _rollback(
     async with anyio.create_task_group() as tg:
         for gate in reversed(enforced_gates):
             tg.start_soon(release_gate, gate)
+
+    async with anyio.create_task_group() as tg:
         for cap in reversed(provided_capabilities):
             tg.start_soon(revoke_cap, cap)
 

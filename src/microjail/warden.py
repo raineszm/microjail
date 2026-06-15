@@ -48,9 +48,17 @@ class Warden:
                 tg.start_soon(wait_process)
                 tg.start_soon(supervise_loop)
         except ExceptionGroup as eg:
-            for exc in eg.exceptions:
-                if isinstance(exc, (GatePolicyViolation, CapabilityPolicyViolation)):
-                    raise exc from None
+            policy_exc, other_exc = eg.split(
+                (GatePolicyViolation, CapabilityPolicyViolation)
+            )
+            if policy_exc is not None:
+                policy = policy_exc.exceptions[0]
+                if other_exc is not None:
+                    raise ExceptionGroup(
+                        "warden errors",
+                        [policy, *other_exc.exceptions],
+                    ) from None
+                raise policy from None
             raise
 
         return exit_code
