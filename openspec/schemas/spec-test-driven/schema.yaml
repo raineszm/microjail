@@ -44,153 +44,71 @@ artifacts:
     generates: specs/**/*.md
     description: Detailed specifications for the change
     template: spec.md
-    instruction: >
+    instruction: |
       Create specification files that define WHAT the system should do.
 
-
-      Create one spec file per capability listed in the proposal's Capabilities
-      section.
-
-      - New capabilities: use the exact kebab-case name from the proposal
-      (specs/<capability>/spec.md).
-
-      - Modified capabilities: use the existing spec folder name from
-      openspec/specs/<capability>/ when creating the delta spec at
-      specs/<capability>/spec.md.
-
+      Create one spec file per capability listed in the proposal's Capabilities section.
+      - New capabilities: use the exact kebab-case name from the proposal (specs/<capability>/spec.md).
+      - Modified capabilities: use the existing spec folder name from openspec/specs/<capability>/ when creating the delta spec at specs/<capability>/spec.md.
 
       Delta operations (use ## headers):
-
       - **ADDED Requirements**: New capabilities
-
-      - **MODIFIED Requirements**: Changed behavior - MUST include full updated
-      content
-
-      - **REMOVED Requirements**: Deprecated features - MUST include **Reason**
-      and **Migration**
-
+      - **MODIFIED Requirements**: Changed behavior - MUST include full updated content
+      - **REMOVED Requirements**: Deprecated features - MUST include **Reason** and **Migration**
       - **RENAMED Requirements**: Name changes only - use FROM:/TO: format
 
-
       Format requirements:
-
-      - Each requirement: `### Requirement: <name>` followed by description
-
-      - Use SHALL/MUST for normative requirements (avoid should/may)
-
-      - Each scenario: `#### Scenario: <name>` with GIVEN/WHEN/THEN format
-
-      - **CRITICAL**: Scenarios MUST use exactly 4 hashtags (`####`). Using 3
-      hashtags or bullets will fail silently.
-
+      - Each requirement: `### Requirement: <name>` followed by description.
+      - Every requirement description MUST follow the **Easy Approach to Requirements Syntax (EARS)** patterns using SHALL/MUST. Avoid vague language, should, or may.
+      - Each scenario: `#### Scenario: <name>` with GIVEN/WHEN/THEN format.
+      - **CRITICAL**: Scenarios MUST use exactly 4 hashtags (`####`). Using 3 hashtags or bullets will fail silently.
       - Every requirement MUST have at least one scenario.
 
+      **EARS Requirements Patterns:**
+      1. **Ubiquitous** (always active):
+         The [system] SHALL [behavior].
+      2. **State-Driven** (active during specific state):
+         While [state/pre-condition], the [system] SHALL [behavior].
+      3. **Event-Driven** (response to a trigger):
+         When [trigger], the [system] SHALL [response].
+      4. **Optional Feature** (applies if optional feature is present):
+         Where [feature is included], the [system] SHALL [behavior].
+      5. **Unwanted Behavior** (handling errors or unwanted events):
+         If [trigger], then the [system] SHALL [response].
 
       MODIFIED requirements workflow:
-
       1. Locate the existing requirement in openspec/specs/<capability>/spec.md
-
-      2. Copy the ENTIRE requirement block (from `### Requirement:` through all
-      scenarios)
-
+      2. Copy the ENTIRE requirement block (from `### Requirement:` through all scenarios)
       3. Paste under `## MODIFIED Requirements` and edit to reflect new behavior
-
       4. Ensure header text matches exactly (whitespace-insensitive)
 
-
-      Common pitfall: Using MODIFIED with partial content loses detail at
-      archive time.
-
-      If adding new concerns without changing existing behavior, use ADDED
-      instead.
-
+      Common pitfall: Using MODIFIED with partial content loses detail at archive time.
+      If adding new concerns without changing existing behavior, use ADDED instead.
 
       Example:
-
-      ```
-
+      ```markdown
       ## ADDED Requirements
 
-
-      ### Requirement: User can export data
-
-      The system SHALL allow users to export their data in CSV format.
-
+      ### Requirement: Data export
+      When the user requests a data export, the system SHALL download a CSV file containing all user data.
 
       #### Scenario: Successful export
-
-      - **GIVEN** user has data available to export
-
-      - **WHEN** user clicks "Export" button
-
-      - **THEN** system downloads a CSV file with all user data
-
+      - **GIVEN** the user has data available to export
+      - **WHEN** the user triggers the export action
+      - **THEN** the system generates and downloads the CSV file
 
       ## REMOVED Requirements
 
-
       ### Requirement: Legacy export
-
       **Reason**: Replaced by new export system
-
       **Migration**: Use new export endpoint at /api/v2/export
-
       ```
 
-
       Specs should be testable - each scenario is a potential test case.
-      Scenarios describe business requirements, not implementation details. Keep
-      scenarios at the level of observable behavior: what condition triggers what
-      outcome. The test-plan artifact converts these into concrete test code with
-      specific function calls, parameter values, and assertions.
-      Scenario names should be descriptive (e.g., "check returns False before
-      provide" not "test 1"). Each scenario MUST have at least one GIVEN, WHEN, and
-      THEN.
+      Scenarios describe business requirements, not implementation details. Keep scenarios at the level of observable behavior: what condition triggers what outcome.
+      Scenario names should be descriptive. Each scenario MUST have at least one GIVEN, WHEN, and THEN.
     requires:
       - proposal
-  - id: test-plan
-    generates: test-plan.md
-    description: Converts business-level spec scenarios into concrete, actionable test cases
-    template: test-plan.md
-    instruction: >
-      Convert business requirements from spec scenarios into concrete, actionable
-      test cases.
-
-
-      Read all spec files in specs/ — every #### Scenario must have a row in this
-      plan.
-
-
-      Specs describe what should happen at the business level. This plan converts
-      those requirements into test code: each scenario becomes a test function with
-      specific Arrange/Act/Assert steps.
-
-
-      For each scenario:
-      1. Identify the **test function name** in snake_case, derived from the
-      scenario name
-      2. **Arrange**: translate GIVEN and WHEN preconditions into concrete test
-      setup (module imports, fixture calls, object construction, parameter values)
-      3. **Act**: translate the WHEN action into a specific function call or API
-      invocation with concrete arguments
-      4. **Assert**: translate the THEN expected outcome into test assertions
-      (return value checks, state checks, exception checks)
-
-
-      Identify the **tracer bullet**: the simplest scenario that proves the
-      end-to-end path works. This becomes Slice 1.
-
-
-      Order slices by dependency: the tracer bullet first, then scenarios that
-      depend on capabilities proven by earlier slices. Independent scenarios can
-      share a slice.
-
-
-      Each ## heading in the plan is one slice (one vertical RED→GREEN→REFACTOR
-      cycle). Multiple related scenarios can share a slice if they test the same
-      capability and the implementation for one naturally covers the others.
-    requires:
-      - specs
   - id: design
     generates: design.md
     description: Technical design document with implementation details
@@ -238,73 +156,59 @@ artifacts:
       - proposal
   - id: tasks
     generates: tasks.md
-    description: Implementation checklist with trackable tasks
+    description: Implementation checklist with trackable tasks and incremental test plan
     template: tasks.md
     instruction: |
-      Create the task list organized as vertical slices.
+      Create the task list organized as vertical slices (TDD Slices).
 
+      **IMPORTANT: Incremental planning is required to avoid outrunning our headlights.**
+      We only plan the test details (Arrange/Act/Assert) and tasks for Slice 1 (the Tracer Bullet) initially.
+      Later slices are kept as placeholders/pending.
 
-      **IMPORTANT: Each task group is a vertical slice (RED→GREEN→REFACTOR), NOT a
-      horizontal layer.**
-
-
-
-      Each slice corresponds to one capability from the test-plan and contains
-      exactly three tasks:
-
-      1. **RED** — write the failing test (reference the test function name from
-      the test-plan)
-      2. **GREEN** — write minimal code to make the failing test pass
-      3. **REFACTOR** — clean up while keeping all tests green (write "none" if no
-      refactoring is needed)
-
-
+      Step 1: Identify all slices needed for the change, derived from the requirements/scenarios in specs.
+      Step 2: Slice 1 is the Tracer Bullet - the simplest end-to-end scenario that proves the path works.
+      Step 3: Define the detailed Test Strategy for Slice 1 only (Arrange, Act, Assert).
+      Step 4: For Slice 1, generate the three standard TDD tasks: RED, GREEN, REFACTOR.
+      Step 5: For all subsequent slices, only generate a header with the suffix `[Pending]`, and a placeholder task list.
 
       Rules:
-      - **NEVER group all RED tasks together, then all GREEN, then all REFACTOR.**
-      This is horizontal slicing — it produces tests that test implementation shape
-      instead of behavior.
-      - Each slice MUST contain exactly one RED, one GREEN, one REFACTOR task, in
-      that order.
-      - Slice 1 is the tracer bullet from the test-plan (the simplest end-to-end
-      test).
-      - Order slices by dependency: earlier slices establish capabilities that later
-      slices depend on.
-      - Use the format `- [ ] X.Y RED: test_function_name`, `- [ ] X.Y GREEN:
-      description`, `- [ ] X.Y REFACTOR: description or "none"`.
-      - Reference the test-plan for test function names and slice ordering.
+      - Each detailed slice MUST contain exactly one RED (test function name), one GREEN, one REFACTOR task, in that order.
+      - Order slices by dependency: earlier slices establish capabilities that later slices depend on.
+      - Format for detailed slices:
+        ## Slice N: Tracer Bullet - <Capability Name>
+        - **Test**: <test_function_name in tests/path/to/test_file.py>
+        - **Arrange**: <concrete setup: imports, fixtures, objects, values>
+        - **Act**: <specific function call with arguments>
+        - **Assert**: <specific assertion: return value, state, exception>
 
-
-
-      Example:
-
-      ```
-      ## Slice 1: Endpoint reachable after provide
-      - [ ] 1.1 RED: test_endpoint_reachable_after_provide
-      - [ ] 1.2 GREEN: implement provide() to establish tunnel connection
-      - [ ] 1.3 REFACTOR: none
-
-      ```
+        - [ ] N.1 RED: test_function_name
+        - [ ] N.2 GREEN: description
+        - [ ] N.3 REFACTOR: description or "none"
+      - Format for pending slices:
+        ## Slice N: [Pending] - <Capability Name>
+        <!-- Test details and tasks will be planned after Slice N-1 is complete -->
+        - [ ] N.1 RED: pending
+        - [ ] N.2 GREEN: pending
+        - [ ] N.3 REFACTOR: pending
     requires:
       - specs
-      - test-plan
       - design
 apply:
   requires:
     - tasks
   tracks: tasks.md
   instruction: |
-    Work through tasks one vertical slice at a time, following strict TDD discipline:
+    Work through implementation tasks one vertical slice at a time, adhering strictly to TDD (RED -> GREEN -> REFACTOR) and utilizing the project's built-in `tdd` skill.
 
-    1. Complete all tasks in Slice N before starting Slice N+1.
-    2. For each slice, complete tasks in order: RED → GREEN → REFACTOR.
-    3. RED task: write the failing test. The task is done when the test runs and
-    fails for the expected reason.
-    4. GREEN task: write minimal code to make the failing test pass. The task is
-    done when the test passes AND all previously-passing tests still pass.
-    5. REFACTOR task: clean up the code. The task is done when all tests still
-    pass after refactoring.
-    6. Never skip ahead to a later slice while a RED task is pending in the
-    current slice.
-
-    Mark completed tasks as you go. Pause if you hit blockers or need clarification.
+    **Incremental Planning Loop:**
+    1. Start with Slice 1 (Tracer Bullet).
+    2. Execute the TDD loop:
+       - RED: Write the failing test(s) matching the Arrange/Act/Assert strategy. Verify the test fails.
+       - GREEN: Write minimal code to pass the test(s). Verify the test(s) pass.
+       - REFACTOR: Clean up implementation and test code while keeping the suite green.
+    3. Once Slice N is fully GREEN and REFACTOR is complete, mark the tasks as done.
+    4. **PAUSE AND PLAN NEXT SLICE:** Before writing code for Slice N+1:
+       - Read the current state of the codebase.
+       - Edit `tasks.md` to replace the `[Pending]` section of Slice N+1 with a concrete test strategy (Arrange, Act, Assert) and detailed RED/GREEN/REFACTOR tasks.
+       - Only then proceed to execute the TDD loop for Slice N+1.
+    5. Repeat until all slices are fully implemented, refactored, and verified.
