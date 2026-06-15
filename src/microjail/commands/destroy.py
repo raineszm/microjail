@@ -9,6 +9,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+import anyio
+
+
 def destroy(
     ctx: typer.Context,
     all: bool = typer.Option(
@@ -35,8 +38,11 @@ def destroy(
             abort=True,
         )
 
-    try:
-        mj.destroy(delete_project=all, echo=typer.echo)
-    except subprocess.CalledProcessError as exc:
-        typer.echo(f"Infrastructure teardown failed: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+    async def _run() -> None:
+        try:
+            await mj.destroy(delete_project=all, echo=typer.echo)
+        except subprocess.CalledProcessError as exc:
+            typer.echo(f"Infrastructure teardown failed: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+    anyio.run(_run)

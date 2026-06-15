@@ -1,3 +1,4 @@
+import anyio
 import typer
 
 from microjail import policy
@@ -53,14 +54,17 @@ def unlock(ctx: typer.Context) -> None:
         )
         raise typer.Exit(policy.GENERIC_ERROR) from exc
 
-    try:
-        microjail.release()
-        typer.echo(
-            "unlock released: "
-            f"{len(microjail.lockdown.gates)} gates, "
-            f"{len(microjail.lockdown.caps)} capabilities"
-        )
-    except ExceptionGroup as exc:
-        failures = ", ".join(exception_messages(exc))
-        typer.echo(f"unlock failed: {failures}", err=True)
-        raise typer.Exit(release_exit_code(exc)) from exc
+    async def _run() -> None:
+        try:
+            await microjail.release()
+            typer.echo(
+                "unlock released: "
+                f"{len(microjail.lockdown.gates)} gates, "
+                f"{len(microjail.lockdown.caps)} capabilities"
+            )
+        except ExceptionGroup as exc:
+            failures = ", ".join(exception_messages(exc))
+            typer.echo(f"unlock failed: {failures}", err=True)
+            raise typer.Exit(release_exit_code(exc)) from exc
+
+    anyio.run(_run)

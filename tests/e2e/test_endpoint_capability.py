@@ -66,7 +66,7 @@ def endpoint_microjail(
     return mj
 
 
-def test_provide_makes_endpoint_reachable(
+async def test_provide_makes_endpoint_reachable(
     endpoint_microjail: MicroJail,
     host_tcp_listener: tuple[str, int],
 ) -> None:
@@ -74,15 +74,15 @@ def test_provide_makes_endpoint_reachable(
     host, port = host_tcp_listener
     cap = endpoint_microjail.lockdown.caps[0]
 
-    assert not cap.check(endpoint_microjail)
+    assert not await cap.check(endpoint_microjail)
 
-    cap.provide(endpoint_microjail)
+    await cap.provide(endpoint_microjail)
 
-    assert cap.check(endpoint_microjail)
-    assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
+    assert await cap.check(endpoint_microjail)
+    assert await workshop.endpoint_reachable(endpoint_microjail, host, str(port))
 
 
-def test_lockdown_application_applies_endpoint_capability(
+async def test_lockdown_application_applies_endpoint_capability(
     endpoint_microjail: MicroJail,
     host_tcp_listener: tuple[str, int],
 ) -> None:
@@ -90,14 +90,14 @@ def test_lockdown_application_applies_endpoint_capability(
     the network-egress Gate applied by the same run intent."""
     host, port = host_tcp_listener
 
-    result = endpoint_microjail.ensure(ApplicationIntent.RUN)
+    result = await endpoint_microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.SUCCESS
 
-    assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
+    assert await workshop.endpoint_reachable(endpoint_microjail, host, str(port))
 
 
-def test_run_with_endpoint_capability_reaches_declared_endpoint_and_blocks_other_egress(
+async def test_run_with_endpoint_capability_reaches_declared_endpoint_and_blocks_other_egress(
     endpoint_microjail: MicroJail,
     host_tcp_listener: tuple[str, int],
 ) -> None:
@@ -121,7 +121,7 @@ def test_run_with_endpoint_capability_reaches_declared_endpoint_and_blocks_other
 
     assert result.exit_code == 0, result.stderr
     assert (endpoint_microjail.project_path / "endpoint-ok").exists()
-    assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
+    assert await workshop.endpoint_reachable(endpoint_microjail, host, str(port))
     assert not has_network_egress(ws)
 
 

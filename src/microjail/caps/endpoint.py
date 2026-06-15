@@ -28,21 +28,23 @@ class WorkshopEndpointCapability(
             else self.host_endpoint
         )
 
-    def check(self, microjail: MicroJail) -> bool:
+    async def check(self, microjail: MicroJail) -> bool:
         try:
-            rows = workshop.connections(microjail.name, project=microjail.project_path)
+            rows = await workshop.connections(
+                microjail.name, project=microjail.project_path
+            )
             if (
                 f"{microjail.name}/microjail:{self.name}",
                 f"{microjail.name}/system:{self.name}",
             ) not in rows:
                 return False
             host, port = self.resolved_endpoint.rsplit(":", 1)
-            return workshop.endpoint_reachable(microjail, host, port)
+            return await workshop.endpoint_reachable(microjail, host, port)
         except Exception:
             return False
 
-    def provide(self, microjail: MicroJail) -> None:
-        if self.check(microjail):
+    async def provide(self, microjail: MicroJail) -> None:
+        if await self.check(microjail):
             return
         workshop.add_tunnel_plug(
             microjail.project_path, self.name, self.resolved_endpoint
@@ -50,8 +52,8 @@ class WorkshopEndpointCapability(
         workshop.add_tunnel_slot(
             microjail.name, microjail.project_path, self.name, self.host_endpoint
         )
-        workshop.refresh(microjail.name, project=microjail.project_path)
-        workshop.connect(
+        await workshop.refresh(microjail.name, project=microjail.project_path)
+        await workshop.connect(
             microjail.name,
             project=microjail.project_path,
             plug_sdk="microjail",
@@ -60,8 +62,8 @@ class WorkshopEndpointCapability(
             slot=self.name,
         )
 
-    def revoke(self, microjail: MicroJail) -> None:
-        workshop.disconnect(
+    async def revoke(self, microjail: MicroJail) -> None:
+        await workshop.disconnect(
             microjail.name,
             project=microjail.project_path,
             plug_sdk="microjail",
@@ -76,4 +78,4 @@ class WorkshopEndpointCapability(
             self.name,
             remove_sdk=not remaining,
         )
-        workshop.refresh(microjail.name, project=microjail.project_path)
+        await workshop.refresh(microjail.name, project=microjail.project_path)

@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from typer.testing import CliRunner
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(MicroJail, "load", Mock(return_value=microjail))
-    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
+    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", AsyncMock())
 
 
 def test_lock_reports_success_with_counts(
@@ -95,7 +95,7 @@ def test_lock_gate_failure_reports_name_and_exit_code(
     assert "GateError" not in result.stderr
 
 
-def test_lock_does_not_rollback_successfully_applied_policy_after_failure(
+async def test_lock_does_not_rollback_successfully_applied_policy_after_failure(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     cap = RecordingCapability("endpoint", checks=[False, True])
@@ -105,9 +105,9 @@ def test_lock_does_not_rollback_successfully_applied_policy_after_failure(
         project_path=microjail_project,
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
-    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
+    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", AsyncMock())
 
-    result = microjail.ensure(ApplicationIntent.LOCK)
+    result = await microjail.ensure(ApplicationIntent.LOCK)
 
     assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
     assert result.gate_failure is not None

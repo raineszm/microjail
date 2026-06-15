@@ -20,10 +20,10 @@ class ReadonlyConfig(msgspec.Struct, tag="readonly-config", tag_field="name"):
     def name(self) -> str:
         return "readonly-config"
 
-    def check(self, microjail: MicroJail) -> bool:
+    async def check(self, microjail: MicroJail) -> bool:
         """Return True when the config bind-mount device is present with readonly=true."""
         try:
-            instance = microjail.lxc_instance()
+            instance = await microjail.lxc_instance()
         except WorkshopNotLaunchedError:
             return False
         device = instance.devices.get(DEVICE_NAME)
@@ -31,9 +31,9 @@ class ReadonlyConfig(msgspec.Struct, tag="readonly-config", tag_field="name"):
             return False
         return device.get("readonly") == "true"
 
-    def enforce(self, microjail: MicroJail) -> None:
+    async def enforce(self, microjail: MicroJail) -> None:
         """Add a read-only disk device covering the microjail config file."""
-        microjail.add_device(
+        await microjail.add_device(
             DEVICE_NAME,
             {
                 "type": "disk",
@@ -44,8 +44,8 @@ class ReadonlyConfig(msgspec.Struct, tag="readonly-config", tag_field="name"):
         )
         self.removed = True
 
-    def release(self, microjail: MicroJail) -> None:
+    async def release(self, microjail: MicroJail) -> None:
         """Remove the read-only disk device added by enforce()."""
-        if self.removed or self.check(microjail):
-            microjail.remove_device(DEVICE_NAME)
+        if self.removed or await self.check(microjail):
+            await microjail.remove_device(DEVICE_NAME)
         self.removed = False

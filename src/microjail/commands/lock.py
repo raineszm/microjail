@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+import anyio
 import typer
 
 from microjail import policy
@@ -39,8 +40,8 @@ def report_rollback_failures(command: str, result) -> None:
         )
 
 
-def ensure_lockdown(microjail: MicroJail) -> None:
-    result = microjail.ensure(ApplicationIntent.RUN)
+async def ensure_lockdown(microjail: MicroJail) -> None:
+    result = await microjail.ensure(ApplicationIntent.RUN)
     if result.status is ApplicationStatus.SUCCESS:
         return
 
@@ -67,31 +68,37 @@ def ensure_lockdown(microjail: MicroJail) -> None:
 def lock(ctx: typer.Context) -> None:
     project = get_project(ctx)
     microjail = load_microjail_or_exit(project)
-    result = microjail.ensure(ApplicationIntent.LOCK)
-    cap_count = len(microjail.lockdown.caps)
 
-    if result.status is ApplicationStatus.GATE_APPLICATION_FAILURE:
-        gate_failure = result.gate_failure
-        assert gate_failure is not None
-        typer.echo(
-            f"lock failed: gate {gate_failure.name} failed",
-            err=True,
-        )
-        if result.capability_failures:
+    async def _run() -> None:
+        result = await microjail.ensure(ApplicationIntent.LOCK)
+        cap_count = len(microjail.lockdown.caps)
+
+        if result.status is ApplicationStatus.GATE_APPLICATION_FAILURE:
+            gate_failure = result.gate_failure
+            assert gate_failure is not None
             typer.echo(
-                f"lock also had capability failures: {names(result.capability_failures)}",
+                f"lock failed: gate {gate_failure.name} failed",
                 err=True,
             )
-        raise typer.Exit(policy.GATE_APPLICATION_FAILURE)
+            if result.capability_failures:
+                typer.echo(
+                    f"lock also had capability failures: {names(result.capability_failures)}",
+                    err=True,
+                )
+            raise typer.Exit(policy.GATE_APPLICATION_FAILURE)
 
-    if result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE:
+        if result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE:
+            typer.echo(
+                "lock incomplete: "
+                f"{len(result.capability_failures)} capability failures "
+                f"({names(result.capability_failures)}), "
+                f"{result.gates_enforced} gates enforced",
+                err=True,
+            )
+            raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE)
+
         typer.echo(
-            "lock incomplete: "
-            f"{len(result.capability_failures)} capability failures "
-            f"({names(result.capability_failures)}), "
-            f"{result.gates_enforced} gates enforced",
-            err=True,
+            f"lock applied: {cap_count} capabilities, {result.gates_enforced} gates"
         )
-        raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE)
 
-    typer.echo(f"lock applied: {cap_count} capabilities, {result.gates_enforced} gates")
+    anyio.run(_run)

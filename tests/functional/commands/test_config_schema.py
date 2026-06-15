@@ -38,7 +38,7 @@ def test_cli_loads_documented_endpoint_capability_config_shape(
     write_config(tmp_path)
     seen = {}
 
-    def ensure_lockdown(microjail: MicroJail, _intent):
+    async def ensure_lockdown(microjail: MicroJail, _intent):
         seen["cap"] = microjail.lockdown.caps[0]
         return Mock(status=ApplicationStatus.SUCCESS, gates_enforced=2)
 
@@ -59,7 +59,7 @@ def test_cli_loads_documented_default_gate_config_shape(
     write_config(tmp_path)
     seen = {}
 
-    def ensure_lockdown(microjail: MicroJail, _intent):
+    async def ensure_lockdown(microjail: MicroJail, _intent):
         seen["gates"] = microjail.lockdown.gates
         return Mock(status=ApplicationStatus.SUCCESS, gates_enforced=2)
 

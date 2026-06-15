@@ -42,18 +42,18 @@ class RecordingCapability:
         self.checks = checks or [True]
         self.calls: list[str] = []
 
-    def check(self, microjail: MicroJail) -> bool:
+    async def check(self, microjail: MicroJail) -> bool:
         del microjail
         self.calls.append("check")
         if len(self.checks) > 1:
             return self.checks.pop(0)
         return self.checks[0]
 
-    def provide(self, microjail: MicroJail) -> None:
+    async def provide(self, microjail: MicroJail) -> None:
         del microjail
         self.calls.append("provide")
 
-    def revoke(self, microjail: MicroJail) -> None:
+    async def revoke(self, microjail: MicroJail) -> None:
         del microjail
         self.calls.append("revoke")
 
@@ -64,18 +64,18 @@ class RecordingGate:
         self.checks = checks or [True]
         self.calls: list[str] = []
 
-    def check(self, microjail: MicroJail) -> bool:
+    async def check(self, microjail: MicroJail) -> bool:
         del microjail
         self.calls.append("check")
         if len(self.checks) > 1:
             return self.checks.pop(0)
         return self.checks[0]
 
-    def enforce(self, microjail: MicroJail) -> None:
+    async def enforce(self, microjail: MicroJail) -> None:
         del microjail
         self.calls.append("enforce")
 
-    def release(self, microjail: MicroJail) -> None:
+    async def release(self, microjail: MicroJail) -> None:
         del microjail
         self.calls.append("release")
 

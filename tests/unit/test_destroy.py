@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -21,9 +21,9 @@ def mock_microjail(tmp_path: Path):
     return mj
 
 
-@patch("microjail.microjail.workshop.info")
-@patch("microjail.microjail.workshop.remove")
-@patch("time.sleep")
+@patch("microjail.microjail.workshop.info", new_callable=AsyncMock)
+@patch("microjail.microjail.workshop.remove", new_callable=AsyncMock)
+@patch("microjail.microjail.anyio.sleep", new_callable=AsyncMock)
 def test_destroy_pending_workshop(
     mock_sleep, mock_remove, mock_info, mock_microjail, tmp_path
 ):
@@ -41,9 +41,9 @@ def test_destroy_pending_workshop(
     mock_remove.assert_called_once_with("test-jail", tmp_path)
 
 
-@patch("microjail.microjail.workshop.info")
-@patch("microjail.microjail.workshop.start")
-@patch("microjail.microjail.workshop.remove")
+@patch("microjail.microjail.workshop.info", new_callable=AsyncMock)
+@patch("microjail.microjail.workshop.start", new_callable=AsyncMock)
+@patch("microjail.microjail.workshop.remove", new_callable=AsyncMock)
 def test_destroy_off_workshop(
     mock_remove, mock_start, mock_info, mock_microjail, tmp_path
 ):

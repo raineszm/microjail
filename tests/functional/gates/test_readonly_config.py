@@ -3,6 +3,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
+import anyio
 import pytest
 
 from microjail.adapters import workshop
@@ -29,20 +30,23 @@ def launched_workshop(tmp_path_factory):
     name = f"mj-workshop-{uuid.uuid4().hex[:8]}"
     cwd = Path.cwd()
 
-    try:
-        os.chdir(project)
-        workshop.init(name, project=project)
+    async def _setup():
+        await workshop.init(name, project=project)
         mj = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
         mj.save()
-        workshop.launch(name, project=project)
+        await workshop.launch(name, project=project)
+
+    try:
+        os.chdir(project)
+        anyio.run(_setup)
         yield SharedWorkshop(name=name, path=project)
     finally:
         os.chdir(cwd)
         subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
 
 
-def can_write_config(ws: SharedWorkshop) -> bool:
-    result = workshop.exec_(
+async def can_write_config(ws: SharedWorkshop) -> bool:
+    result = await workshop.exec_(
         ws.name,
         ws.path,
         ["bash", "-c", "echo x >> /project/.microjail/config.yaml"],
@@ -53,10 +57,10 @@ def can_write_config(ws: SharedWorkshop) -> bool:
     return result.returncode == 0
 
 
-def test_readonly_config_blocks_write_on_application_and_restores_on_release(
+async def test_readonly_config_blocks_write_on_application_and_restores_on_release(
     launched_workshop: SharedWorkshop,
 ) -> None:
-    if not can_write_config(launched_workshop):
+    if not await can_write_config(launched_workshop):
         pytest.skip("workshop does not have baseline write access to config")
 
     lockdown = Lockdown(caps=[], gates=[ReadonlyConfig()])
@@ -67,10 +71,10 @@ def test_readonly_config_blocks_write_on_application_and_restores_on_release(
     )
 
     try:
-        result = microjail.ensure(ApplicationIntent.RUN)
+        result = await microjail.ensure(ApplicationIntent.RUN)
         assert result.status is ApplicationStatus.SUCCESS
-        assert not can_write_config(launched_workshop)
+        assert not await can_write_config(launched_workshop)
     finally:
-        microjail.release()
+        await microjail.release()
 
-    assert can_write_config(launched_workshop)
+    assert await can_write_config(launched_workshop)

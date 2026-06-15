@@ -22,7 +22,9 @@ def test_destroy_default_behavior(e2e_project: SharedWorkshop) -> None:
     (data_dir / "secret.txt").write_text("hello")
 
     # Launch workshop
-    workshop.launch(e2e_project.name, project=e2e_project.path)
+    import anyio
+
+    anyio.run(workshop.launch, e2e_project.name, e2e_project.path)
 
     # Act
     result = CliRunner().invoke(app, ["--project", str(e2e_project.path), "destroy"])

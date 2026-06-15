@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
@@ -21,11 +21,13 @@ def test_network_drop_has_gate_name() -> None:
     assert gate().name == "network-egress"
 
 
-def test_check_returns_false_when_egress_probe_succeeds() -> None:
+async def test_check_returns_false_when_egress_probe_succeeds() -> None:
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+    mock_mj.exec_ = AsyncMock(
+        return_value=subprocess.CompletedProcess(args=[], returncode=0)
+    )
 
-    assert not gate().check(mock_mj)
+    assert not await gate().check(mock_mj)
 
     mock_mj.exec_.assert_called_once_with(
         ["bash", "-c", ": >/dev/tcp/1.1.1.1/443"],
@@ -36,24 +38,29 @@ def test_check_returns_false_when_egress_probe_succeeds() -> None:
     )
 
 
-def test_check_returns_true_when_egress_probe_fails() -> None:
+async def test_check_returns_true_when_egress_probe_fails() -> None:
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.return_value = subprocess.CompletedProcess(args=[], returncode=1)
-
-    assert gate().check(mock_mj)
-
-
-def test_enforce_removes_all_network_devices_from_workshop_container() -> None:
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.lxc_instance.return_value = SimpleNamespace(
-        devices={
-            "root": {"type": "disk", "path": "/"},
-            "eth0": {"type": "nic", "nictype": "bridged", "parent": "lxdbr0"},
-            "uplink": {"type": "nic", "nictype": "bridged", "parent": "fan0"},
-        }
+    mock_mj.exec_ = AsyncMock(
+        return_value=subprocess.CompletedProcess(args=[], returncode=1)
     )
 
-    gate().enforce(mock_mj)
+    assert await gate().check(mock_mj)
+
+
+async def test_enforce_removes_all_network_devices_from_workshop_container() -> None:
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance = AsyncMock(
+        return_value=SimpleNamespace(
+            devices={
+                "root": {"type": "disk", "path": "/"},
+                "eth0": {"type": "nic", "nictype": "bridged", "parent": "lxdbr0"},
+                "uplink": {"type": "nic", "nictype": "bridged", "parent": "fan0"},
+            }
+        )
+    )
+    mock_mj.remove_device = AsyncMock()
+
+    await gate().enforce(mock_mj)
 
     assert mock_mj.remove_device.mock_calls == [
         call("eth0"),
@@ -61,18 +68,22 @@ def test_enforce_removes_all_network_devices_from_workshop_container() -> None:
     ]
 
 
-def test_release_restores_network_devices_removed_by_enforce() -> None:
+async def test_release_restores_network_devices_removed_by_enforce() -> None:
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.lxc_instance.return_value = SimpleNamespace(
-        devices={
-            "root": {"type": "disk", "path": "/"},
-            "eth0": {"type": "nic", "nictype": "bridged", "parent": "lxdbr0"},
-        }
+    mock_mj.lxc_instance = AsyncMock(
+        return_value=SimpleNamespace(
+            devices={
+                "root": {"type": "disk", "path": "/"},
+                "eth0": {"type": "nic", "nictype": "bridged", "parent": "lxdbr0"},
+            }
+        )
     )
+    mock_mj.remove_device = AsyncMock()
+    mock_mj.add_device = AsyncMock()
 
     network_gate = gate()
-    network_gate.enforce(mock_mj)
-    network_gate.release(mock_mj)
+    await network_gate.enforce(mock_mj)
+    await network_gate.release(mock_mj)
 
     mock_mj.add_device.assert_called_once_with(
         "eth0",
@@ -80,28 +91,32 @@ def test_release_restores_network_devices_removed_by_enforce() -> None:
     )
 
 
-def test_release_restores_workshop_when_removed_network_device_cannot_be_derived() -> (
+async def test_release_restores_workshop_when_removed_network_device_cannot_be_derived() -> (
     None
 ):
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.profile_devices.return_value = {}
+    mock_mj.profile_devices = AsyncMock(return_value={})
+    mock_mj.restore_workshop = AsyncMock()
+    mock_mj.add_device = AsyncMock()
 
     network_gate = gate()
-    network_gate.release(mock_mj)
+    await network_gate.release(mock_mj)
 
     mock_mj.restore_workshop.assert_called_once_with()
     mock_mj.add_device.assert_not_called()
 
 
-def test_enforce_fails_if_workshop_container_is_not_available() -> None:
+async def test_enforce_fails_if_workshop_container_is_not_available() -> None:
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.lxc_instance.side_effect = WorkshopNotLaunchedError(
-        name=WORKSHOP_NAME,
-        project=PROJECT,
+    mock_mj.lxc_instance = AsyncMock(
+        side_effect=WorkshopNotLaunchedError(
+            name=WORKSHOP_NAME,
+            project=PROJECT,
+        )
     )
 
     with pytest.raises(WorkshopNotLaunchedError) as exc_info:
-        gate().enforce(mock_mj)
+        await gate().enforce(mock_mj)
 
     assert exc_info.value.name == WORKSHOP_NAME
     assert exc_info.value.project == PROJECT

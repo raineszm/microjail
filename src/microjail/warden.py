@@ -1,7 +1,10 @@
-import subprocess
 from typing import TYPE_CHECKING
 
+import anyio
+
 if TYPE_CHECKING:
+    from anyio.abc import Process
+
     from microjail.microjail import MicroJail
 
 
@@ -19,36 +22,50 @@ class Warden:
     def __init__(
         self,
         microjail: MicroJail,
-        process: subprocess.Popen,
+        process: Process,
         interval: float = 1.0,
     ) -> None:
         self.microjail = microjail
         self.process = process
         self.interval = interval
 
-    def supervise(self) -> int:
+    async def supervise(self) -> int | None:
         """Supervise the workload process and block until it terminates."""
-        while True:
-            try:
-                # Wait blocks up to interval seconds.
-                # If the process terminates, wait() returns its exit code.
-                exit_code = self.process.wait(timeout=self.interval)
-                return exit_code
-            except subprocess.TimeoutExpired:
-                # The process is still running. Perform periodic checks.
-                self.check_policies()
+        exit_code = None
 
-    def check_policies(self) -> None:
+        async def wait_process():
+            nonlocal exit_code
+            exit_code = await self.process.wait()
+            tg.cancel_scope.cancel()
+
+        async def supervise_loop():
+            while True:
+                await anyio.sleep(self.interval)
+                await self.check_policies()
+
+        try:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(wait_process)
+                tg.start_soon(supervise_loop)
+        except ExceptionGroup as eg:
+            for exc in eg.exceptions:
+                if isinstance(exc, (GatePolicyViolation, CapabilityPolicyViolation)):
+                    raise exc from None
+            raise
+
+        return exit_code
+
+    async def check_policies(self) -> None:
         """Inspect all active gates and capabilities."""
         for gate in self.microjail.lockdown.gates:
-            if not gate.check(self.microjail):
-                self.terminate_workload()
+            if not await gate.check(self.microjail):
+                await self.terminate_workload()
                 raise GatePolicyViolation(f"Gate policy violation: {gate.name}")
 
         for cap in self.microjail.lockdown.caps:
-            if not cap.check(self.microjail):
+            if not await cap.check(self.microjail):
                 if getattr(cap, "fatal", False):
-                    self.terminate_workload()
+                    await self.terminate_workload()
                     raise CapabilityPolicyViolation(
                         f"Capability policy violation: {cap.name}"
                     )
@@ -60,14 +77,15 @@ class Warden:
                         file=sys.stderr,
                     )
 
-    def terminate_workload(self) -> None:
+    async def terminate_workload(self) -> None:
         """Terminate the workload process and escalate to container force stop if needed."""
         self.process.terminate()
         try:
-            self.process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
+            with anyio.fail_after(2):
+                await self.process.wait()
+        except TimeoutError:
             from microjail.adapters import lxc
 
-            container = self.microjail.container_name()
+            container = await self.microjail.container_name()
             project = self.microjail.lxd_project()
-            lxc.stop_instance(container, project, force=True)
+            await lxc.stop_instance(container, project, force=True)

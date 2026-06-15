@@ -9,6 +9,7 @@ from functools import cache
 from pathlib import Path
 from typing import Literal
 
+import anyio
 import msgspec
 
 
@@ -106,15 +107,12 @@ def _sdk_entry(workshop_data: WorkshopConfig, name: str) -> WorkshopSdk | None:
     return None
 
 
-def connections(name: str, project: Path) -> list[tuple[str, str]]:
-    result = subprocess.run(
+async def connections(name: str, project: Path) -> list[tuple[str, str]]:
+    result = await anyio.run_process(
         ["workshop", "connections", name, "--project", str(project)],
-        check=True,
-        capture_output=True,
-        text=True,
     )
     rows: list[tuple[str, str]] = []
-    lines = result.stdout.splitlines()
+    lines = result.stdout.decode("utf-8").splitlines()
     if len(lines) < 2:
         return rows
     header = lines[0]
@@ -137,10 +135,10 @@ def connections(name: str, project: Path) -> list[tuple[str, str]]:
     return rows
 
 
-def connect(
+async def connect(
     name: str, project: Path, plug_sdk: str, plug: str, slot_sdk: str, slot: str
 ) -> None:
-    subprocess.run(
+    await anyio.run_process(
         [
             "workshop",
             "connect",
@@ -149,16 +147,14 @@ def connect(
             "--project",
             str(project),
         ],
-        check=True,
-        capture_output=True,
     )
 
 
-def disconnect(
+async def disconnect(
     name: str, project: Path, plug_sdk: str, plug: str, slot_sdk: str, slot: str
 ) -> None:
     try:
-        subprocess.run(
+        await anyio.run_process(
             [
                 "workshop",
                 "disconnect",
@@ -167,8 +163,6 @@ def disconnect(
                 "--project",
                 str(project),
             ],
-            check=True,
-            capture_output=True,
         )
     except subprocess.CalledProcessError as exc:
         if b"not connected" in exc.stderr:
@@ -176,32 +170,28 @@ def disconnect(
         raise
 
 
-def refresh(name: str, project: Path) -> None:
-    subprocess.run(
+async def refresh(name: str, project: Path) -> None:
+    await anyio.run_process(
         ["workshop", "refresh", name, "--project", str(project)],
-        check=True,
-        capture_output=True,
     )
 
 
-def restore(name: str, project: Path) -> None:
-    subprocess.run(
+async def restore(name: str, project: Path) -> None:
+    await anyio.run_process(
         ["workshop", "restore", name, "--project", str(project)],
-        check=True,
-        capture_output=True,
     )
 
 
-def endpoint_reachable(microjail, host: str, port: int | str) -> bool:
+async def endpoint_reachable(microjail, host: str, port: int | str) -> bool:
     try:
-        result = microjail.exec_(
+        result = await microjail.exec_(
             ["bash", "-c", f": >/dev/tcp/{host}/{port}"],
             check=False,
             capture_output=True,
             text=True,
             timeout=_EGRESS_PROBE_TIMEOUT,
         )
-    except subprocess.TimeoutExpired:
+    except TimeoutError, subprocess.TimeoutExpired:
         return False
     return result.returncode == 0
 
@@ -220,7 +210,7 @@ def lxd_project() -> str:
     return f"workshop.{project_suffix()}"
 
 
-def init(
+async def init(
     name: str,
     project: Path,
     sdks: list[str] | None = None,
@@ -244,37 +234,35 @@ def init(
         cmd.extend(["--base", base])
 
     try:
-        subprocess.run(cmd, check=True, capture_output=True)
+        await anyio.run_process(cmd)
     except subprocess.CalledProcessError as exc:
         if b"already exists" in exc.stderr:
             raise WorkshopExistsError(name=name, project=project) from exc
         raise
 
 
-def launch(name: str, project: Path, **kwargs):
-    subprocess.run(
-        ["workshop", "launch", name, "--project", str(project)], check=True, **kwargs
+async def launch(name: str, project: Path, **kwargs):
+    await anyio.run_process(
+        ["workshop", "launch", name, "--project", str(project)], **kwargs
     )
 
 
-def remove(name: str, project: Path, **kwargs) -> None:
-    subprocess.run(
-        ["workshop", "remove", name, "--project", str(project)], check=True, **kwargs
+async def remove(name: str, project: Path, **kwargs) -> None:
+    await anyio.run_process(
+        ["workshop", "remove", name, "--project", str(project)], **kwargs
     )
 
 
-def start(name: str, project: Path, **kwargs) -> None:
-    subprocess.run(
-        ["workshop", "start", name, "--project", str(project)], check=True, **kwargs
+async def start(name: str, project: Path, **kwargs) -> None:
+    await anyio.run_process(
+        ["workshop", "start", name, "--project", str(project)], **kwargs
     )
 
 
-def info(name: str, project: Path) -> WorkshopInfo | None:
+async def info(name: str, project: Path) -> WorkshopInfo | None:
     try:
-        result = subprocess.run(
+        result = await anyio.run_process(
             ["workshop", "info", name, "--project", str(project)],
-            check=True,
-            capture_output=True,
         )
     except subprocess.CalledProcessError as exc:
         if b"workshop not launched" in exc.stderr:
@@ -290,30 +278,28 @@ def container_name(name: str, project: Path) -> str | None:
     return f"{name}-{lock_file.read_text(encoding='utf-8').strip()}"
 
 
-def get_container(name: str, project: Path) -> ContainerInfo | None:
+async def get_container(name: str, project: Path) -> ContainerInfo | None:
     c_name = container_name(name, project)
     if c_name is None:
         return None
 
-    result = subprocess.run(
-        ["lxc", "query", f"/1.0/instances/{c_name}?project={lxd_project()}"],
-        check=True,
-        capture_output=True,
-    )
+    try:
+        result = await anyio.run_process(
+            ["lxc", "query", f"/1.0/instances/{c_name}?project={lxd_project()}"],
+        )
+    except subprocess.CalledProcessError as exc:
+        if b"not found" in exc.stderr:
+            return None
+        raise
     return msgspec.json.decode(result.stdout, type=ContainerInfo)
 
 
-def exists(name: str, project: Path) -> bool:
+async def exists(name: str, project: Path) -> bool:
     try:
-        for line in (
-            subprocess.run(
-                ["workshop", "list", "--project", str(project), "--no-headers"],
-                check=True,
-                capture_output=True,
-            )
-            .stdout.decode("utf-8")
-            .splitlines()
-        ):
+        result = await anyio.run_process(
+            ["workshop", "list", "--project", str(project), "--no-headers"],
+        )
+        for line in result.stdout.decode("utf-8").splitlines():
             if line.split()[0] == name:
                 return True
     except subprocess.CalledProcessError as exc:
@@ -323,20 +309,78 @@ def exists(name: str, project: Path) -> bool:
     return False
 
 
-def ensure_exists_and_launched(name: str, project: Path) -> None:
-    if not exists(name, project):
+async def ensure_exists_and_launched(name: str, project: Path) -> None:
+    if not await exists(name, project):
         raise WorkshopNotFoundError(name=name, project=project)
 
-    if info(name, project) is None:
+    if await info(name, project) is None:
         raise WorkshopNotLaunchedError(name=name, project=project)
 
 
-def exec_(
+async def _run_process_compat(
+    command: list[str],
+    **kwargs,
+) -> subprocess.CompletedProcess:
+    check = kwargs.pop("check", False)
+    capture_output = kwargs.pop("capture_output", False)
+    text = kwargs.pop("text", False)
+    input_data = kwargs.pop("input", None)
+    timeout = kwargs.pop("timeout", None)
+
+    if isinstance(input_data, str):
+        input_bytes = input_data.encode("utf-8")
+    else:
+        input_bytes = input_data
+
+    stdout = kwargs.pop("stdout", subprocess.PIPE if capture_output else None)
+    stderr = kwargs.pop("stderr", subprocess.PIPE if capture_output else None)
+
+    try:
+        if timeout is not None:
+            with anyio.fail_after(timeout):
+                result = await anyio.run_process(
+                    command,
+                    stdout=stdout,
+                    stderr=stderr,
+                    check=check,
+                    input=input_bytes,
+                    **kwargs,
+                )
+        else:
+            result = await anyio.run_process(
+                command,
+                stdout=stdout,
+                stderr=stderr,
+                check=check,
+                input=input_bytes,
+                **kwargs,
+            )
+    except TimeoutError as exc:
+        raise subprocess.TimeoutExpired(command, timeout) from exc
+
+    stdout_res = result.stdout
+    stderr_res = result.stderr
+
+    if text:
+        if stdout_res is not None:
+            stdout_res = stdout_res.decode("utf-8")
+        if stderr_res is not None:
+            stderr_res = stderr_res.decode("utf-8")
+
+    return subprocess.CompletedProcess(
+        args=command,
+        returncode=result.returncode,
+        stdout=stdout_res,
+        stderr=stderr_res,
+    )
+
+
+async def exec_(
     name: str, project: Path, command: list[str], **kwargs
 ) -> subprocess.CompletedProcess:
-    ensure_exists_and_launched(name, project)
+    await ensure_exists_and_launched(name, project)
 
-    return subprocess.run(
+    return await _run_process_compat(
         [
             "workshop",
             "exec",
@@ -351,17 +395,17 @@ def exec_(
     )
 
 
-def popen(
+async def popen(
     name: str,
     project: Path,
     command: list[str],
     *,
     interactive: bool = False,
     **kwargs,
-) -> subprocess.Popen:
-    ensure_exists_and_launched(name, project)
+):
+    await ensure_exists_and_launched(name, project)
     mode_flag = "--interactive" if interactive else "--non-interactive"
-    return subprocess.Popen(
+    return await anyio.open_process(
         [
             "workshop",
             "exec",

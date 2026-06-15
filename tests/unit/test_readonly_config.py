@@ -1,6 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -21,27 +21,30 @@ def test_readonly_config_has_gate_name() -> None:
     assert gate().name == "readonly-config"
 
 
-def test_check_returns_false_when_device_absent() -> None:
+async def test_check_returns_false_when_device_absent() -> None:
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.lxc_instance.return_value = SimpleNamespace(devices={})
+    mock_mj.lxc_instance = AsyncMock(return_value=SimpleNamespace(devices={}))
 
-    assert not gate().check(mock_mj)
+    assert not await gate().check(mock_mj)
 
 
-def test_check_returns_true_when_device_present() -> None:
+async def test_check_returns_true_when_device_present() -> None:
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.lxc_instance.return_value = SimpleNamespace(
-        devices={"microjail-config-ro": {"type": "disk", "readonly": "true"}}
+    mock_mj.lxc_instance = AsyncMock(
+        return_value=SimpleNamespace(
+            devices={"microjail-config-ro": {"type": "disk", "readonly": "true"}}
+        )
     )
 
-    assert gate().check(mock_mj)
+    assert await gate().check(mock_mj)
 
 
-def test_enforce_adds_readonly_disk_device() -> None:
+async def test_enforce_adds_readonly_disk_device() -> None:
     mock_mj = Mock(spec=MicroJail)
     mock_mj.config_path = "/project/.microjail/config.yaml"
+    mock_mj.add_device = AsyncMock()
 
-    gate().enforce(mock_mj)
+    await gate().enforce(mock_mj)
 
     mock_mj.add_device.assert_called_once_with(
         "microjail-config-ro",
@@ -54,45 +57,55 @@ def test_enforce_adds_readonly_disk_device() -> None:
     )
 
 
-def test_release_removes_device_after_enforce() -> None:
+async def test_release_removes_device_after_enforce(monkeypatch) -> None:
     mock_mj = Mock(spec=MicroJail)
     mock_mj.config_path = "/project/.microjail/config.yaml"
+    mock_mj.add_device = AsyncMock()
+    mock_mj.remove_device = AsyncMock()
+    # check() will be called in release, so we also need to mock lxc_instance (which check calls)
+    mock_mj.lxc_instance = AsyncMock(return_value=SimpleNamespace(devices={}))
 
     ro_gate = gate()
-    ro_gate.enforce(mock_mj)
-    ro_gate.release(mock_mj)
+    await ro_gate.enforce(mock_mj)
+    await ro_gate.release(mock_mj)
 
     mock_mj.remove_device.assert_called_once_with("microjail-config-ro")
 
 
-def test_release_is_noop_when_not_enforced() -> None:
+async def test_release_is_noop_when_not_enforced() -> None:
     mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance = AsyncMock(return_value=SimpleNamespace(devices={}))
+    mock_mj.remove_device = AsyncMock()
 
-    gate().release(mock_mj)
+    await gate().release(mock_mj)
 
     mock_mj.remove_device.assert_not_called()
 
 
-def test_enforce_fails_if_workshop_container_is_not_available() -> None:
+async def test_enforce_fails_if_workshop_container_is_not_available() -> None:
     mock_mj = Mock(spec=MicroJail)
     mock_mj.config_path = "/project/.microjail/config.yaml"
-    mock_mj.add_device.side_effect = WorkshopNotLaunchedError(
-        name=WORKSHOP_NAME,
-        project=PROJECT,
+    mock_mj.add_device = AsyncMock(
+        side_effect=WorkshopNotLaunchedError(
+            name=WORKSHOP_NAME,
+            project=PROJECT,
+        )
     )
 
     with pytest.raises(WorkshopNotLaunchedError) as exc_info:
-        gate().enforce(mock_mj)
+        await gate().enforce(mock_mj)
 
     assert exc_info.value.name == WORKSHOP_NAME
     assert exc_info.value.project == PROJECT
 
 
-def test_check_returns_false_when_container_is_not_available() -> None:
+async def test_check_returns_false_when_container_is_not_available() -> None:
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.lxc_instance.side_effect = WorkshopNotLaunchedError(
-        name=WORKSHOP_NAME,
-        project=PROJECT,
+    mock_mj.lxc_instance = AsyncMock(
+        side_effect=WorkshopNotLaunchedError(
+            name=WORKSHOP_NAME,
+            project=PROJECT,
+        )
     )
 
-    assert not gate().check(mock_mj)
+    assert not await gate().check(mock_mj)

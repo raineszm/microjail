@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from typer.testing import CliRunner
 
@@ -25,9 +25,9 @@ if TYPE_CHECKING:
 
 def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(MicroJail, "load", Mock(return_value=microjail))
-    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
+    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", AsyncMock())
     monkeypatch.setattr(
-        MicroJail, "workshop_info", Mock(return_value=Mock(status="ready"))
+        MicroJail, "workshop_info", AsyncMock(return_value=Mock(status="ready"))
     )
 
 
@@ -48,9 +48,9 @@ def test_run_propagates_workload_exit_status(
     )
     load_as(microjail, monkeypatch)
     mock_process = Mock()
-    popen = Mock(return_value=mock_process)
+    popen = AsyncMock(return_value=mock_process)
     monkeypatch.setattr(MicroJail, "popen", popen)
-    supervise = Mock(return_value=7)
+    supervise = AsyncMock(return_value=7)
     monkeypatch.setattr(Warden, "supervise", supervise)
 
     result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 7"])
@@ -71,7 +71,7 @@ def test_run_capability_failure_blocks_workload_and_skips_gates(
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     load_as(microjail, monkeypatch)
-    popen = Mock()
+    popen = AsyncMock()
     monkeypatch.setattr(MicroJail, "popen", popen)
 
     result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "echo started"])
@@ -93,7 +93,7 @@ def test_run_gate_failure_blocks_workload(
         lockdown=Lockdown(caps=[], gates=[gate]),
     )
     load_as(microjail, monkeypatch)
-    popen = Mock()
+    popen = AsyncMock()
     monkeypatch.setattr(MicroJail, "popen", popen)
 
     result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "echo started"])
@@ -104,7 +104,7 @@ def test_run_gate_failure_blocks_workload(
     popen.assert_not_called()
 
 
-def test_run_rolls_back_applied_policy_on_pre_workload_failure(
+async def test_run_rolls_back_applied_policy_on_pre_workload_failure(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     cap = RecordingCapability("endpoint", checks=[False, True])
@@ -114,9 +114,9 @@ def test_run_rolls_back_applied_policy_on_pre_workload_failure(
         project_path=microjail_project,
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
-    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
+    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", AsyncMock())
 
-    result = microjail.ensure(ApplicationIntent.RUN)
+    result = await microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
 
@@ -135,10 +135,10 @@ def test_run_uses_warden_supervision(
     load_as(microjail, monkeypatch)
 
     mock_process = Mock()
-    mock_popen = Mock(return_value=mock_process)
+    mock_popen = AsyncMock(return_value=mock_process)
     monkeypatch.setattr(MicroJail, "popen", mock_popen)
 
-    mock_supervise = Mock(return_value=0)
+    mock_supervise = AsyncMock(return_value=0)
     monkeypatch.setattr(Warden, "supervise", mock_supervise)
 
     result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 0"])
@@ -159,9 +159,9 @@ def test_run_exits_with_84_on_gate_violation(
     load_as(microjail, monkeypatch)
 
     mock_process = Mock()
-    monkeypatch.setattr(MicroJail, "popen", Mock(return_value=mock_process))
+    monkeypatch.setattr(MicroJail, "popen", AsyncMock(return_value=mock_process))
 
-    def raising_supervise(self):
+    async def raising_supervise(self):
         raise GatePolicyViolation("mock gate violation")
 
     monkeypatch.setattr(Warden, "supervise", raising_supervise)
@@ -182,9 +182,9 @@ def test_run_exits_with_82_on_fatal_capability_violation(
     load_as(microjail, monkeypatch)
 
     mock_process = Mock()
-    monkeypatch.setattr(MicroJail, "popen", Mock(return_value=mock_process))
+    monkeypatch.setattr(MicroJail, "popen", AsyncMock(return_value=mock_process))
 
-    def raising_supervise(self):
+    async def raising_supervise(self):
         raise CapabilityPolicyViolation("mock cap violation")
 
     monkeypatch.setattr(Warden, "supervise", raising_supervise)
@@ -204,17 +204,17 @@ def test_run_launches_workshop_if_not_launched(
     )
     monkeypatch.setattr(MicroJail, "load", Mock(return_value=microjail))
 
-    mock_workshop_info = Mock(return_value=None)
+    mock_workshop_info = AsyncMock(return_value=None)
     monkeypatch.setattr(MicroJail, "workshop_info", mock_workshop_info)
 
-    mock_launch = Mock()
+    mock_launch = AsyncMock()
     monkeypatch.setattr("microjail.adapters.workshop.launch", mock_launch)
 
     # Mock popen, Warden supervise, ensure_lockdown to do nothing/success
-    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
-    monkeypatch.setattr("microjail.commands.run.ensure_lockdown", Mock())
-    monkeypatch.setattr(MicroJail, "popen", Mock())
-    monkeypatch.setattr(Warden, "supervise", Mock(return_value=0))
+    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", AsyncMock())
+    monkeypatch.setattr("microjail.commands.run.ensure_lockdown", AsyncMock())
+    monkeypatch.setattr(MicroJail, "popen", AsyncMock())
+    monkeypatch.setattr(Warden, "supervise", AsyncMock(return_value=0))
 
     result = CliRunner().invoke(app, ["run", "--", "true"])
 

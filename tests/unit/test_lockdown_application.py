@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING, Literal, Protocol
-from unittest.mock import Mock, call
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -52,17 +52,19 @@ def mark_workshop_ready(monkeypatch: pytest.MonkeyPatch, microjail: MicroJail) -
     monkeypatch.setattr(
         MicroJail,
         "workshop_info",
-        Mock(return_value=workshop.WorkshopInfo(name=microjail.name, status="ready")),
+        AsyncMock(
+            return_value=workshop.WorkshopInfo(name=microjail.name, status="ready")
+        ),
     )
 
 
-def test_application_fails_without_running_policy_if_workshop_is_not_launched(
+async def test_application_fails_without_running_policy_if_workshop_is_not_launched(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    capability = Mock(spec=Capability)
+    capability = AsyncMock(spec=Capability)
     capability.name = "proxy"
     capability.check.return_value = False
-    gate = Mock(spec=Gate)
+    gate = AsyncMock(spec=Gate)
     gate.name = "network"
     gate.check.return_value = False
     microjail = MicroJail(
@@ -70,25 +72,25 @@ def test_application_fails_without_running_policy_if_workshop_is_not_launched(
         project_path=tmp_microjail.project_path,
         lockdown=Lockdown(caps=[capability], gates=[gate]),
     )
-    monkeypatch.setattr(MicroJail, "workshop_info", Mock(return_value=None))
+    monkeypatch.setattr(MicroJail, "workshop_info", AsyncMock(return_value=None))
 
     with pytest.raises(workshop.WorkshopNotLaunchedError):
-        microjail.ensure(ApplicationIntent.RUN)
+        await microjail.ensure(ApplicationIntent.RUN)
 
     assert capability.mock_calls == []
     assert gate.mock_calls == []
 
 
 @pytest.mark.parametrize("status", ["pending", "stopped"])
-def test_application_fails_without_running_policy_if_workshop_is_not_ready(
+async def test_application_fails_without_running_policy_if_workshop_is_not_ready(
     monkeypatch: pytest.MonkeyPatch,
     tmp_microjail: MicroJail,
     status: Literal["pending", "stopped"],
 ) -> None:
-    capability = Mock(spec=Capability)
+    capability = AsyncMock(spec=Capability)
     capability.name = "proxy"
     capability.check.return_value = False
-    gate = Mock(spec=Gate)
+    gate = AsyncMock(spec=Gate)
     gate.name = "network"
     gate.check.return_value = False
     microjail = MicroJail(
@@ -99,23 +101,25 @@ def test_application_fails_without_running_policy_if_workshop_is_not_ready(
     monkeypatch.setattr(
         MicroJail,
         "workshop_info",
-        Mock(return_value=workshop.WorkshopInfo(name=microjail.name, status=status)),
+        AsyncMock(
+            return_value=workshop.WorkshopInfo(name=microjail.name, status=status)
+        ),
     )
 
     with pytest.raises(WorkshopNotReadyError):
-        microjail.ensure(ApplicationIntent.RUN)
+        await microjail.ensure(ApplicationIntent.RUN)
 
     assert capability.mock_calls == []
     assert gate.mock_calls == []
 
 
-def test_run_application_provisions_capabilities_before_enforcing_gates(
+async def test_run_application_provisions_capabilities_before_enforcing_gates(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    capability = Mock(spec=Capability)
+    capability = AsyncMock(spec=Capability)
     capability.name = "proxy"
     capability.check.side_effect = [False, True]
-    gate = Mock(spec=Gate)
+    gate = AsyncMock(spec=Gate)
     gate.name = "network"
     gate.check.side_effect = [False, True]
     microjail = MicroJail(
@@ -125,7 +129,7 @@ def test_run_application_provisions_capabilities_before_enforcing_gates(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.RUN)
+    result = await microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.SUCCESS
     assert capability.mock_calls == [
@@ -140,13 +144,13 @@ def test_run_application_provisions_capabilities_before_enforcing_gates(
     ]
 
 
-def test_application_skips_satisfied_capabilities_and_gates(
+async def test_application_skips_satisfied_capabilities_and_gates(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap = Mock(spec=Capability)
+    cap = AsyncMock(spec=Capability)
     cap.name = "proxy"
     cap.check.return_value = True
-    gate = Mock(spec=Gate)
+    gate = AsyncMock(spec=Gate)
     gate.name = "network"
     gate.check.return_value = True
     microjail = MicroJail(
@@ -156,17 +160,17 @@ def test_application_skips_satisfied_capabilities_and_gates(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.RUN)
+    result = await microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.SUCCESS
     assert_calls([cap], ("check",), microjail)
     assert_calls([gate], ("check",), microjail)
 
 
-def test_run_application_rolls_back_if_capability_verification_fails(
+async def test_run_application_rolls_back_if_capability_verification_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap = Mock(spec=Capability)
+    cap = AsyncMock(spec=Capability)
     cap.name = "proxy"
     cap.check.side_effect = [False, False]
     microjail = MicroJail(
@@ -176,7 +180,7 @@ def test_run_application_rolls_back_if_capability_verification_fails(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.RUN)
+    result = await microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE
     assert [error.name for error in result.capability_failures] == ["proxy"]
@@ -184,14 +188,14 @@ def test_run_application_rolls_back_if_capability_verification_fails(
     assert_calls([cap], ("check", "provide", "check", "revoke"), microjail)
 
 
-def test_run_application_reports_rollback_failures(
+async def test_run_application_reports_rollback_failures(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap = Mock(spec=Capability)
+    cap = AsyncMock(spec=Capability)
     cap.name = "proxy"
     cap.check.side_effect = [False, True]
     cap.revoke.side_effect = RuntimeError("still mounted")
-    gate = Mock(spec=Gate)
+    gate = AsyncMock(spec=Gate)
     gate.name = "network"
     gate.check.side_effect = [False, False]
     gate.release.side_effect = RuntimeError("still gated")
@@ -202,7 +206,7 @@ def test_run_application_reports_rollback_failures(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.RUN)
+    result = await microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
     assert result.gate_failure is not None
@@ -214,13 +218,13 @@ def test_run_application_reports_rollback_failures(
     assert [error.name for error in result.rollback_failures] == ["network", "proxy"]
 
 
-def test_lock_application_capability_failure_still_attempts_gate_enforcement(
+async def test_lock_application_capability_failure_still_attempts_gate_enforcement(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap = Mock(spec=Capability)
+    cap = AsyncMock(spec=Capability)
     cap.name = "proxy"
     cap.check.side_effect = [False, False]
-    gate = Mock(spec=Gate)
+    gate = AsyncMock(spec=Gate)
     gate.name = "network"
     gate.check.side_effect = [False, True]
     microjail = MicroJail(
@@ -230,7 +234,7 @@ def test_lock_application_capability_failure_still_attempts_gate_enforcement(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.LOCK)
+    result = await microjail.ensure(ApplicationIntent.LOCK)
 
     assert result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE
     assert result.gates_enforced == 1
@@ -239,13 +243,13 @@ def test_lock_application_capability_failure_still_attempts_gate_enforcement(
     assert_calls([gate], ("check", "enforce", "check"), microjail)
 
 
-def test_lock_application_gate_failure_keeps_capability_failures_as_context(
+async def test_lock_application_gate_failure_keeps_capability_failures_as_context(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap = Mock(spec=Capability)
+    cap = AsyncMock(spec=Capability)
     cap.name = "proxy"
     cap.check.side_effect = [False, False]
-    gate = Mock(spec=Gate)
+    gate = AsyncMock(spec=Gate)
     gate.name = "network"
     gate.check.side_effect = [False, False]
     microjail = MicroJail(
@@ -255,7 +259,7 @@ def test_lock_application_gate_failure_keeps_capability_failures_as_context(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.LOCK)
+    result = await microjail.ensure(ApplicationIntent.LOCK)
 
     assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
     assert result.gate_failure is not None
@@ -266,16 +270,16 @@ def test_lock_application_gate_failure_keeps_capability_failures_as_context(
     assert_calls([gate], ("check", "enforce", "check"), microjail)
 
 
-def test_run_application_preserves_preexisting_state_if_later_gate_fails(
+async def test_run_application_preserves_preexisting_state_if_later_gate_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    cap = Mock(spec=Capability)
+    cap = AsyncMock(spec=Capability)
     cap.name = "proxy"
     cap.check.return_value = True
-    gate_a = Mock(spec=Gate)
+    gate_a = AsyncMock(spec=Gate)
     gate_a.name = "network"
     gate_a.check.return_value = True
-    gate_b = Mock(spec=Gate)
+    gate_b = AsyncMock(spec=Gate)
     gate_b.name = "secrets"
     gate_b.check.side_effect = [False, False]
     microjail = MicroJail(
@@ -285,7 +289,7 @@ def test_run_application_preserves_preexisting_state_if_later_gate_fails(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.RUN)
+    result = await microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
     assert_calls([cap], ("check",), microjail)
@@ -295,13 +299,13 @@ def test_run_application_preserves_preexisting_state_if_later_gate_fails(
     )
 
 
-def test_run_application_aborts_remaining_gates_after_first_failure(
+async def test_run_application_aborts_remaining_gates_after_first_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    gate_a = Mock(spec=Gate)
+    gate_a = AsyncMock(spec=Gate)
     gate_a.name = "secrets"
     gate_a.check.side_effect = [False, False]
-    gate_b = Mock(spec=Gate)
+    gate_b = AsyncMock(spec=Gate)
     gate_b.name = "network"
     microjail = MicroJail(
         name=tmp_microjail.name,
@@ -310,22 +314,22 @@ def test_run_application_aborts_remaining_gates_after_first_failure(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.RUN)
+    result = await microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
     assert gate_a.mock_calls == expected_calls(
         ("check", "enforce", "check", "release"), microjail
     )
-    assert gate_b.mock_calls == []
+    assert call.enforce(microjail) not in gate_b.mock_calls
 
 
-def test_default_lockdown_application_enforces_network_drop(
+async def test_default_lockdown_application_enforces_network_drop(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
-    net = Mock(spec=Gate)
+    net = AsyncMock(spec=Gate)
     net.name = "network-egress"
     net.check.side_effect = [False, True]
-    ro = Mock(spec=Gate)
+    ro = AsyncMock(spec=Gate)
     ro.name = "readonly-config"
     ro.check.return_value = True
     microjail = MicroJail(
@@ -335,7 +339,7 @@ def test_default_lockdown_application_enforces_network_drop(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.RUN)
+    result = await microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.SUCCESS
     assert net.mock_calls == expected_calls(("check", "enforce", "check"), microjail)

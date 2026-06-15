@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import msgspec
 import pytest
@@ -26,16 +26,16 @@ def capability() -> WorkshopEndpointCapability:
     return WorkshopEndpointCapability(name="inference", host_endpoint="127.0.0.1:8080")
 
 
-def test_check_returns_false_when_connection_row_is_absent(
+async def test_check_returns_false_when_connection_row_is_absent(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
     cap = capability()
-    mock_connections = Mock(return_value=[])
+    mock_connections = AsyncMock(return_value=[])
     monkeypatch.setattr(workshop, "connections", mock_connections)
-    mock_endpoint_reachable = Mock(return_value=True)
+    mock_endpoint_reachable = AsyncMock(return_value=True)
     monkeypatch.setattr(workshop, "endpoint_reachable", mock_endpoint_reachable)
 
-    assert not cap.check(tmp_microjail)
+    assert not await cap.check(tmp_microjail)
 
     mock_connections.assert_called_once_with(
         tmp_microjail.name, project=tmp_microjail.project_path
@@ -43,20 +43,20 @@ def test_check_returns_false_when_connection_row_is_absent(
     mock_endpoint_reachable.assert_not_called()
 
 
-def test_check_returns_true_when_connection_and_reachability_hold(
+async def test_check_returns_true_when_connection_and_reachability_hold(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
     cap = capability()
-    mock_connections = Mock(
+    mock_connections = AsyncMock(
         return_value=[
             ("mj-workshop/microjail:inference", "mj-workshop/system:inference")
         ]
     )
     monkeypatch.setattr(workshop, "connections", mock_connections)
-    mock_endpoint_reachable = Mock(return_value=True)
+    mock_endpoint_reachable = AsyncMock(return_value=True)
     monkeypatch.setattr(workshop, "endpoint_reachable", mock_endpoint_reachable)
 
-    assert cap.check(tmp_microjail)
+    assert await cap.check(tmp_microjail)
 
     mock_connections.assert_called_once_with(
         tmp_microjail.name, project=tmp_microjail.project_path
@@ -64,25 +64,25 @@ def test_check_returns_true_when_connection_and_reachability_hold(
     mock_endpoint_reachable.assert_called_once_with(tmp_microjail, "127.0.0.1", "8080")
 
 
-def test_check_returns_false_when_endpoint_is_unreachable(
+async def test_check_returns_false_when_endpoint_is_unreachable(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
     cap = capability()
-    mock_connections = Mock(
+    mock_connections = AsyncMock(
         return_value=[
             ("mj-workshop/microjail:inference", "mj-workshop/system:inference")
         ]
     )
     monkeypatch.setattr(workshop, "connections", mock_connections)
-    mock_endpoint_reachable = Mock(return_value=False)
+    mock_endpoint_reachable = AsyncMock(return_value=False)
     monkeypatch.setattr(workshop, "endpoint_reachable", mock_endpoint_reachable)
 
-    assert not cap.check(tmp_microjail)
+    assert not await cap.check(tmp_microjail)
 
     mock_endpoint_reachable.assert_called_once_with(tmp_microjail, "127.0.0.1", "8080")
 
 
-def test_check_probes_container_endpoint_when_set(
+async def test_check_probes_container_endpoint_when_set(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
     cap = WorkshopEndpointCapability(
@@ -90,44 +90,44 @@ def test_check_probes_container_endpoint_when_set(
         host_endpoint="127.0.0.1:8080",
         container_endpoint="10.0.0.1:9090",
     )
-    mock_connections = Mock(
+    mock_connections = AsyncMock(
         return_value=[
             ("mj-workshop/microjail:inference", "mj-workshop/system:inference")
         ]
     )
     monkeypatch.setattr(workshop, "connections", mock_connections)
-    mock_endpoint_reachable = Mock(return_value=True)
+    mock_endpoint_reachable = AsyncMock(return_value=True)
     monkeypatch.setattr(workshop, "endpoint_reachable", mock_endpoint_reachable)
 
-    assert cap.check(tmp_microjail)
+    assert await cap.check(tmp_microjail)
 
     mock_endpoint_reachable.assert_called_once_with(tmp_microjail, "10.0.0.1", "9090")
 
 
-def test_provide_is_idempotent_when_check_already_returns_true(
+async def test_provide_is_idempotent_when_check_already_returns_true(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
     cap = capability()
     monkeypatch.setattr(
         workshop,
         "connections",
-        Mock(
+        AsyncMock(
             return_value=[
                 ("mj-workshop/microjail:inference", "mj-workshop/system:inference")
             ]
         ),
     )
-    monkeypatch.setattr(workshop, "endpoint_reachable", Mock(return_value=True))
+    monkeypatch.setattr(workshop, "endpoint_reachable", AsyncMock(return_value=True))
     add_tunnel_plug = Mock()
     add_tunnel_slot = Mock()
-    refresh = Mock()
-    connect = Mock()
+    refresh = AsyncMock()
+    connect = AsyncMock()
     monkeypatch.setattr(workshop, "add_tunnel_plug", add_tunnel_plug)
     monkeypatch.setattr(workshop, "add_tunnel_slot", add_tunnel_slot)
     monkeypatch.setattr(workshop, "refresh", refresh)
     monkeypatch.setattr(workshop, "connect", connect)
 
-    cap.provide(tmp_microjail)
+    await cap.provide(tmp_microjail)
 
     add_tunnel_plug.assert_not_called()
     add_tunnel_slot.assert_not_called()
@@ -135,20 +135,20 @@ def test_provide_is_idempotent_when_check_already_returns_true(
     connect.assert_not_called()
 
 
-def test_revoke_is_idempotent_when_capability_was_never_provided(
+async def test_revoke_is_idempotent_when_capability_was_never_provided(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
     cap = capability()
-    disconnect = Mock()
+    disconnect = AsyncMock()
     remove_tunnel_plug = Mock(return_value=True)
     remove_tunnel_slot = Mock()
-    refresh = Mock()
+    refresh = AsyncMock()
     monkeypatch.setattr(workshop, "disconnect", disconnect)
     monkeypatch.setattr(workshop, "remove_tunnel_plug", remove_tunnel_plug)
     monkeypatch.setattr(workshop, "remove_tunnel_slot", remove_tunnel_slot)
     monkeypatch.setattr(workshop, "refresh", refresh)
 
-    cap.revoke(tmp_microjail)
+    await cap.revoke(tmp_microjail)
 
     disconnect.assert_called_once_with(
         tmp_microjail.name,

@@ -73,12 +73,16 @@ def test_lock_then_run_succeeds_without_clean_baseline(
 def test_run_auto_launches_workshop_e2e(
     e2e_unlaunched_workshop: SharedWorkshop,
 ) -> None:
+    import anyio
+
     from microjail.adapters import workshop
 
     # Assert that workshop is NOT launched before running
     assert (
-        workshop.info(
-            e2e_unlaunched_workshop.name, project=e2e_unlaunched_workshop.path
+        anyio.run(
+            workshop.info,
+            e2e_unlaunched_workshop.name,
+            e2e_unlaunched_workshop.path,
         )
         is None
     )
@@ -88,8 +92,10 @@ def test_run_auto_launches_workshop_e2e(
 
     # Assert
     assert result.exit_code == 0, result.stderr
-    info = workshop.info(
-        e2e_unlaunched_workshop.name, project=e2e_unlaunched_workshop.path
+    info = anyio.run(
+        workshop.info,
+        e2e_unlaunched_workshop.name,
+        e2e_unlaunched_workshop.path,
     )
     assert info is not None
     assert info.status == "ready"

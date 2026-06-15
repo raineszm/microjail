@@ -17,7 +17,9 @@ def test_init_writes_default_config_that_lock_can_apply(
     result = CliRunner().invoke(app, ["init", e2e_project.name])
     assert result.exit_code == 0, result.stderr
     assert (e2e_project.path / ".microjail" / "config.yaml").exists()
-    workshop.launch(e2e_project.name, project=e2e_project.path)
+    import anyio
+
+    anyio.run(workshop.launch, e2e_project.name, e2e_project.path)
 
     if not has_network_egress(e2e_project):
         pytest.skip("workshop lacks baseline network egress")

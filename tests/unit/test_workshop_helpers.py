@@ -1,6 +1,6 @@
 from pathlib import Path
-from subprocess import CalledProcessError, CompletedProcess, TimeoutExpired
-from unittest.mock import Mock
+from subprocess import CalledProcessError, CompletedProcess
+from unittest.mock import AsyncMock, Mock
 
 import msgspec
 import pytest
@@ -15,58 +15,52 @@ from microjail.adapters.workshop import (
 )
 
 
-def test_connections_parses_tunnel_rows_from_column_slices(
+async def test_connections_parses_tunnel_rows_from_column_slices(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run = Mock(
+    run = AsyncMock(
         return_value=CompletedProcess(
             args=["workshop"],
             returncode=0,
             stdout=(
-                "INTERFACE  PLUG              SLOT              NOTES\n"
-                "tunnel     api               ingress           ok\n"
-                "tunnel     db                storage           ok\n"
-                "bridge     ignored           ignored           ignored\n"
-                "tunnel                       missing-slot      ok\n"
+                b"INTERFACE  PLUG              SLOT              NOTES\n"
+                b"tunnel     api               ingress           ok\n"
+                b"tunnel     db                storage           ok\n"
+                b"bridge     ignored           ignored           ignored\n"
+                b"tunnel                       missing-slot      ok\n"
             ),
-            stderr="",
+            stderr=b"",
         )
     )
-    monkeypatch.setattr(workshop.subprocess, "run", run)
+    monkeypatch.setattr(workshop.anyio, "run_process", run)
 
-    assert workshop.connections("mj-workshop", Path("/tmp/project")) == [
+    assert await workshop.connections("mj-workshop", Path("/tmp/project")) == [
         ("api", "ingress"),
         ("db", "storage"),
     ]
     run.assert_called_once_with(
         ["workshop", "connections", "mj-workshop", "--project", "/tmp/project"],
-        check=True,
-        capture_output=True,
-        text=True,
     )
 
 
-def test_connections_returns_empty_when_headers_are_missing(
+async def test_connections_returns_empty_when_headers_are_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        workshop.subprocess,
-        "run",
-        Mock(
-            return_value=CompletedProcess(
-                args=["workshop"], returncode=0, stdout="no headers here\n", stderr=""
-            )
-        ),
+    run = AsyncMock(
+        return_value=CompletedProcess(
+            args=["workshop"], returncode=0, stdout=b"no headers here\n", stderr=b""
+        )
     )
+    monkeypatch.setattr(workshop.anyio, "run_process", run)
 
-    assert workshop.connections("mj-workshop", Path("/tmp/project")) == []
+    assert await workshop.connections("mj-workshop", Path("/tmp/project")) == []
 
 
-def test_connect_builds_expected_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    run = Mock(return_value=CompletedProcess(args=["workshop"], returncode=0))
-    monkeypatch.setattr(workshop.subprocess, "run", run)
+async def test_connect_builds_expected_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = AsyncMock(return_value=CompletedProcess(args=["workshop"], returncode=0))
+    monkeypatch.setattr(workshop.anyio, "run_process", run)
 
-    workshop.connect(
+    await workshop.connect(
         "mj-workshop", Path("/tmp/project"), "microjail", "plug", "system", "slot"
     )
 
@@ -79,85 +73,82 @@ def test_connect_builds_expected_command(monkeypatch: pytest.MonkeyPatch) -> Non
             "--project",
             "/tmp/project",
         ],
-        check=True,
-        capture_output=True,
     )
 
 
-def test_disconnect_ignores_not_connected_error(
+async def test_disconnect_ignores_not_connected_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run = Mock(
+    run = AsyncMock(
         side_effect=CalledProcessError(
             returncode=1,
             cmd=["workshop", "disconnect"],
             stderr=b"error: not connected\n",
         )
     )
-    monkeypatch.setattr(workshop.subprocess, "run", run)
+    monkeypatch.setattr(workshop.anyio, "run_process", run)
 
-    workshop.disconnect(
+    await workshop.disconnect(
         "mj-workshop", Path("/tmp/project"), "microjail", "plug", "system", "slot"
     )
 
     run.assert_called_once()
 
 
-def test_disconnect_raises_for_other_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_disconnect_raises_for_other_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = AsyncMock(
+        side_effect=CalledProcessError(
+            returncode=1,
+            cmd=["workshop", "disconnect"],
+            stderr=b"something else\n",
+        )
+    )
     monkeypatch.setattr(
-        workshop.subprocess,
-        "run",
-        Mock(
-            side_effect=CalledProcessError(
-                returncode=1,
-                cmd=["workshop", "disconnect"],
-                stderr=b"something else\n",
-            )
-        ),
+        workshop.anyio,
+        "run_process",
+        run,
     )
 
     with pytest.raises(CalledProcessError):
-        workshop.disconnect(
+        await workshop.disconnect(
             "mj-workshop", Path("/tmp/project"), "microjail", "plug", "system", "slot"
         )
 
 
-def test_refresh_builds_expected_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    run = Mock(return_value=CompletedProcess(args=["workshop"], returncode=0))
-    monkeypatch.setattr(workshop.subprocess, "run", run)
+async def test_refresh_builds_expected_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = AsyncMock(return_value=CompletedProcess(args=["workshop"], returncode=0))
+    monkeypatch.setattr(workshop.anyio, "run_process", run)
 
-    workshop.refresh("mj-workshop", Path("/tmp/project"))
+    await workshop.refresh("mj-workshop", Path("/tmp/project"))
 
     run.assert_called_once_with(
         ["workshop", "refresh", "mj-workshop", "--project", "/tmp/project"],
-        check=True,
-        capture_output=True,
     )
 
 
-def test_restore_builds_expected_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    run = Mock(return_value=CompletedProcess(args=["workshop"], returncode=0))
-    monkeypatch.setattr(workshop.subprocess, "run", run)
+async def test_restore_builds_expected_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = AsyncMock(return_value=CompletedProcess(args=["workshop"], returncode=0))
+    monkeypatch.setattr(workshop.anyio, "run_process", run)
 
-    workshop.restore("mj-workshop", Path("/tmp/project"))
+    await workshop.restore("mj-workshop", Path("/tmp/project"))
 
     run.assert_called_once_with(
         ["workshop", "restore", "mj-workshop", "--project", "/tmp/project"],
-        check=True,
-        capture_output=True,
     )
 
 
 @pytest.mark.parametrize("returncode,expected", [(0, True), (1, False)])
-def test_endpoint_reachable_returns_probe_result(
+async def test_endpoint_reachable_returns_probe_result(
     returncode: int, expected: bool
 ) -> None:
     microjail = Mock()
-    microjail.exec_.return_value = CompletedProcess(
-        args=["bash"], returncode=returncode
+    microjail.exec_ = AsyncMock(
+        return_value=CompletedProcess(args=["bash"], returncode=returncode)
     )
 
-    assert workshop.endpoint_reachable(microjail, "127.0.0.1", 8080) is expected
+    assert await workshop.endpoint_reachable(microjail, "127.0.0.1", 8080) is expected
     microjail.exec_.assert_called_once_with(
         ["bash", "-c", ": >/dev/tcp/127.0.0.1/8080"],
         check=False,
@@ -167,11 +158,11 @@ def test_endpoint_reachable_returns_probe_result(
     )
 
 
-def test_endpoint_reachable_returns_false_on_timeout() -> None:
+async def test_endpoint_reachable_returns_false_on_timeout() -> None:
     microjail = Mock()
-    microjail.exec_.side_effect = TimeoutExpired(cmd=["bash"], timeout=10)
+    microjail.exec_ = AsyncMock(side_effect=TimeoutError("timeout"))
 
-    assert not workshop.endpoint_reachable(microjail, "127.0.0.1", "8080")
+    assert not await workshop.endpoint_reachable(microjail, "127.0.0.1", "8080")
 
 
 def test_read_and_write_workshop_yaml_round_trip(tmp_path: Path) -> None:

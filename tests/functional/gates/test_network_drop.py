@@ -24,8 +24,8 @@ pytestmark = [
 NETWORK_PROBE_TIMEOUT = 10
 
 
-def has_network_egress(workshop_state: SharedWorkshop) -> bool:
-    result = workshop.exec_(
+async def has_network_egress(workshop_state: SharedWorkshop) -> bool:
+    result = await workshop.exec_(
         workshop_state.name,
         workshop_state.path,
         [
@@ -41,10 +41,10 @@ def has_network_egress(workshop_state: SharedWorkshop) -> bool:
     return result.returncode == 0
 
 
-def test_network_drop_blocks_egress_on_application_and_restores_it_on_release(
+async def test_network_drop_blocks_egress_on_application_and_restores_it_on_release(
     launched_workshop: SharedWorkshop,
 ) -> None:
-    if not has_network_egress(launched_workshop):
+    if not await has_network_egress(launched_workshop):
         pytest.skip("workshop does not have baseline network egress")
 
     lockdown = Lockdown(caps=[], gates=[NetworkDrop()])
@@ -55,10 +55,10 @@ def test_network_drop_blocks_egress_on_application_and_restores_it_on_release(
     )
 
     try:
-        result = microjail.ensure(ApplicationIntent.RUN)
+        result = await microjail.ensure(ApplicationIntent.RUN)
         assert result.status is ApplicationStatus.SUCCESS
-        assert not has_network_egress(launched_workshop)
+        assert not await has_network_egress(launched_workshop)
     finally:
-        microjail.release()
+        await microjail.release()
 
-    assert has_network_egress(launched_workshop)
+    assert await has_network_egress(launched_workshop)

@@ -5,6 +5,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
+import anyio
 import pytest
 
 from microjail.adapters import workshop
@@ -18,10 +19,13 @@ def launched_workshop(tmp_path_factory):
     name = f"mj-workshop-{uuid.uuid4().hex[:8]}"
     cwd = Path.cwd()
 
+    async def _setup():
+        await workshop.init(name, project=project)
+        await workshop.launch(name, project=project)
+
     try:
         os.chdir(project)
-        workshop.init(name, project=project)
-        workshop.launch(name, project=project)
+        anyio.run(_setup)
         yield SharedWorkshop(name=name, path=project)
     finally:
         os.chdir(cwd)

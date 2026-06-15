@@ -21,32 +21,42 @@ NETWORK_PROBE_TIMEOUT = 10
 
 def has_egress(ws: SharedWorkshop) -> bool:
     """Return True if the workshop container can reach the internet."""
-    result = workshop.exec_(
-        ws.name,
-        ws.path,
-        [
-            "python3",
-            "-c",
-            "import socket; socket.create_connection(('1.1.1.1', 443), timeout=5).close()",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=NETWORK_PROBE_TIMEOUT,
-    )
+    import anyio
+
+    async def _run():
+        return await workshop.exec_(
+            ws.name,
+            ws.path,
+            [
+                "python3",
+                "-c",
+                "import socket; socket.create_connection(('1.1.1.1', 443), timeout=5).close()",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=NETWORK_PROBE_TIMEOUT,
+        )
+
+    result = anyio.run(_run)
     return result.returncode == 0
 
 
 def can_write_config(ws: SharedWorkshop) -> bool:
     """Return True if /project/.microjail/config.yaml is writable inside the container."""
-    result = workshop.exec_(
-        ws.name,
-        ws.path,
-        ["test", "-w", "/project/.microjail/config.yaml"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    import anyio
+
+    async def _run():
+        return await workshop.exec_(
+            ws.name,
+            ws.path,
+            ["test", "-w", "/project/.microjail/config.yaml"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    result = anyio.run(_run)
     return result.returncode == 0
 
 

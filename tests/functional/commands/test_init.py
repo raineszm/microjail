@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from typer.testing import CliRunner
 
@@ -13,9 +13,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_delegates_to_workshop_and_writes_config(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -38,9 +38,9 @@ def test_init_delegates_to_workshop_and_writes_config(
     ]
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_bails_if_exists(
-    mock_init: MagicMock, tmp_path: Path, monkeypatch, project_name: str
+    mock_init: AsyncMock, tmp_path: Path, monkeypatch, project_name: str
 ) -> None:
     monkeypatch.chdir(tmp_path)
     mock_init.side_effect = workshop.WorkshopExistsError(
@@ -59,9 +59,9 @@ def test_init_bails_if_exists(
     assert not (tmp_path / ".microjail" / "config.yaml").exists()
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_workshop_failure_exits_nonzero_without_config(
-    mock_init: MagicMock, tmp_path: Path, monkeypatch, project_name: str
+    mock_init: AsyncMock, tmp_path: Path, monkeypatch, project_name: str
 ) -> None:
     monkeypatch.chdir(tmp_path)
     mock_init.side_effect = RuntimeError("workshop unavailable")
@@ -74,10 +74,11 @@ def test_init_workshop_failure_exits_nonzero_without_config(
     assert not (tmp_path / ".microjail" / "config.yaml").exists()
 
 
-@patch("microjail.adapters.workshop.exists", return_value=False)
+@patch("microjail.adapters.workshop.exists", new_callable=AsyncMock)
 def test_init_adopt_fails_if_doesnt_exist(
-    mock_exists: MagicMock, tmp_path: Path, monkeypatch
+    mock_exists: AsyncMock, tmp_path: Path, monkeypatch
 ) -> None:
+    mock_exists.return_value = False
     monkeypatch.chdir(tmp_path)
 
     result = CliRunner().invoke(app, ["init", "bad-name", "--adopt"])
@@ -88,9 +89,9 @@ def test_init_adopt_fails_if_doesnt_exist(
     assert not (tmp_path / ".microjail" / "config.yaml").exists()
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_overwrite_warns_if_doesnt_exist(
-    mock_init: MagicMock, tmp_path: Path, monkeypatch
+    mock_init: AsyncMock, tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
@@ -104,10 +105,11 @@ def test_init_overwrite_warns_if_doesnt_exist(
     assert MicroJail.load(tmp_path).name == "bad-name"
 
 
-@patch("microjail.adapters.workshop.exists", return_value=True)
+@patch("microjail.adapters.workshop.exists", new_callable=AsyncMock)
 def test_init_adopt_succeeds_if_exists(
-    mock_exists: MagicMock, tmp_path: Path, monkeypatch, project_name: str
+    mock_exists: AsyncMock, tmp_path: Path, monkeypatch, project_name: str
 ) -> None:
+    mock_exists.return_value = True
     monkeypatch.chdir(tmp_path)
 
     result = CliRunner().invoke(app, ["init", project_name, "--adopt"])
@@ -120,9 +122,9 @@ def test_init_adopt_succeeds_if_exists(
     assert loaded.project_path == tmp_path
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_delegates_to_workshop_with_default_sdks(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -139,9 +141,9 @@ def test_init_delegates_to_workshop_with_default_sdks(
     assert loaded.name == project_name
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_default_omits_base(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -156,9 +158,9 @@ def test_init_default_omits_base(
     assert kwargs.get("sdks") is None
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_forwards_single_sdk(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -173,9 +175,9 @@ def test_init_forwards_single_sdk(
     )
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_forwards_multiple_sdks(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -190,14 +192,16 @@ def test_init_forwards_multiple_sdks(
     )
 
 
-@patch("subprocess.run")
+@patch("microjail.adapters.workshop.anyio.run_process", new_callable=AsyncMock)
 def test_init_preserves_direnv_in_sdk_list(
-    mock_run: MagicMock,
+    mock_run: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    mock_run.return_value = MagicMock()
+    mock_run.return_value.stdout = b""
 
     result = CliRunner().invoke(app, ["init", project_name, "--sdks", "golang"])
 
@@ -211,9 +215,9 @@ def test_init_preserves_direnv_in_sdk_list(
     assert "direnv" in sdks_list
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_forwards_sdks_to_adapter(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -227,9 +231,9 @@ def test_init_forwards_sdks_to_adapter(
     assert kwargs["sdks"] == ["golang"]
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_forwards_base(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -244,9 +248,9 @@ def test_init_forwards_base(
     )
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_forwards_base_to_adapter(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -260,9 +264,9 @@ def test_init_forwards_base_to_adapter(
     assert kwargs["base"] == "ubuntu@22.04"
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_omits_base_when_not_provided(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -276,9 +280,9 @@ def test_init_omits_base_when_not_provided(
     assert kwargs["base"] is None
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_init_exits_nonzero_on_sdk_failure(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -295,15 +299,16 @@ def test_init_exits_nonzero_on_sdk_failure(
     assert not (tmp_path / ".microjail" / "config.yaml").exists()
 
 
-@patch("microjail.adapters.workshop.exists", return_value=True)
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.exists", new_callable=AsyncMock)
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_adopt_ignores_sdks(
-    mock_init: MagicMock,
-    mock_exists: MagicMock,
+    mock_init: AsyncMock,
+    mock_exists: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
 ) -> None:
+    mock_exists.return_value = True
     monkeypatch.chdir(tmp_path)
 
     result = CliRunner().invoke(
@@ -315,15 +320,16 @@ def test_adopt_ignores_sdks(
     assert MicroJail.load(tmp_path).name == project_name
 
 
-@patch("microjail.adapters.workshop.exists", return_value=True)
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.exists", new_callable=AsyncMock)
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_adopt_warns_on_base(
-    mock_init: MagicMock,
-    mock_exists: MagicMock,
+    mock_init: AsyncMock,
+    mock_exists: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
 ) -> None:
+    mock_exists.return_value = True
     monkeypatch.chdir(tmp_path)
 
     result = CliRunner().invoke(
@@ -336,9 +342,9 @@ def test_adopt_warns_on_base(
     assert MicroJail.load(tmp_path).name == project_name
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_overwrite_forwards_sdks_and_base(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -368,9 +374,9 @@ def test_overwrite_forwards_sdks_and_base(
     assert (tmp_path / ".microjail" / "config.yaml").exists()
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_project_flag_resolves_relative_to_absolute(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -385,9 +391,9 @@ def test_project_flag_resolves_relative_to_absolute(
     assert (other / ".microjail" / "config.yaml").exists()
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_project_flag_accepts_absolute_path(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -402,9 +408,9 @@ def test_project_flag_accepts_absolute_path(
     assert (proj / ".microjail" / "config.yaml").exists()
 
 
-@patch("microjail.adapters.workshop.init")
+@patch("microjail.adapters.workshop.init", new_callable=AsyncMock)
 def test_project_flag_defaults_to_cwd(
-    mock_init: MagicMock,
+    mock_init: AsyncMock,
     tmp_path: Path,
     monkeypatch,
     project_name: str,
@@ -417,9 +423,9 @@ def test_project_flag_defaults_to_cwd(
     assert (tmp_path / ".microjail" / "config.yaml").exists()
 
 
-@patch("microjail.microjail.MicroJail.ensure")
+@patch("microjail.microjail.MicroJail.ensure", new_callable=AsyncMock)
 def test_lock_loads_config_from_resolved_project_path(
-    mock_ensure: MagicMock,
+    mock_ensure: AsyncMock,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -439,17 +445,24 @@ def test_lock_loads_config_from_resolved_project_path(
     mock_ensure.assert_called_once()
 
 
-@patch("microjail.microjail.MicroJail.release")
+@patch("microjail.microjail.MicroJail.release", new_callable=AsyncMock)
 @patch("microjail.microjail.MicroJail.load")
 def test_unlock_loads_config_from_resolved_project_path(
     mock_load: MagicMock,
-    mock_release: MagicMock,
+    mock_release: AsyncMock,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     proj = tmp_path / "myproject"
     proj.mkdir(parents=True)
     monkeypatch.chdir("/")
+
+    mock_mj = MagicMock(spec=MicroJail)
+    mock_mj.release = mock_release
+    mock_mj.lockdown = MagicMock()
+    mock_mj.lockdown.gates = []
+    mock_mj.lockdown.caps = []
+    mock_load.return_value = mock_mj
 
     result = CliRunner().invoke(app, ["--project", str(proj), "unlock"])
 

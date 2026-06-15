@@ -1,5 +1,6 @@
 from typing import Annotated
 
+import anyio
 import typer
 
 from microjail import policy
@@ -15,21 +16,25 @@ from microjail.warden import CapabilityPolicyViolation, GatePolicyViolation, War
 def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) -> None:
     project = get_project(ctx)
     microjail = load_microjail_or_exit(project)
-    if microjail.workshop_info() is None:
-        typer.echo(f"Launching workshop {microjail.name}...")
-        workshop.launch(microjail.name, project=microjail.project_path)
 
-    ensure_lockdown(microjail)
+    async def _run() -> None:
+        if await microjail.workshop_info() is None:
+            typer.echo(f"Launching workshop {microjail.name}...")
+            await workshop.launch(microjail.name, project=microjail.project_path)
 
-    process = microjail.popen(command, interactive=False)
-    warden = Warden(microjail, process)
-    try:
-        exit_code = warden.supervise()
-    except GatePolicyViolation as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(policy.RUNTIME_GATE_POLICY_VIOLATION) from exc
-    except CapabilityPolicyViolation as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(policy.FATAL_RUNTIME_CAPABILITY_VIOLATION) from exc
+        await ensure_lockdown(microjail)
 
-    raise typer.Exit(exit_code)
+        process = await microjail.popen(command, interactive=False)
+        warden = Warden(microjail, process)
+        try:
+            exit_code = await warden.supervise()
+        except GatePolicyViolation as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(policy.RUNTIME_GATE_POLICY_VIOLATION) from exc
+        except CapabilityPolicyViolation as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(policy.FATAL_RUNTIME_CAPABILITY_VIOLATION) from exc
+
+        raise typer.Exit(exit_code if exit_code is not None else 1)
+
+    anyio.run(_run)

@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Annotated
 
+import anyio
 import typer
 
 from microjail.adapters import workshop
@@ -32,27 +33,33 @@ def init(
 ) -> None:
     sdks_list = sdks.split(",") if sdks else None
     project = get_project(ctx)
-    if overwrite:
-        return overwrite_workshop(name, project=project, sdks=sdks_list, base=base)
-    if adopt:
-        return adopt_workshop(name, project=project, base=base)
 
-    try:
-        MicroJail.init(name, project_path=project, sdks=sdks_list, base=base)
-    except workshop.WorkshopExistsError as exc:
-        typer.echo(
-            f"Workshop '{exc.name}' already exists in {exc.project}. "
-            "Use --overwrite to replace this workshop definition "
-            "or --adopt to configure that existing workshop with microjail.",
-            err=True,
-        )
-        raise typer.Exit(code=1) from exc
-    except Exception as exc:
-        typer.echo(f"Failed to initialize Workshop '{name}': {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+    async def _run() -> None:
+        if overwrite:
+            await overwrite_workshop(name, project=project, sdks=sdks_list, base=base)
+            return
+        if adopt:
+            await adopt_workshop(name, project=project, base=base)
+            return
+
+        try:
+            await MicroJail.init(name, project_path=project, sdks=sdks_list, base=base)
+        except workshop.WorkshopExistsError as exc:
+            typer.echo(
+                f"Workshop '{exc.name}' already exists in {exc.project}. "
+                "Use --overwrite to replace this workshop definition "
+                "or --adopt to configure that existing workshop with microjail.",
+                err=True,
+            )
+            raise typer.Exit(code=1) from exc
+        except Exception as exc:
+            typer.echo(f"Failed to initialize Workshop '{name}': {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+    anyio.run(_run)
 
 
-def overwrite_workshop(
+async def overwrite_workshop(
     name: str,
     project: Path,
     sdks: list[str] | None = None,
@@ -66,13 +73,13 @@ def overwrite_workshop(
             f"WARN: Workshop '{name}' does not exist in {project} overwrite not needed",
             err=True,
         )
-    MicroJail.init(name, project_path=project, sdks=sdks, base=base)
+    await MicroJail.init(name, project_path=project, sdks=sdks, base=base)
 
 
-def adopt_workshop(name: str, project: Path, base: str | None = None) -> None:
+async def adopt_workshop(name: str, project: Path, base: str | None = None) -> None:
     if base is not None:
         typer.echo("WARN: --base is ignored during adopt", err=True)
-    if not workshop.exists(name, project):
+    if not await workshop.exists(name, project):
         typer.echo(
             f"Workshop '{name}' does not exist in {project}. "
             "Cannot adopt non-existent workshop",
