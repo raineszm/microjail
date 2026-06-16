@@ -83,6 +83,8 @@ def enc_hook(obj: object) -> object:
     """Serialize types msgspec does not handle natively."""
     if isinstance(obj, Path):
         return str(obj)
+    if hasattr(obj, "run") and hasattr(obj, "popen"):
+        return None
     raise NotImplementedError(f"cannot encode object of type {type(obj).__name__}")
 
 
@@ -278,7 +280,12 @@ class MicroJail(msgspec.Struct):
     def save(self) -> None:
         """Persist this microjail to ``.microjail/config.yaml``."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        self.config_path.write_bytes(msgspec.yaml.encode(self, enc_hook=enc_hook))
+        executor = self.workshop.executor
+        self.workshop.executor = None
+        try:
+            self.config_path.write_bytes(msgspec.yaml.encode(self, enc_hook=enc_hook))
+        finally:
+            self.workshop.executor = executor
 
     def destroy(
         self,
