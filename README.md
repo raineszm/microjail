@@ -54,7 +54,7 @@ ______________________________________________________________________
 
 ## Usage
 
-A microjail session has four commands.
+A microjail session has five commands.
 
 ### `microjail init`
 
@@ -95,6 +95,7 @@ Run the command against a specific project directory instead of the current work
 microjail --project /path/to/project init my-project
 microjail --project /path/to/project lock
 microjail --project /path/to/project unlock
+microjail --project /path/to/project shell
 ```
 
 ### `microjail lock`
@@ -115,6 +116,23 @@ microjail run -- opencode run "refactor the parser module"
 
 Workload exit codes are passed through. If microjail itself fails before or during execution, a bitmask exit code in the `0x40` range is returned instead (see *Exit codes* below).
 
+### `microjail shell`
+
+Apply the Lockdown and start an interactive shell inside the Workshop environment under Warden supervision. The command requires both stdin and stdout to be attached to a terminal; use `microjail run` for non-interactive scripts and CI jobs.
+
+```bash
+microjail shell
+```
+
+By default, `microjail shell` starts the container's default shell, matching `workshop shell`. Pass an explicit shell command after `--` when the environment needs a different command or shell flags:
+
+```bash
+microjail shell -- bash -l
+microjail shell -- zsh
+```
+
+The shell starts only after Capabilities and Gates apply successfully, runs through Workshop interactive execution, passes through the shell process exit code, and does not unlock the environment when the shell exits.
+
 ### `microjail unlock`
 
 Explicitly release the Lockdown — terminate any supervised workload, release gates, revoke capabilities. This is the only command that weakens the policy.
@@ -131,8 +149,8 @@ cd ~/my-project
 # Initialise a microjail for this project
 microjail init my-project
 
-# Run the workload; lock is applied automatically before launch
-microjail run -- opencode run "add docstrings to src/"
+# Start an interactive shell; lock is applied automatically before launch
+microjail shell
 
 # Release when you're done
 microjail unlock

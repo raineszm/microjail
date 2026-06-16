@@ -185,6 +185,20 @@ class Workshop(msgspec.Struct, omit_defaults=True):
             **kwargs,
         )
 
+    def shell(self, **kwargs) -> subprocess.Popen:
+        """Open the workshop's default interactive shell and return a process handle."""
+        self.ensure_launched()
+        return self._popen(
+            [
+                "workshop",
+                "shell",
+                "--project",
+                str(self.project),
+                self.name,
+            ],
+            **kwargs,
+        )
+
     def refresh(self) -> None:
         """Refresh the workshop environment."""
         self._run(

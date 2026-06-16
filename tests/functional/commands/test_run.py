@@ -214,3 +214,22 @@ def test_run_launches_workshop_if_not_launched(
     assert result.exit_code == 0
     mock_workshop_info.assert_called_once()
     mock_launch.assert_called_once()
+
+
+def test_run_remains_non_interactive_after_shell_addition(
+    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
+) -> None:
+    microjail = MicroJail(
+        workshop=Workshop(name="test-jail", project=microjail_project),
+        lockdown=Lockdown(caps=[], gates=[]),
+    )
+    load_as(microjail, monkeypatch)
+    mock_process = Mock()
+    popen = Mock(return_value=mock_process)
+    monkeypatch.setattr(MicroJail, "popen", popen)
+    monkeypatch.setattr(Warden, "supervise", Mock(return_value=0))
+
+    result = CliRunner().invoke(app, ["run", "--", "bash"])
+
+    assert result.exit_code == 0
+    popen.assert_called_once_with(["bash"], interactive=False)

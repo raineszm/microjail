@@ -164,6 +164,10 @@ class MicroJail(msgspec.Struct):
         """Execute *command* inside the associated workshop container and return a Workload process handle."""
         return self.workshop.popen(command, interactive=interactive, **kwargs)
 
+    def shell(self, **kwargs) -> subprocess.Popen:
+        """Open the associated workshop's default interactive shell and return a process handle."""
+        return self.workshop.shell(**kwargs)
+
     def container_name(self) -> str:
         """Return the LXD container name, raising if the workshop is not launched."""
         container = self.workshop.get_container()

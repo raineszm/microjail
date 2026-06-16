@@ -259,6 +259,41 @@ def test_workshop_popen_interactive_flag(
     assert popen.call_args[0][0][2] == "--interactive"
 
 
+def test_workshop_shell_builds_shell_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ws = Workshop(name="test", project=Path("/tmp/test"))
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        Mock(
+            side_effect=[
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=b"test  ready  ubuntu@22.04\n"
+                ),
+                subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=b"name: test\nstatus: ready\n"
+                ),
+            ]
+        ),
+    )
+    popen = Mock(spec=subprocess.Popen)
+    monkeypatch.setattr(subprocess, "Popen", popen)
+
+    ws.shell(stdin=None)
+
+    popen.assert_called_once_with(
+        [
+            "workshop",
+            "shell",
+            "--project",
+            "/tmp/test",
+            "test",
+        ],
+        stdin=None,
+    )
+
+
 def test_workshop_refresh_builds_correct_command(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

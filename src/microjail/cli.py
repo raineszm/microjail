@@ -8,6 +8,7 @@ from microjail.commands.destroy import destroy
 from microjail.commands.init import init
 from microjail.commands.lock import lock
 from microjail.commands.run import run
+from microjail.commands.shell import shell
 from microjail.commands.unlock import unlock
 
 app = typer.Typer(
@@ -32,5 +33,6 @@ def main(
 app.command("init")(init)
 app.command("lock")(lock)
 app.command("run")(run)
+app.command("shell")(shell)
 app.command("unlock")(unlock)
 app.command("destroy")(destroy)
