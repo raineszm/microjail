@@ -4,7 +4,6 @@ from typing import Annotated
 import typer
 
 from microjail import policy
-from microjail.adapters import workshop
 from microjail.commands.init import get_project
 from microjail.commands.lock import (
     ensure_lockdown,
@@ -18,7 +17,7 @@ def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) 
     microjail = load_microjail_or_exit(project)
     if microjail.workshop_info() is None:
         typer.echo(f"Launching workshop {microjail.name}...")
-        workshop.launch(microjail.name, project=microjail.project_path)
+        microjail.workshop.launch()
 
     ensure_lockdown(microjail)
 
@@ -39,5 +38,6 @@ def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) 
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
+                process.wait()
 
     raise typer.Exit(exit_code)

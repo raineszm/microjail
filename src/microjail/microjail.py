@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 import msgspec
 
-from microjail.adapters import lxc, workshop
-from microjail.adapters.workshop import Workshop
+from microjail.adapters import lxc
+from microjail.adapters.workshop import Workshop, WorkshopInfo, WorkshopNotLaunchedError
 from microjail.caps.base import Capability
 from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.gates.base import Gate
@@ -127,7 +127,7 @@ class MicroJail(msgspec.Struct):
     def config_path(self) -> Path:
         return self.config_dir / CONFIG_FILENAME
 
-    def workshop_info(self) -> workshop.WorkshopInfo | None:
+    def workshop_info(self) -> WorkshopInfo | None:
         """Return workshop info, or None if the workshop is not launched."""
         return self.workshop.info()
 
@@ -135,9 +135,7 @@ class MicroJail(msgspec.Struct):
         """Verify the associated workshop is launched and ready."""
         info = self.workshop_info()
         if info is None:
-            raise workshop.WorkshopNotLaunchedError(
-                name=self.name, project=self.project_path
-            )
+            raise WorkshopNotLaunchedError(name=self.name, project=self.project_path)
         if info.status != "ready":
             raise WorkshopNotReadyError(
                 name=self.name,
@@ -161,11 +159,9 @@ class MicroJail(msgspec.Struct):
 
     def container_name(self) -> str:
         """Return the LXD container name, raising if the workshop is not launched."""
-        container = workshop.get_container(self.name, project=self.project_path)
+        container = self.workshop.get_container()
         if container is None:
-            raise workshop.WorkshopNotLaunchedError(
-                name=self.name, project=self.project_path
-            )
+            raise WorkshopNotLaunchedError(name=self.name, project=self.project_path)
         return container.name
 
     def restore_workshop(self) -> None:
@@ -174,7 +170,7 @@ class MicroJail(msgspec.Struct):
 
     def lxd_project(self) -> str:
         """Return the workshop LXD project name."""
-        return workshop.lxd_project()
+        return self.workshop.lxd_project
 
     def lxc_instance(self) -> lxc.InstanceInfo:
         """Return LXD instance information for this workshop's container."""
@@ -348,7 +344,7 @@ class MicroJail(msgspec.Struct):
         sdks: list[str] | None = None,
         base: str | None = None,
     ) -> MicroJail:
-        workshop.init(name, project=project_path, sdks=sdks, base=base)
+        Workshop.init(name, project=project_path, sdks=sdks, base=base)
         config = cls(
             workshop=Workshop(name=name, project=project_path),
             lockdown=Lockdown.default(),

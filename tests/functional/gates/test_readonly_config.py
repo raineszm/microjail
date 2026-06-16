@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from microjail.adapters import workshop
 from microjail.adapters.workshop import Workshop
 from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import Lockdown
@@ -14,7 +13,6 @@ from microjail.microjail import (
     ApplicationStatus,
     MicroJail,
 )
-from tests._helpers import SharedWorkshop
 from tests.marks import requires_lxd, requires_workshop
 
 pytestmark = [
@@ -32,22 +30,20 @@ def launched_workshop(tmp_path_factory):
 
     try:
         os.chdir(project)
-        workshop.init(name, project=project)
+        Workshop.init(name, project=project)
         mj = MicroJail(
             workshop=Workshop(name=name, project=project), lockdown=Lockdown.default()
         )
         mj.save()
-        workshop.launch(name, project=project)
-        yield SharedWorkshop(name=name, path=project)
+        Workshop(name=name, project=project).launch()
+        yield Workshop(name=name, project=project)
     finally:
         os.chdir(cwd)
         subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
 
 
-def can_write_config(ws: SharedWorkshop) -> bool:
-    result = workshop.exec_(
-        ws.name,
-        ws.path,
+def can_write_config(ws: Workshop) -> bool:
+    result = ws.exec_(
         ["bash", "-c", "echo x >> /project/.microjail/config.yaml"],
         check=False,
         capture_output=True,
@@ -57,14 +53,14 @@ def can_write_config(ws: SharedWorkshop) -> bool:
 
 
 def test_readonly_config_blocks_write_on_application_and_restores_on_release(
-    launched_workshop: SharedWorkshop,
+    launched_workshop: Workshop,
 ) -> None:
     if not can_write_config(launched_workshop):
         pytest.skip("workshop does not have baseline write access to config")
 
     lockdown = Lockdown(caps=[], gates=[ReadonlyConfig()])
     microjail = MicroJail(
-        workshop=Workshop(name=launched_workshop.name, project=launched_workshop.path),
+        workshop=launched_workshop,
         lockdown=lockdown,
     )
 

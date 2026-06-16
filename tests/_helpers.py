@@ -1,26 +1,16 @@
 """Shared test helpers — importable by all test layers."""
 
 import socket
-from dataclasses import dataclass
-from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING
-
-from microjail.adapters import workshop
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-
-@dataclass(frozen=True)
-class SharedWorkshop:
-    name: str
-    path: Path
+    from microjail.adapters.workshop import Workshop
 
 
-def has_network_egress(ws: SharedWorkshop) -> bool:
-    result = workshop.exec_(
-        ws.name,
-        ws.path,
+def has_network_egress(ws: Workshop) -> bool:
+    result = ws.exec_(
         [
             "python3",
             "-c",
@@ -34,10 +24,8 @@ def has_network_egress(ws: SharedWorkshop) -> bool:
     return result.returncode == 0
 
 
-def can_write_microjail_config(ws: SharedWorkshop) -> bool:
-    result = workshop.exec_(
-        ws.name,
-        ws.path,
+def can_write_microjail_config(ws: Workshop) -> bool:
+    result = ws.exec_(
         ["test", "-w", "/project/.microjail/config.yaml"],
         check=False,
         capture_output=True,
@@ -46,10 +34,8 @@ def can_write_microjail_config(ws: SharedWorkshop) -> bool:
     return result.returncode == 0
 
 
-def can_append_microjail_config(ws: SharedWorkshop) -> bool:
-    result = workshop.exec_(
-        ws.name,
-        ws.path,
+def can_append_microjail_config(ws: Workshop) -> bool:
+    result = ws.exec_(
         ["sh", "-c", "echo probe >> /project/.microjail/config.yaml"],
         check=False,
         capture_output=True,
@@ -58,11 +44,9 @@ def can_append_microjail_config(ws: SharedWorkshop) -> bool:
     return result.returncode == 0
 
 
-def can_roundtrip_project_file(ws: SharedWorkshop) -> bool:
-    (ws.path / "input.txt").write_text("ok", encoding="utf-8")
-    result = workshop.exec_(
-        ws.name,
-        ws.path,
+def can_roundtrip_project_file(ws: Workshop) -> bool:
+    (ws.project / "input.txt").write_text("ok", encoding="utf-8")
+    result = ws.exec_(
         ["sh", "-c", "cat /project/input.txt > /project/out.txt"],
         check=False,
         capture_output=True,
@@ -70,7 +54,7 @@ def can_roundtrip_project_file(ws: SharedWorkshop) -> bool:
     )
     return (
         result.returncode == 0
-        and (ws.path / "out.txt").read_text(encoding="utf-8") == "ok"
+        and (ws.project / "out.txt").read_text(encoding="utf-8") == "ok"
     )
 
 

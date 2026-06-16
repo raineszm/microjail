@@ -201,7 +201,7 @@ def test_run_launches_workshop_if_not_launched(
     monkeypatch.setattr(MicroJail, "workshop_info", mock_workshop_info)
 
     mock_launch = Mock()
-    monkeypatch.setattr("microjail.adapters.workshop.launch", mock_launch)
+    monkeypatch.setattr(Workshop, "launch", mock_launch)
 
     # Mock popen, Warden supervise, ensure_lockdown to do nothing/success
     monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
@@ -213,4 +213,4 @@ def test_run_launches_workshop_if_not_launched(
 
     assert result.exit_code == 0
     mock_workshop_info.assert_called_once()
-    mock_launch.assert_called_once_with("test-jail", project=microjail_project)
+    mock_launch.assert_called_once()

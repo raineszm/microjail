@@ -7,14 +7,11 @@ import tempfile
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 import msgspec
 
 from microjail.policy import EGRESS_PROBE_TIMEOUT
-
-if TYPE_CHECKING:
-    from microjail.microjail import MicroJail
 
 
 class WorkshopInfo(msgspec.Struct):
@@ -101,7 +98,8 @@ class Workshop(msgspec.Struct):
                 .stdout.decode("utf-8")
                 .splitlines()
             ):
-                if line.split()[0] == self.name:
+                parts = line.split()
+                if parts and parts[0] == self.name:
                     return True
         except subprocess.CalledProcessError as exc:
             if b"not a project" in exc.stderr:
@@ -202,6 +200,57 @@ class Workshop(msgspec.Struct):
             **kwargs,
         )
 
+    @classmethod
+    def init(
+        cls,
+        name: str,
+        project: Path,
+        sdks: list[str] | None = None,
+        base: str | None = None,
+    ) -> None:
+        """Initialize a workshop in the project directory."""
+        if sdks is None:
+            sdks = []
+        sdks = sdks.copy()
+        sdks.append("direnv")
+
+        cmd = [
+            "workshop",
+            "init",
+            name,
+            "--project",
+            str(project),
+            "--sdks",
+            ",".join(sdks),
+        ]
+        if base is not None:
+            cmd.extend(["--base", base])
+
+        try:
+            subprocess.run(cmd, check=True, capture_output=True)
+        except subprocess.CalledProcessError as exc:
+            if b"already exists" in exc.stderr:
+                raise WorkshopExistsError(name=name, project=project) from exc
+            raise
+
+    @property
+    def lxd_project(self) -> str:
+        """Return the workshop LXD project name."""
+        return f"workshop.{project_suffix()}"
+
+    def get_container(self) -> ContainerInfo | None:
+        """Return LXD container info, or None if the container name is not resolved."""
+        c_name = self.container_name()
+        if c_name is None:
+            return None
+
+        result = subprocess.run(
+            ["lxc", "query", f"/1.0/instances/{c_name}?project={self.lxd_project}"],
+            check=True,
+            capture_output=True,
+        )
+        return msgspec.json.decode(result.stdout, type=ContainerInfo)
+
     @property
     def tunnel(self) -> TunnelInterface:
         return TunnelInterface(self.name, self.project, exec_=self.exec_)
@@ -211,13 +260,13 @@ class TunnelInterface:
     """Tunnel plug/slot/connection operations for a workshop."""
 
     def __init__(self, name: str, project: Path, exec_):
-        self._name = name
-        self._project = project
-        self._exec = exec_
+        self.name = name
+        self.project = project
+        self.exec_ = exec_
 
     def connections(self) -> list[tuple[str, str]]:
         result = subprocess.run(
-            ["workshop", "connections", self._name, "--project", str(self._project)],
+            ["workshop", "connections", self.name, "--project", str(self.project)],
             check=True,
             capture_output=True,
             text=True,
@@ -247,7 +296,7 @@ class TunnelInterface:
 
     def endpoint_reachable(self, host: str, port: int | str) -> bool:
         try:
-            result = self._exec(
+            result = self.exec_(
                 ["bash", "-c", f": >/dev/tcp/{host}/{port}"],
                 check=False,
                 capture_output=True,
@@ -263,10 +312,10 @@ class TunnelInterface:
             [
                 "workshop",
                 "connect",
-                f"{self._name}/{plug_sdk}:{plug}",
-                f"{self._name}/{slot_sdk}:{slot}",
+                f"{self.name}/{plug_sdk}:{plug}",
+                f"{self.name}/{slot_sdk}:{slot}",
                 "--project",
-                str(self._project),
+                str(self.project),
             ],
             check=True,
             capture_output=True,
@@ -278,10 +327,10 @@ class TunnelInterface:
                 [
                     "workshop",
                     "disconnect",
-                    f"{self._name}/{plug_sdk}:{plug}",
-                    f"{self._name}/{slot_sdk}:{slot}",
+                    f"{self.name}/{plug_sdk}:{plug}",
+                    f"{self.name}/{slot_sdk}:{slot}",
                     "--project",
-                    str(self._project),
+                    str(self.project),
                 ],
                 check=True,
                 capture_output=True,
@@ -292,23 +341,23 @@ class TunnelInterface:
             raise
 
     def add_plug(self, plug_name: str, endpoint: str) -> None:
-        data = read_microjail_sdk(self._project)
+        data = read_microjail_sdk(self.project)
         entry = data.plugs.get(plug_name)
         if entry is not None and entry.endpoint == endpoint:
             return
         data.plugs[plug_name] = _tunnel_entry(endpoint)
-        write_microjail_sdk(self._project, data)
+        write_microjail_sdk(self.project, data)
 
     def remove_plug(self, plug_name: str) -> bool:
-        data = read_microjail_sdk(self._project)
+        data = read_microjail_sdk(self.project)
         if plug_name not in data.plugs:
             return bool(data.plugs)
         del data.plugs[plug_name]
-        write_microjail_sdk(self._project, data)
+        write_microjail_sdk(self.project, data)
         return bool(data.plugs)
 
     def add_slot(self, slot_name: str, endpoint: str) -> None:
-        data = read_workshop_yaml(self._name, self._project)
+        data = read_workshop_yaml(self.name, self.project)
         changed = False
         if _sdk_entry(data, _PROJECT_MICROJAIL_SDK_NAME) is None:
             data.sdks.append(WorkshopSdk(name=_PROJECT_MICROJAIL_SDK_NAME))
@@ -326,10 +375,10 @@ class TunnelInterface:
             changed = True
 
         if changed:
-            write_workshop_yaml(self._name, self._project, data)
+            write_workshop_yaml(self.name, self.project, data)
 
     def remove_slot(self, slot_name: str, *, remove_sdk: bool = False) -> None:
-        data = read_workshop_yaml(self._name, self._project)
+        data = read_workshop_yaml(self.name, self.project)
         system = _sdk_entry(data, _SYSTEM_SDK_NAME)
         if system is None or slot_name not in system.slots:
             return
@@ -338,7 +387,7 @@ class TunnelInterface:
         if remove_sdk and not system.slots:
             data.sdks.remove(system)
 
-        write_workshop_yaml(self._name, self._project, data)
+        write_workshop_yaml(self.name, self.project, data)
 
 
 class TunnelEntry(msgspec.Struct):
@@ -388,106 +437,6 @@ def _sdk_entry(workshop_data: WorkshopConfig, name: str) -> WorkshopSdk | None:
     return None
 
 
-def connections(name: str, project: Path) -> list[tuple[str, str]]:
-    result = subprocess.run(
-        ["workshop", "connections", name, "--project", str(project)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    rows: list[tuple[str, str]] = []
-    lines = result.stdout.splitlines()
-    if len(lines) < 2:
-        return rows
-    header = lines[0]
-    try:
-        plug_start = header.index("PLUG")
-        slot_start = header.index("SLOT")
-        notes_start = header.index("NOTES")
-    except ValueError:
-        return rows
-    for line in lines[1:]:
-        if not line.strip():
-            continue
-        interface = line[:plug_start].strip()
-        if interface != _TUNNEL_INTERFACE:
-            continue
-        plug = line[plug_start:slot_start].strip()
-        slot = line[slot_start:notes_start].strip()
-        if plug and slot:
-            rows.append((plug, slot))
-    return rows
-
-
-def connect(
-    name: str, project: Path, plug_sdk: str, plug: str, slot_sdk: str, slot: str
-) -> None:
-    subprocess.run(
-        [
-            "workshop",
-            "connect",
-            f"{name}/{plug_sdk}:{plug}",
-            f"{name}/{slot_sdk}:{slot}",
-            "--project",
-            str(project),
-        ],
-        check=True,
-        capture_output=True,
-    )
-
-
-def disconnect(
-    name: str, project: Path, plug_sdk: str, plug: str, slot_sdk: str, slot: str
-) -> None:
-    try:
-        subprocess.run(
-            [
-                "workshop",
-                "disconnect",
-                f"{name}/{plug_sdk}:{plug}",
-                f"{name}/{slot_sdk}:{slot}",
-                "--project",
-                str(project),
-            ],
-            check=True,
-            capture_output=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        if b"not connected" in exc.stderr:
-            return
-        raise
-
-
-def refresh(name: str, project: Path) -> None:
-    subprocess.run(
-        ["workshop", "refresh", name, "--project", str(project)],
-        check=True,
-        capture_output=True,
-    )
-
-
-def restore(name: str, project: Path) -> None:
-    subprocess.run(
-        ["workshop", "restore", name, "--project", str(project)],
-        check=True,
-        capture_output=True,
-    )
-
-
-def endpoint_reachable(microjail: MicroJail, host: str, port: int | str) -> bool:
-    try:
-        result = microjail.exec_(
-            ["bash", "-c", f": >/dev/tcp/{host}/{port}"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=EGRESS_PROBE_TIMEOUT,
-        )
-    except subprocess.TimeoutExpired:
-        return False
-    return result.returncode == 0
-
-
 @cache
 def project_suffix() -> str:
     username = getpass.getuser()
@@ -533,131 +482,6 @@ def init(
         raise
 
 
-def launch(name: str, project: Path, **kwargs):
-    subprocess.run(
-        ["workshop", "launch", name, "--project", str(project)], check=True, **kwargs
-    )
-
-
-def remove(name: str, project: Path, **kwargs) -> None:
-    subprocess.run(
-        ["workshop", "remove", name, "--project", str(project)], check=True, **kwargs
-    )
-
-
-def start(name: str, project: Path, **kwargs) -> None:
-    subprocess.run(
-        ["workshop", "start", name, "--project", str(project)], check=True, **kwargs
-    )
-
-
-def info(name: str, project: Path) -> WorkshopInfo | None:
-    try:
-        result = subprocess.run(
-            ["workshop", "info", name, "--project", str(project)],
-            check=True,
-            capture_output=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        if b"workshop not launched" in exc.stderr:
-            return None
-        raise
-    return msgspec.yaml.decode(result.stdout, type=WorkshopInfo)
-
-
-def container_name(name: str, project: Path) -> str | None:
-    lock_file = project / ".workshop.lock"
-    if not lock_file.exists():
-        return None
-    return f"{name}-{lock_file.read_text(encoding='utf-8').strip()}"
-
-
-def get_container(name: str, project: Path) -> ContainerInfo | None:
-    c_name = container_name(name, project)
-    if c_name is None:
-        return None
-
-    result = subprocess.run(
-        ["lxc", "query", f"/1.0/instances/{c_name}?project={lxd_project()}"],
-        check=True,
-        capture_output=True,
-    )
-    return msgspec.json.decode(result.stdout, type=ContainerInfo)
-
-
-def exists(name: str, project: Path) -> bool:
-    try:
-        for line in (
-            subprocess.run(
-                ["workshop", "list", "--project", str(project), "--no-headers"],
-                check=True,
-                capture_output=True,
-            )
-            .stdout.decode("utf-8")
-            .splitlines()
-        ):
-            if line.split()[0] == name:
-                return True
-    except subprocess.CalledProcessError as exc:
-        if b"not a project" in exc.stderr:
-            return False
-        raise
-    return False
-
-
-def ensure_exists_and_launched(name: str, project: Path) -> None:
-    if not exists(name, project):
-        raise WorkshopNotFoundError(name=name, project=project)
-
-    if info(name, project) is None:
-        raise WorkshopNotLaunchedError(name=name, project=project)
-
-
-def exec_(
-    name: str, project: Path, command: list[str], **kwargs
-) -> subprocess.CompletedProcess:
-    ensure_exists_and_launched(name, project)
-
-    return subprocess.run(
-        [
-            "workshop",
-            "exec",
-            "--non-interactive",
-            "--project",
-            str(project),
-            name,
-            "--",
-            *command,
-        ],
-        **kwargs,
-    )
-
-
-def popen(
-    name: str,
-    project: Path,
-    command: list[str],
-    *,
-    interactive: bool = False,
-    **kwargs,
-) -> subprocess.Popen:
-    ensure_exists_and_launched(name, project)
-    mode_flag = "--interactive" if interactive else "--non-interactive"
-    return subprocess.Popen(
-        [
-            "workshop",
-            "exec",
-            mode_flag,
-            "--project",
-            str(project),
-            name,
-            "--",
-            *command,
-        ],
-        **kwargs,
-    )
-
-
 def read_workshop_yaml(name: str, project: Path) -> WorkshopConfig:
     path = project / _WORKSHOP_DIRNAME / f"{name}.yaml"
     if not path.exists():
@@ -690,61 +514,3 @@ def write_microjail_sdk(project: Path, data: MicrojailSdk) -> None:
     _atomic_write_yaml(
         project / _WORKSHOP_DIRNAME / _MICROJAIL_SDK_NAME / "sdk.yaml", data
     )
-
-
-def add_tunnel_plug(project: Path, plug_name: str, endpoint: str) -> None:
-    data = read_microjail_sdk(project)
-    entry = data.plugs.get(plug_name)
-    if entry is not None and entry.endpoint == endpoint:
-        return
-    data.plugs[plug_name] = _tunnel_entry(endpoint)
-    write_microjail_sdk(project, data)
-
-
-def remove_tunnel_plug(project: Path, plug_name: str) -> bool:
-    data = read_microjail_sdk(project)
-    if plug_name not in data.plugs:
-        return bool(data.plugs)
-    del data.plugs[plug_name]
-    write_microjail_sdk(project, data)
-    return bool(data.plugs)
-
-
-def add_tunnel_slot(name: str, project: Path, slot_name: str, endpoint: str) -> None:
-    data = read_workshop_yaml(name, project)
-    changed = False
-    if _sdk_entry(data, _PROJECT_MICROJAIL_SDK_NAME) is None:
-        data.sdks.append(WorkshopSdk(name=_PROJECT_MICROJAIL_SDK_NAME))
-        changed = True
-
-    system = _sdk_entry(data, _SYSTEM_SDK_NAME)
-    if system is None:
-        system = WorkshopSdk(name=_SYSTEM_SDK_NAME)
-        data.sdks.append(system)
-        changed = True
-
-    entry = system.slots.get(slot_name)
-    if entry is None or entry.endpoint != endpoint:
-        system.slots[slot_name] = _tunnel_entry(endpoint)
-        changed = True
-
-    if changed:
-        write_workshop_yaml(name, project, data)
-
-
-def remove_tunnel_slot(
-    name: str, project: Path, slot_name: str, remove_sdk: bool
-) -> None:
-    data = read_workshop_yaml(name, project)
-    system = _sdk_entry(data, _SYSTEM_SDK_NAME)
-    if system is None or slot_name not in system.slots:
-        return
-
-    del system.slots[slot_name]
-
-    if remove_sdk:
-        data.sdks = [
-            entry for entry in data.sdks if entry.name != _PROJECT_MICROJAIL_SDK_NAME
-        ]
-
-    write_workshop_yaml(name, project, data)

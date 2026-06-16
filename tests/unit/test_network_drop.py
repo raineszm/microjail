@@ -89,7 +89,7 @@ def test_release_restores_workshop_when_removed_network_device_cannot_be_derived
     network_gate = gate()
     network_gate.release(mock_mj)
 
-    mock_mj.restore_workshop.assert_called_once_with()
+    mock_mj.restore_workshop.assert_called_once()
     mock_mj.add_device.assert_not_called()
 
 

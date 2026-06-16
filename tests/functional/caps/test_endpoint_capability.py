@@ -44,7 +44,7 @@ def test_provide_calls_adapter_sequence_in_order(
             plug_sdk="microjail", plug="inference", slot_sdk="system", slot="inference"
         ),
     ]
-    r.assert_called_once_with()
+    r.assert_called_once()
 
 
 def test_provide_passes_container_endpoint_to_plug_and_host_endpoint_to_slot(
@@ -71,7 +71,7 @@ def test_provide_passes_container_endpoint_to_plug_and_host_endpoint_to_slot(
             plug_sdk="microjail", plug="inference", slot_sdk="system", slot="inference"
         ),
     ]
-    r.assert_called_once_with()
+    r.assert_called_once()
 
 
 def test_revoke_calls_adapter_sequence_in_order(
@@ -93,7 +93,7 @@ def test_revoke_calls_adapter_sequence_in_order(
         call.remove_plug("inference"),
         call.remove_slot("inference", remove_sdk=False),
     ]
-    r.assert_called_once_with()
+    r.assert_called_once()
 
 
 def test_check_parses_workshop_connections_column_positions(

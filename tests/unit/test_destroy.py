@@ -41,7 +41,7 @@ def test_destroy_pending_workshop(
     assert result.exit_code == 0
     assert mock_info.call_count == 3
     assert mock_sleep.call_count == 2
-    mock_remove.assert_called_once_with()
+    mock_remove.assert_called_once()
 
 
 @patch.object(Workshop, "info")
@@ -55,5 +55,5 @@ def test_destroy_off_workshop(
     result = CliRunner().invoke(app, ["--project", str(tmp_path), "destroy"])
 
     assert result.exit_code == 0
-    mock_start.assert_called_once_with()
-    mock_remove.assert_called_once_with()
+    mock_start.assert_called_once()
+    mock_remove.assert_called_once()

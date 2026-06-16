@@ -1,3 +1,4 @@
+import subprocess
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, PropertyMock
 
@@ -35,7 +36,7 @@ def test_check_returns_false_when_connection_row_is_absent(
 
     assert not cap.check(tmp_microjail)
 
-    mock_tunnel.connections.assert_called_once_with()
+    mock_tunnel.connections.assert_called_once()
     mock_tunnel.endpoint_reachable.assert_not_called()
 
 
@@ -69,6 +70,48 @@ def test_check_returns_false_when_endpoint_is_unreachable(
     assert not cap.check(tmp_microjail)
 
     mock_tunnel.endpoint_reachable.assert_called_once_with("127.0.0.1", "8080")
+
+
+def test_check_returns_false_when_connections_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    cap = capability()
+    mock_tunnel = Mock()
+    mock_tunnel.connections.side_effect = subprocess.CalledProcessError(
+        returncode=1, cmd=["workshop", "connections"]
+    )
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+    assert not cap.check(tmp_microjail)
+
+
+def test_check_returns_false_when_reachability_times_out(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    cap = capability()
+    mock_tunnel = Mock()
+    mock_tunnel.connections.return_value = [
+        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
+    ]
+    mock_tunnel.endpoint_reachable.side_effect = subprocess.TimeoutExpired(
+        cmd=["bash"], timeout=5
+    )
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+    assert not cap.check(tmp_microjail)
+
+
+def test_check_returns_false_on_invalid_endpoint(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    cap = WorkshopEndpointCapability(name="inference", host_endpoint="invalid-no-port")
+    mock_tunnel = Mock()
+    mock_tunnel.connections.return_value = [
+        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
+    ]
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+    assert not cap.check(tmp_microjail)
 
 
 def test_check_probes_container_endpoint_when_set(
@@ -132,7 +175,7 @@ def test_revoke_is_idempotent_when_capability_was_never_provided(
     )
     mock_tunnel.remove_plug.assert_called_once_with("inference")
     mock_tunnel.remove_slot.assert_called_once_with("inference", remove_sdk=False)
-    mock_refresh.assert_called_once_with()
+    mock_refresh.assert_called_once()
 
 
 def test_config_round_trip_deserializes_endpoint_proxy_capability() -> None:
