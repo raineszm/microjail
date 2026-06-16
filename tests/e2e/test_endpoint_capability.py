@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from microjail import policy
-from microjail.adapters import workshop
+from microjail.adapters.workshop import Workshop
 from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.cli import app
 from microjail.lockdown import Lockdown
@@ -20,7 +20,6 @@ from microjail.microjail import (
     MicroJail,
 )
 from tests._helpers import (
-    SharedWorkshop,
     has_network_egress,
 )
 from tests._helpers import (
@@ -44,14 +43,15 @@ def host_tcp_listener() -> Generator[tuple[str, int]]:
 
 @pytest.fixture(scope="function")
 def endpoint_microjail(
-    endpoint_e2e_workshop: SharedWorkshop,
+    endpoint_e2e_workshop: Workshop,
     host_tcp_listener: tuple[str, int],
 ) -> MicroJail:
     """A saved MicroJail config with one endpoint capability."""
     host, port = host_tcp_listener
     mj = MicroJail(
-        name=endpoint_e2e_workshop.name,
-        project_path=endpoint_e2e_workshop.path,
+        workshop=Workshop(
+            name=endpoint_e2e_workshop.name, project=endpoint_e2e_workshop.project
+        ),
         lockdown=Lockdown(
             caps=[
                 WorkshopEndpointCapability(
@@ -79,7 +79,7 @@ def test_provide_makes_endpoint_reachable(
     cap.provide(endpoint_microjail)
 
     assert cap.check(endpoint_microjail)
-    assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
+    assert endpoint_microjail.workshop.tunnel.endpoint_reachable(host, str(port))
 
 
 def test_lockdown_application_applies_endpoint_capability(
@@ -94,16 +94,14 @@ def test_lockdown_application_applies_endpoint_capability(
 
     assert result.status is ApplicationStatus.SUCCESS
 
-    assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
+    assert endpoint_microjail.workshop.tunnel.endpoint_reachable(host, str(port))
 
 
 def test_run_with_endpoint_capability_reaches_declared_endpoint_and_blocks_other_egress(
     endpoint_microjail: MicroJail,
     host_tcp_listener: tuple[str, int],
 ) -> None:
-    ws = SharedWorkshop(
-        name=endpoint_microjail.name, path=endpoint_microjail.project_path
-    )
+    ws = endpoint_microjail.workshop
     host, port = host_tcp_listener
     if not has_network_egress(ws):
         pytest.skip("workshop lacks baseline network egress")
@@ -121,16 +119,15 @@ def test_run_with_endpoint_capability_reaches_declared_endpoint_and_blocks_other
 
     assert result.exit_code == 0, result.stderr
     assert (endpoint_microjail.project_path / "endpoint-ok").exists()
-    assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
+    assert endpoint_microjail.workshop.tunnel.endpoint_reachable(host, str(port))
     assert not has_network_egress(ws)
 
 
 def test_run_does_not_start_workload_when_endpoint_capability_cannot_be_applied(
-    e2e_workshop: SharedWorkshop,
+    e2e_workshop: Workshop,
 ) -> None:
     mj = MicroJail(
-        name=e2e_workshop.name,
-        project_path=e2e_workshop.path,
+        workshop=e2e_workshop,
         lockdown=Lockdown(
             caps=[
                 WorkshopEndpointCapability(
@@ -148,7 +145,7 @@ def test_run_does_not_start_workload_when_endpoint_capability_cannot_be_applied(
     )
 
     assert result.exit_code == policy.CAPABILITY_APPLICATION_FAILURE
-    assert not (e2e_workshop.path / "started").exists()
+    assert not (e2e_workshop.project / "started").exists()
 
 
 def test_unlock_revokes_declared_endpoint_capability(
@@ -159,8 +156,8 @@ def test_unlock_revokes_declared_endpoint_capability(
 
     result = CliRunner().invoke(app, ["run", "--", "true"])
     assert result.exit_code == 0, result.stderr
-    assert workshop.endpoint_reachable(endpoint_microjail, host, str(port))
+    assert endpoint_microjail.workshop.tunnel.endpoint_reachable(host, str(port))
 
     result = CliRunner().invoke(app, ["unlock"])
     assert result.exit_code == 0, result.stderr
-    assert not workshop.endpoint_reachable(endpoint_microjail, host, str(port))
+    assert not endpoint_microjail.workshop.tunnel.endpoint_reachable(host, str(port))

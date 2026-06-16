@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from microjail.adapters import workshop
 from microjail.gates.network_drop import NetworkDrop
 from microjail.lockdown import Lockdown
 from microjail.microjail import (
@@ -13,7 +12,7 @@ from microjail.microjail import (
 from tests.marks import requires_lxd, requires_workshop
 
 if TYPE_CHECKING:
-    from tests._helpers import SharedWorkshop
+    from microjail.adapters.workshop import Workshop
 
 pytestmark = [
     requires_lxd(),
@@ -24,10 +23,8 @@ pytestmark = [
 NETWORK_PROBE_TIMEOUT = 10
 
 
-def has_network_egress(workshop_state: SharedWorkshop) -> bool:
-    result = workshop.exec_(
-        workshop_state.name,
-        workshop_state.path,
+def has_network_egress(workshop_state: Workshop) -> bool:
+    result = workshop_state.exec_(
         [
             "python3",
             "-c",
@@ -42,15 +39,14 @@ def has_network_egress(workshop_state: SharedWorkshop) -> bool:
 
 
 def test_network_drop_blocks_egress_on_application_and_restores_it_on_release(
-    launched_workshop: SharedWorkshop,
+    launched_workshop: Workshop,
 ) -> None:
     if not has_network_egress(launched_workshop):
         pytest.skip("workshop does not have baseline network egress")
 
     lockdown = Lockdown(caps=[], gates=[NetworkDrop()])
     microjail = MicroJail(
-        name=launched_workshop.name,
-        project_path=launched_workshop.path,
+        workshop=launched_workshop,
         lockdown=lockdown,
     )
 

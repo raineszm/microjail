@@ -1,31 +1,26 @@
 import subprocess
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Generator
-    from pathlib import Path
+from pathlib import Path
 
-
-@dataclass(frozen=True)
-class TmpWorkshop:
-    name: str
-    path: Path
+from microjail.adapters.workshop import Workshop
 
 
 @pytest.fixture
-def tmp_workshop(tmpdir, project_name, monkeypatch) -> Generator[TmpWorkshop]:
+def tmp_workshop(tmpdir, project_name, monkeypatch) -> Generator[Workshop]:
     """A tempory directory for creating a workshop.
 
     Ensure that the workshop is removed when it's done."""
 
     monkeypatch.chdir(tmpdir)
 
-    yield TmpWorkshop(
+    yield Workshop(
         name=project_name,
-        path=tmpdir,
+        project=Path(tmpdir),
     )
 
     # Clean up the workshop before we move on.

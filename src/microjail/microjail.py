@@ -7,7 +7,13 @@ from typing import TYPE_CHECKING
 
 import msgspec
 
-from microjail.adapters import lxc, workshop
+from microjail.adapters import lxc
+from microjail.adapters.workshop import (
+    CommandExecutor,
+    Workshop,
+    WorkshopInfo,
+    WorkshopNotLaunchedError,
+)
 from microjail.caps.base import Capability
 from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.gates.base import Gate
@@ -82,6 +88,8 @@ def enc_hook(obj: object) -> object:
     """Serialize types msgspec does not handle natively."""
     if isinstance(obj, Path):
         return str(obj)
+    if hasattr(obj, "run") and hasattr(obj, "popen"):
+        return None
     raise NotImplementedError(f"cannot encode object of type {type(obj).__name__}")
 
 
@@ -98,21 +106,25 @@ def dec_hook(expected: type, obj: object) -> object:
 
 class MicroJail(msgspec.Struct):
     """Configuration for a single microjail.
-
     Parameters
     ----------
-    name:
-        Name of the associated workshop.
-    project_path:
-        Path to the workshop project that this microjail governs.
+    workshop:
+        The workshop instance this microjail governs.
     lockdown:
         The policy applied while workloads execute.
     """
 
-    name: str
-    project_path: Path
+    workshop: Workshop
     lockdown: Lockdown
     purge_path: str = "data"
+
+    @property
+    def name(self) -> str:
+        return self.workshop.name
+
+    @property
+    def project_path(self) -> Path:
+        return self.workshop.project
 
     @property
     def config_dir(self) -> Path:
@@ -122,17 +134,15 @@ class MicroJail(msgspec.Struct):
     def config_path(self) -> Path:
         return self.config_dir / CONFIG_FILENAME
 
-    def workshop_info(self) -> workshop.WorkshopInfo | None:
+    def workshop_info(self) -> WorkshopInfo | None:
         """Return workshop info, or None if the workshop is not launched."""
-        return workshop.info(self.name, project=self.project_path)
+        return self.workshop.info()
 
     def ensure_workshop_ready(self) -> None:
         """Verify the associated workshop is launched and ready."""
         info = self.workshop_info()
         if info is None:
-            raise workshop.WorkshopNotLaunchedError(
-                name=self.name, project=self.project_path
-            )
+            raise WorkshopNotLaunchedError(name=self.name, project=self.project_path)
         if info.status != "ready":
             raise WorkshopNotReadyError(
                 name=self.name,
@@ -142,7 +152,7 @@ class MicroJail(msgspec.Struct):
 
     def exec_(self, command: list[str], **kwargs) -> subprocess.CompletedProcess:
         """Execute *command* inside the associated workshop container."""
-        return workshop.exec_(self.name, self.project_path, command, **kwargs)
+        return self.workshop.exec_(command, **kwargs)
 
     def popen(
         self,
@@ -152,30 +162,22 @@ class MicroJail(msgspec.Struct):
         **kwargs,
     ) -> subprocess.Popen:
         """Execute *command* inside the associated workshop container and return a Workload process handle."""
-        return workshop.popen(
-            self.name,
-            self.project_path,
-            command,
-            interactive=interactive,
-            **kwargs,
-        )
+        return self.workshop.popen(command, interactive=interactive, **kwargs)
 
     def container_name(self) -> str:
         """Return the LXD container name, raising if the workshop is not launched."""
-        container = workshop.get_container(self.name, project=self.project_path)
+        container = self.workshop.get_container()
         if container is None:
-            raise workshop.WorkshopNotLaunchedError(
-                name=self.name, project=self.project_path
-            )
+            raise WorkshopNotLaunchedError(name=self.name, project=self.project_path)
         return container.name
 
     def restore_workshop(self) -> None:
         """Restore the Workshop environment to its last launch/refresh point."""
-        workshop.restore(self.name, project=self.project_path)
+        self.workshop.restore()
 
     def lxd_project(self) -> str:
         """Return the workshop LXD project name."""
-        return workshop.lxd_project()
+        return self.workshop.lxd_project
 
     def lxc_instance(self) -> lxc.InstanceInfo:
         """Return LXD instance information for this workshop's container."""
@@ -283,7 +285,12 @@ class MicroJail(msgspec.Struct):
     def save(self) -> None:
         """Persist this microjail to ``.microjail/config.yaml``."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        self.config_path.write_bytes(msgspec.yaml.encode(self, enc_hook=enc_hook))
+        executor = self.workshop.executor
+        self.workshop.executor = None
+        try:
+            self.config_path.write_bytes(msgspec.yaml.encode(self, enc_hook=enc_hook))
+        finally:
+            self.workshop.executor = executor
 
     def destroy(
         self,
@@ -299,7 +306,7 @@ class MicroJail(msgspec.Struct):
         import time
 
         while True:
-            info = workshop.info(self.name, self.project_path)
+            info = self.workshop.info()
             if not info:
                 break
             if info.status == "pending":
@@ -310,12 +317,12 @@ class MicroJail(msgspec.Struct):
             elif info.status == "off":
                 if echo:
                     echo("Workshop is off, starting before removal...")
-                workshop.start(self.name, self.project_path)
+                self.workshop.start()
                 break
             else:
                 break
 
-        workshop.remove(self.name, self.project_path)
+        self.workshop.remove()
 
         if delete_project:
             shutil.rmtree(self.project_path)
@@ -325,7 +332,9 @@ class MicroJail(msgspec.Struct):
                 shutil.rmtree(purge_dir)
 
     @classmethod
-    def load(cls, project_path: Path) -> MicroJail:
+    def load(
+        cls, project_path: Path, executor: CommandExecutor | None = None
+    ) -> MicroJail:
         """Load the microjail config stored under ``project_path``.
 
         Raises
@@ -339,7 +348,10 @@ class MicroJail(msgspec.Struct):
         except FileNotFoundError as exc:
             raise ConfigNotFoundError(project_path=project_path) from exc
 
-        return msgspec.yaml.decode(raw, type=cls, dec_hook=dec_hook)
+        config = msgspec.yaml.decode(raw, type=cls, dec_hook=dec_hook)
+        if executor is not None:
+            config.workshop.executor = executor
+        return config
 
     @classmethod
     def init(
@@ -348,16 +360,15 @@ class MicroJail(msgspec.Struct):
         project_path: Path,
         sdks: list[str] | None = None,
         base: str | None = None,
+        executor: CommandExecutor | None = None,
     ) -> MicroJail:
-        """Initialize a new microjail: create Workshop and persist config.
-
-        Raises
-        ------
-        WorkshopExistsError:
-            If a Workshop with *name* already exists at *project_path*.
-        """
-        workshop.init(name, project=project_path, sdks=sdks, base=base)
-        config = cls(name=name, project_path=project_path, lockdown=Lockdown.default())
+        Workshop.init(
+            name, project=project_path, sdks=sdks, base=base, executor=executor
+        )
+        config = cls(
+            workshop=Workshop(name=name, project=project_path, executor=executor),
+            lockdown=Lockdown.default(),
+        )
         config.save()
         if config.purge_path:
             (project_path / config.purge_path).mkdir(parents=True, exist_ok=True)

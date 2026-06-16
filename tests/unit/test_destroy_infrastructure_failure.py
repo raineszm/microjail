@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
+from microjail.adapters.workshop import Workshop
 from microjail.cli import app
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
@@ -14,14 +15,17 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def mock_microjail(tmp_path: Path):
-    mj = MicroJail(name="test-jail", project_path=tmp_path, lockdown=Lockdown.default())
+    mj = MicroJail(
+        workshop=Workshop(name="test-jail", project=tmp_path),
+        lockdown=Lockdown.default(),
+    )
     mj.save()
     (tmp_path / "data").mkdir()
     return mj
 
 
-@patch("microjail.microjail.workshop.remove")
-@patch("microjail.microjail.workshop.info")
+@patch.object(Workshop, "remove")
+@patch.object(Workshop, "info")
 def test_destroy_infrastructure_failure(
     mock_info, mock_remove, mock_microjail, tmp_path
 ):

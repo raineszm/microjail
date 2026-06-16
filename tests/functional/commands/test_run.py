@@ -4,6 +4,7 @@ from unittest.mock import Mock
 from typer.testing import CliRunner
 
 from microjail import policy
+from microjail.adapters.workshop import Workshop
 from microjail.cli import app
 from microjail.lockdown import Lockdown
 from microjail.microjail import (
@@ -42,8 +43,7 @@ def test_run_propagates_workload_exit_status(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[], gates=[]),
     )
     load_as(microjail, monkeypatch)
@@ -66,8 +66,7 @@ def test_run_capability_failure_blocks_workload_and_skips_gates(
     cap = RecordingCapability("local-inference", checks=[False, False])
     gate = RecordingGate("network-egress", checks=[False, True])
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     load_as(microjail, monkeypatch)
@@ -88,8 +87,7 @@ def test_run_gate_failure_blocks_workload(
 ) -> None:
     gate = RecordingGate("network-egress", checks=[False, False])
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[], gates=[gate]),
     )
     load_as(microjail, monkeypatch)
@@ -110,8 +108,7 @@ def test_run_rolls_back_applied_policy_on_pre_workload_failure(
     cap = RecordingCapability("endpoint", checks=[False, True])
     gate = RecordingGate("network-egress", checks=[False, False])
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
@@ -128,8 +125,7 @@ def test_run_uses_warden_supervision(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[], gates=[]),
     )
     load_as(microjail, monkeypatch)
@@ -152,8 +148,7 @@ def test_run_exits_with_84_on_gate_violation(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[], gates=[]),
     )
     load_as(microjail, monkeypatch)
@@ -175,8 +170,7 @@ def test_run_exits_with_82_on_fatal_capability_violation(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[], gates=[]),
     )
     load_as(microjail, monkeypatch)
@@ -198,8 +192,7 @@ def test_run_launches_workshop_if_not_launched(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[], gates=[]),
     )
     monkeypatch.setattr(MicroJail, "load", Mock(return_value=microjail))
@@ -208,7 +201,7 @@ def test_run_launches_workshop_if_not_launched(
     monkeypatch.setattr(MicroJail, "workshop_info", mock_workshop_info)
 
     mock_launch = Mock()
-    monkeypatch.setattr("microjail.adapters.workshop.launch", mock_launch)
+    monkeypatch.setattr(Workshop, "launch", mock_launch)
 
     # Mock popen, Warden supervise, ensure_lockdown to do nothing/success
     monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
@@ -220,4 +213,4 @@ def test_run_launches_workshop_if_not_launched(
 
     assert result.exit_code == 0
     mock_workshop_info.assert_called_once()
-    mock_launch.assert_called_once_with("test-jail", project=microjail_project)
+    mock_launch.assert_called_once()

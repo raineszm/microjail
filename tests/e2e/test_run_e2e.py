@@ -1,16 +1,20 @@
+from typing import TYPE_CHECKING
+
 import pytest
 from typer.testing import CliRunner
 
 from microjail.cli import app
 from tests._helpers import (
-    SharedWorkshop,
     can_append_microjail_config,
     can_write_microjail_config,
     has_network_egress,
 )
 
+if TYPE_CHECKING:
+    from microjail.adapters.workshop import Workshop
 
-def require_baseline_lockable(ws: SharedWorkshop) -> None:
+
+def require_baseline_lockable(ws: Workshop) -> None:
     if not has_network_egress(ws):
         pytest.skip("workshop lacks baseline network egress")
     if not can_write_microjail_config(ws):
@@ -18,7 +22,7 @@ def require_baseline_lockable(ws: SharedWorkshop) -> None:
 
 
 def test_run_applies_readonly_config_gate_before_workload(
-    e2e_workshop: SharedWorkshop,
+    e2e_workshop: Workshop,
 ) -> None:
     require_baseline_lockable(e2e_workshop)
 
@@ -31,7 +35,7 @@ def test_run_applies_readonly_config_gate_before_workload(
     assert not can_append_microjail_config(e2e_workshop)
 
 
-def test_run_does_not_unlock_after_workload_exits(e2e_workshop: SharedWorkshop) -> None:
+def test_run_does_not_unlock_after_workload_exits(e2e_workshop: Workshop) -> None:
     require_baseline_lockable(e2e_workshop)
 
     result = CliRunner().invoke(app, ["run", "--", "true"])
@@ -42,10 +46,10 @@ def test_run_does_not_unlock_after_workload_exits(e2e_workshop: SharedWorkshop) 
 
 
 def test_run_preserves_workshop_project_mount_behavior(
-    e2e_workshop: SharedWorkshop,
+    e2e_workshop: Workshop,
 ) -> None:
     require_baseline_lockable(e2e_workshop)
-    (e2e_workshop.path / "input.txt").write_text("ok", encoding="utf-8")
+    (e2e_workshop.project / "input.txt").write_text("ok", encoding="utf-8")
 
     result = CliRunner().invoke(
         app,
@@ -53,13 +57,13 @@ def test_run_preserves_workshop_project_mount_behavior(
     )
 
     assert result.exit_code == 0, result.stderr
-    assert (e2e_workshop.path / "out.txt").read_text(encoding="utf-8") == "ok"
+    assert (e2e_workshop.project / "out.txt").read_text(encoding="utf-8") == "ok"
     assert not has_network_egress(e2e_workshop)
     assert not can_write_microjail_config(e2e_workshop)
 
 
 def test_lock_then_run_succeeds_without_clean_baseline(
-    e2e_workshop: SharedWorkshop,
+    e2e_workshop: Workshop,
 ) -> None:
     require_baseline_lockable(e2e_workshop)
 
@@ -71,25 +75,16 @@ def test_lock_then_run_succeeds_without_clean_baseline(
 
 
 def test_run_auto_launches_workshop_e2e(
-    e2e_unlaunched_workshop: SharedWorkshop,
+    e2e_unlaunched_workshop: Workshop,
 ) -> None:
-    from microjail.adapters import workshop
-
     # Assert that workshop is NOT launched before running
-    assert (
-        workshop.info(
-            e2e_unlaunched_workshop.name, project=e2e_unlaunched_workshop.path
-        )
-        is None
-    )
+    assert e2e_unlaunched_workshop.info() is None
 
     # Act: Run microjail run
     result = CliRunner().invoke(app, ["run", "--", "true"])
 
     # Assert
     assert result.exit_code == 0, result.stderr
-    info = workshop.info(
-        e2e_unlaunched_workshop.name, project=e2e_unlaunched_workshop.path
-    )
+    info = e2e_unlaunched_workshop.info()
     assert info is not None
     assert info.status == "ready"

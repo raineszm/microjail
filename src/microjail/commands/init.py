@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Annotated
 
 import typer
 
-from microjail.adapters import workshop
+from microjail.adapters.workshop import Workshop, WorkshopExistsError
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
 
@@ -39,7 +39,7 @@ def init(
 
     try:
         MicroJail.init(name, project_path=project, sdks=sdks_list, base=base)
-    except workshop.WorkshopExistsError as exc:
+    except WorkshopExistsError as exc:
         typer.echo(
             f"Workshop '{exc.name}' already exists in {exc.project}. "
             "Use --overwrite to replace this workshop definition "
@@ -72,14 +72,18 @@ def overwrite_workshop(
 def adopt_workshop(name: str, project: Path, base: str | None = None) -> None:
     if base is not None:
         typer.echo("WARN: --base is ignored during adopt", err=True)
-    if not workshop.exists(name, project):
+    ws = Workshop(name=name, project=project)
+    if not ws.exists():
         typer.echo(
             f"Workshop '{name}' does not exist in {project}. "
             "Cannot adopt non-existent workshop",
             err=True,
         )
         raise typer.Exit(code=1)
-    config = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
+    config = MicroJail(
+        workshop=Workshop(name=name, project=project),
+        lockdown=Lockdown.default(),
+    )
     config.save()
     if config.purge_path:
         (project / config.purge_path).mkdir(parents=True, exist_ok=True)

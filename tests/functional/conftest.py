@@ -7,8 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from microjail.adapters import workshop
-from tests._helpers import SharedWorkshop
+from microjail.adapters.workshop import Workshop
 
 
 @pytest.fixture(scope="module")
@@ -20,9 +19,10 @@ def launched_workshop(tmp_path_factory):
 
     try:
         os.chdir(project)
-        workshop.init(name, project=project)
-        workshop.launch(name, project=project)
-        yield SharedWorkshop(name=name, path=project)
+        Workshop.init(name, project=project)
+        ws = Workshop(name=name, project=project)
+        ws.launch()
+        yield ws
     finally:
         os.chdir(cwd)
         subprocess.run(["workshop", "remove", "--project", str(project)], check=False)

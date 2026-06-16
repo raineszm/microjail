@@ -3,7 +3,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from microjail.adapters import workshop
 from microjail.caps.base import Capability  # noqa: TC001
 from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.microjail import MicroJail
@@ -43,39 +42,23 @@ def setup_test_cap_satisfied(mj: Mock, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def setup_endpoint_unsatisfied(mj: Mock, monkeypatch: pytest.MonkeyPatch) -> None:
+    del monkeypatch
     mj.name = "mj-workshop"
-    mj.project_path = object()
-    monkeypatch.setattr(workshop, "connections", Mock(return_value=[]))
-    monkeypatch.setattr(workshop, "endpoint_reachable", Mock(return_value=True))
-    monkeypatch.setattr(workshop, "add_tunnel_plug", Mock())
-    monkeypatch.setattr(workshop, "add_tunnel_slot", Mock())
-    monkeypatch.setattr(workshop, "refresh", Mock())
-    monkeypatch.setattr(workshop, "connect", Mock())
-    monkeypatch.setattr(workshop, "disconnect", Mock())
-    monkeypatch.setattr(workshop, "remove_tunnel_plug", Mock(return_value=True))
-    monkeypatch.setattr(workshop, "remove_tunnel_slot", Mock())
+    t = mj.workshop.tunnel
+    t.connections.return_value = []
+    t.endpoint_reachable.return_value = True
+    t.remove_plug.return_value = True
 
 
 def setup_endpoint_satisfied(mj: Mock, monkeypatch: pytest.MonkeyPatch) -> None:
+    del monkeypatch
     mj.name = "mj-workshop"
-    mj.project_path = object()
-    monkeypatch.setattr(
-        workshop,
-        "connections",
-        Mock(
-            return_value=[
-                ("mj-workshop/microjail:inference", "mj-workshop/system:inference")
-            ]
-        ),
-    )
-    monkeypatch.setattr(workshop, "endpoint_reachable", Mock(return_value=True))
-    monkeypatch.setattr(workshop, "add_tunnel_plug", Mock())
-    monkeypatch.setattr(workshop, "add_tunnel_slot", Mock())
-    monkeypatch.setattr(workshop, "refresh", Mock())
-    monkeypatch.setattr(workshop, "connect", Mock())
-    monkeypatch.setattr(workshop, "disconnect", Mock())
-    monkeypatch.setattr(workshop, "remove_tunnel_plug", Mock(return_value=False))
-    monkeypatch.setattr(workshop, "remove_tunnel_slot", Mock())
+    t = mj.workshop.tunnel
+    t.connections.return_value = [
+        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
+    ]
+    t.endpoint_reachable.return_value = True
+    t.remove_plug.return_value = False
 
 
 class CapSpec(NamedTuple):

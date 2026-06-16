@@ -17,7 +17,7 @@ def create_microjail_config(project: Path) -> Path:
     config = project / ".microjail" / "config.yaml"
     config.parent.mkdir()
     config.write_text(
-        f"name: test-jail\nproject_path: {project}\nlockdown:\n  caps: []\n  gates: []\n",
+        f"workshop:\n  name: test-jail\n  project: {project}\nlockdown:\n  caps: []\n  gates: []\n",
         encoding="utf-8",
     )
     return config

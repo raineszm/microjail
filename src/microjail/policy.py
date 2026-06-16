@@ -1,4 +1,4 @@
-"""Policy-result exit codes used by user-facing commands."""
+"""Policy-result exit codes and shared constants."""
 
 SUCCESS = 0
 GENERIC_ERROR = 1
@@ -24,3 +24,5 @@ CAPABILITY_AND_GATE_RELEASE_FAILURE = (
 RELEASE_BLOCKED_BY_ACTIVE_WORKLOAD_TERMINATION_FAILURE = (
     POLICY_RESULT | RELEASE_PHASE | WORKLOAD_BIT
 )
+
+EGRESS_PROBE_TIMEOUT = 10

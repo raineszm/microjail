@@ -1,9 +1,9 @@
+import subprocess
 from typing import Annotated
 
 import typer
 
 from microjail import policy
-from microjail.adapters import workshop
 from microjail.commands.init import get_project
 from microjail.commands.lock import (
     ensure_lockdown,
@@ -17,7 +17,7 @@ def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) 
     microjail = load_microjail_or_exit(project)
     if microjail.workshop_info() is None:
         typer.echo(f"Launching workshop {microjail.name}...")
-        workshop.launch(microjail.name, project=microjail.project_path)
+        microjail.workshop.launch()
 
     ensure_lockdown(microjail)
 
@@ -31,5 +31,13 @@ def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) 
     except CapabilityPolicyViolation as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(policy.FATAL_RUNTIME_CAPABILITY_VIOLATION) from exc
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
 
     raise typer.Exit(exit_code)
