@@ -7,7 +7,7 @@ import tempfile
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, Protocol
 
 import msgspec
 
@@ -60,16 +60,39 @@ _SYSTEM_SDK_NAME = "system"
 _TUNNEL_INTERFACE = "tunnel"
 
 
-class Workshop(msgspec.Struct):
+class CommandExecutor(Protocol):
+    def run(self, command: list[str], **kwargs: Any) -> subprocess.CompletedProcess: ...
+
+    def popen(self, command: list[str], **kwargs: Any) -> subprocess.Popen: ...
+
+
+class LocalExecutor:
+    def run(self, command: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        return subprocess.run(command, **kwargs)
+
+    def popen(self, command: list[str], **kwargs: Any) -> subprocess.Popen:
+        return subprocess.Popen(command, **kwargs)
+
+
+class Workshop(msgspec.Struct, omit_defaults=True):
     """A workshop instance identified by name and project directory."""
 
     name: str
     project: Path
+    executor: CommandExecutor | None = None
+
+    def _run(self, *args, **kwargs):
+        executor = self.executor or LocalExecutor()
+        return executor.run(*args, **kwargs)
+
+    def _popen(self, *args, **kwargs):
+        executor = self.executor or LocalExecutor()
+        return executor.popen(*args, **kwargs)
 
     def info(self) -> WorkshopInfo | None:
         """Return workshop info, or None if the workshop is not launched."""
         try:
-            result = subprocess.run(
+            result = self._run(
                 ["workshop", "info", self.name, "--project", str(self.project)],
                 check=True,
                 capture_output=True,
@@ -84,7 +107,7 @@ class Workshop(msgspec.Struct):
         """Return True if a workshop with this name exists in the project."""
         try:
             for line in (
-                subprocess.run(
+                self._run(
                     [
                         "workshop",
                         "list",
@@ -124,7 +147,7 @@ class Workshop(msgspec.Struct):
     def exec_(self, command: list[str], **kwargs) -> subprocess.CompletedProcess:
         """Execute *command* inside the workshop container."""
         self.ensure_launched()
-        return subprocess.run(
+        return self._run(
             [
                 "workshop",
                 "exec",
@@ -148,7 +171,7 @@ class Workshop(msgspec.Struct):
         """Execute *command* inside the workshop container and return a process handle."""
         self.ensure_launched()
         mode_flag = "--interactive" if interactive else "--non-interactive"
-        return subprocess.Popen(
+        return self._popen(
             [
                 "workshop",
                 "exec",
@@ -164,21 +187,21 @@ class Workshop(msgspec.Struct):
 
     def refresh(self) -> None:
         """Refresh the workshop environment."""
-        subprocess.run(
+        self._run(
             ["workshop", "refresh", self.name, "--project", str(self.project)],
             check=True,
         )
 
     def restore(self) -> None:
         """Restore the workshop to its last launch/refresh point."""
-        subprocess.run(
+        self._run(
             ["workshop", "restore", self.name, "--project", str(self.project)],
             check=True,
         )
 
     def launch(self, **kwargs) -> None:
         """Launch the workshop."""
-        subprocess.run(
+        self._run(
             ["workshop", "launch", self.name, "--project", str(self.project)],
             check=True,
             **kwargs,
@@ -186,7 +209,7 @@ class Workshop(msgspec.Struct):
 
     def start(self, **kwargs) -> None:
         """Start a stopped workshop."""
-        subprocess.run(
+        self._run(
             ["workshop", "start", self.name, "--project", str(self.project)],
             check=True,
             **kwargs,
@@ -194,7 +217,7 @@ class Workshop(msgspec.Struct):
 
     def remove(self, **kwargs) -> None:
         """Remove the workshop."""
-        subprocess.run(
+        self._run(
             ["workshop", "remove", self.name, "--project", str(self.project)],
             check=True,
             **kwargs,
@@ -207,6 +230,7 @@ class Workshop(msgspec.Struct):
         project: Path,
         sdks: list[str] | None = None,
         base: str | None = None,
+        executor: CommandExecutor | None = None,
     ) -> None:
         """Initialize a workshop in the project directory."""
         if sdks is None:
@@ -227,7 +251,8 @@ class Workshop(msgspec.Struct):
             cmd.extend(["--base", base])
 
         try:
-            subprocess.run(cmd, check=True, capture_output=True)
+            runner = executor.run if executor is not None else subprocess.run
+            runner(cmd, check=True, capture_output=True)
         except subprocess.CalledProcessError as exc:
             if b"already exists" in exc.stderr:
                 raise WorkshopExistsError(name=name, project=project) from exc
@@ -244,7 +269,7 @@ class Workshop(msgspec.Struct):
         if c_name is None:
             return None
 
-        result = subprocess.run(
+        result = self._run(
             ["lxc", "query", f"/1.0/instances/{c_name}?project={self.lxd_project}"],
             check=True,
             capture_output=True,
@@ -253,19 +278,32 @@ class Workshop(msgspec.Struct):
 
     @property
     def tunnel(self) -> TunnelInterface:
-        return TunnelInterface(self.name, self.project, exec_=self.exec_)
+        return TunnelInterface(
+            self.name, self.project, exec_=self.exec_, executor=self.executor
+        )
 
 
 class TunnelInterface:
     """Tunnel plug/slot/connection operations for a workshop."""
 
-    def __init__(self, name: str, project: Path, exec_):
+    def __init__(
+        self,
+        name: str,
+        project: Path,
+        exec_,
+        executor: CommandExecutor | None = None,
+    ):
         self.name = name
         self.project = project
         self.exec_ = exec_
+        self.executor = executor
+
+    def _run(self, *args, **kwargs):
+        executor = self.executor or LocalExecutor()
+        return executor.run(*args, **kwargs)
 
     def connections(self) -> list[tuple[str, str]]:
-        result = subprocess.run(
+        result = self._run(
             ["workshop", "connections", self.name, "--project", str(self.project)],
             check=True,
             capture_output=True,
@@ -308,7 +346,7 @@ class TunnelInterface:
         return result.returncode == 0
 
     def connect(self, plug_sdk: str, plug: str, slot_sdk: str, slot: str) -> None:
-        subprocess.run(
+        self._run(
             [
                 "workshop",
                 "connect",
@@ -323,7 +361,7 @@ class TunnelInterface:
 
     def disconnect(self, plug_sdk: str, plug: str, slot_sdk: str, slot: str) -> None:
         try:
-            subprocess.run(
+            self._run(
                 [
                     "workshop",
                     "disconnect",

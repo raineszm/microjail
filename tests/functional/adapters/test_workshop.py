@@ -1,6 +1,5 @@
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,6 +10,22 @@ from tests.marks import requires_workshop
 pytestmark = [
     requires_workshop(),
 ]
+
+
+class FakeExecutor:
+    def __init__(self, return_value=None):
+        self.calls = []
+        self.return_value = return_value
+
+    def run(self, cmd, *args, **kwargs):
+        self.calls.append((cmd, args, kwargs))
+        if self.return_value is not None:
+            return self.return_value
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=b"")
+
+    def popen(self, cmd, *args, **kwargs):
+        self.calls.append((cmd, args, kwargs))
+        return subprocess.Popen(["sleep", "0"])
 
 
 @pytest.fixture
@@ -127,24 +142,24 @@ def test_exists_returns_false_if_name_doesnt_match(initialized_workshop):
     assert not ws.exists()
 
 
-@patch("subprocess.run")
-def test_workshop_init_subprocess_receives_project_flag(mock_run: MagicMock) -> None:
-    Workshop.init("myproj", project=Path("/tmp/myproject"))
+def test_workshop_init_subprocess_receives_project_flag() -> None:
+    fake_exec = FakeExecutor()
+    Workshop.init("myproj", project=Path("/tmp/myproject"), executor=fake_exec)
 
-    args, _ = mock_run.call_args
-    cmd = args[0]
+    assert len(fake_exec.calls) == 1
+    cmd = fake_exec.calls[0][0]
     assert "--project" in cmd
     project_idx = cmd.index("--project")
     assert cmd[project_idx + 1] == "/tmp/myproject"
 
 
-@patch("subprocess.run")
-def test_workshop_launch_subprocess_receives_project_flag(mock_run: MagicMock) -> None:
-    ws = Workshop("myproj", project=Path("/tmp/myproject"))
+def test_workshop_launch_subprocess_receives_project_flag() -> None:
+    fake_exec = FakeExecutor()
+    ws = Workshop("myproj", project=Path("/tmp/myproject"), executor=fake_exec)
     ws.launch()
 
-    args, _ = mock_run.call_args
-    cmd = args[0]
+    assert len(fake_exec.calls) == 1
+    cmd = fake_exec.calls[0][0]
     assert "--project" in cmd
     project_idx = cmd.index("--project")
     assert cmd[project_idx + 1] == "/tmp/myproject"
