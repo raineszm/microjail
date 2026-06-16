@@ -4,6 +4,7 @@ from unittest.mock import Mock
 from typer.testing import CliRunner
 
 from microjail import policy
+from microjail.adapters.workshop import Workshop
 from microjail.cli import app
 from microjail.lockdown import Lockdown
 from microjail.microjail import (
@@ -34,8 +35,7 @@ def test_lock_reports_success_with_counts(
         RecordingGate("readonly-config", checks=[True]),
     ]
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[], gates=gates),
     )
     load_as(microjail, monkeypatch)
@@ -61,8 +61,7 @@ def test_lock_capability_failure_still_attempts_gate_enforcement(
     cap = RecordingCapability("local-inference", checks=[False, False])
     gate = RecordingGate("network-egress", checks=[False, True])
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     load_as(microjail, monkeypatch)
@@ -81,8 +80,7 @@ def test_lock_gate_failure_reports_name_and_exit_code(
 ) -> None:
     gate = RecordingGate("network-egress", checks=[False, False])
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[], gates=[gate]),
     )
     load_as(microjail, monkeypatch)
@@ -101,8 +99,7 @@ def test_lock_does_not_rollback_successfully_applied_policy_after_failure(
     cap = RecordingCapability("endpoint", checks=[False, True])
     gate = RecordingGate("network-egress", checks=[False, False])
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())

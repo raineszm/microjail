@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
+from microjail.adapters.workshop import Workshop
 from microjail.cli import app
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
@@ -14,14 +15,17 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def mock_microjail(tmp_path: Path):
-    mj = MicroJail(name="test-jail", project_path=tmp_path, lockdown=Lockdown.default())
+    mj = MicroJail(
+        workshop=Workshop(name="test-jail", project=tmp_path),
+        lockdown=Lockdown.default(),
+    )
     mj.save()
     (tmp_path / "data").mkdir()
     return mj
 
 
-@patch("microjail.microjail.workshop.remove")
-@patch("microjail.microjail.workshop.info")
+@patch.object(Workshop, "remove")
+@patch.object(Workshop, "info")
 @patch("microjail.commands.destroy.typer.confirm")
 def test_destroy_all_interactive_yes(
     mock_confirm, mock_info, mock_remove, mock_microjail, tmp_path
@@ -36,8 +40,8 @@ def test_destroy_all_interactive_yes(
     assert not tmp_path.exists()
 
 
-@patch("microjail.microjail.workshop.remove")
-@patch("microjail.microjail.workshop.info")
+@patch.object(Workshop, "remove")
+@patch.object(Workshop, "info")
 @patch("microjail.commands.destroy.typer.confirm")
 def test_destroy_all_interactive_no(
     mock_confirm, mock_info, mock_remove, mock_microjail, tmp_path
@@ -52,8 +56,8 @@ def test_destroy_all_interactive_no(
     assert tmp_path.exists()  # project is kept
 
 
-@patch("microjail.microjail.workshop.remove")
-@patch("microjail.microjail.workshop.info")
+@patch.object(Workshop, "remove")
+@patch.object(Workshop, "info")
 def test_destroy_all_bypass(mock_info, mock_remove, mock_microjail, tmp_path):
     mock_info.return_value = None
 

@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 from typer.testing import CliRunner
 
+from microjail.adapters.workshop import Workshop
 from microjail.cli import app
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
@@ -26,8 +27,7 @@ def save_config(
     project: Path, *, name: str = "test-jail", lockdown: Lockdown | None = None
 ) -> MicroJail:
     microjail = MicroJail(
-        name=name,
-        project_path=project,
+        workshop=Workshop(name=name, project=project),
         lockdown=lockdown or Lockdown.default(),
     )
     microjail.save()

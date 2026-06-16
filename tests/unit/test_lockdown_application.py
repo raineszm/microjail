@@ -4,6 +4,7 @@ from unittest.mock import Mock, call
 import pytest
 
 from microjail.adapters import workshop
+from microjail.adapters.workshop import Workshop
 from microjail.caps.base import Capability
 from microjail.gates.base import Gate
 from microjail.lockdown import CapabilityReleaseError, GateReleaseError, Lockdown
@@ -30,8 +31,7 @@ class GateMock(Gate, Protocol):
 @pytest.fixture
 def tmp_microjail(tmp_path: Path, project_name: str) -> MicroJail:
     return MicroJail(
-        name=project_name,
-        project_path=tmp_path,
+        workshop=Workshop(name=project_name, project=tmp_path),
         lockdown=Lockdown(caps=[], gates=[]),
     )
 
@@ -66,8 +66,7 @@ def test_application_fails_without_running_policy_if_workshop_is_not_launched(
     gate.name = "network"
     gate.check.return_value = False
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[capability], gates=[gate]),
     )
     monkeypatch.setattr(MicroJail, "workshop_info", Mock(return_value=None))
@@ -92,8 +91,7 @@ def test_application_fails_without_running_policy_if_workshop_is_not_ready(
     gate.name = "network"
     gate.check.return_value = False
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[capability], gates=[gate]),
     )
     monkeypatch.setattr(
@@ -119,8 +117,7 @@ def test_run_application_provisions_capabilities_before_enforcing_gates(
     gate.name = "network"
     gate.check.side_effect = [False, True]
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[capability], gates=[gate]),
     )
     mark_workshop_ready(monkeypatch, microjail)
@@ -150,8 +147,7 @@ def test_application_skips_satisfied_capabilities_and_gates(
     gate.name = "network"
     gate.check.return_value = True
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     mark_workshop_ready(monkeypatch, microjail)
@@ -170,8 +166,7 @@ def test_run_application_rolls_back_if_capability_verification_fails(
     cap.name = "proxy"
     cap.check.side_effect = [False, False]
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[cap], gates=[]),
     )
     mark_workshop_ready(monkeypatch, microjail)
@@ -196,8 +191,7 @@ def test_run_application_reports_rollback_failures(
     gate.check.side_effect = [False, False]
     gate.release.side_effect = RuntimeError("still gated")
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     mark_workshop_ready(monkeypatch, microjail)
@@ -224,8 +218,7 @@ def test_lock_application_capability_failure_still_attempts_gate_enforcement(
     gate.name = "network"
     gate.check.side_effect = [False, True]
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     mark_workshop_ready(monkeypatch, microjail)
@@ -249,8 +242,7 @@ def test_lock_application_gate_failure_keeps_capability_failures_as_context(
     gate.name = "network"
     gate.check.side_effect = [False, False]
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     mark_workshop_ready(monkeypatch, microjail)
@@ -279,8 +271,7 @@ def test_run_application_preserves_preexisting_state_if_later_gate_fails(
     gate_b.name = "secrets"
     gate_b.check.side_effect = [False, False]
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[cap], gates=[gate_a, gate_b]),
     )
     mark_workshop_ready(monkeypatch, microjail)
@@ -304,8 +295,7 @@ def test_run_application_aborts_remaining_gates_after_first_failure(
     gate_b = Mock(spec=Gate)
     gate_b.name = "network"
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[], gates=[gate_a, gate_b]),
     )
     mark_workshop_ready(monkeypatch, microjail)
@@ -329,8 +319,7 @@ def test_default_lockdown_application_enforces_network_drop(
     ro.name = "readonly-config"
     ro.check.return_value = True
     microjail = MicroJail(
-        name=tmp_microjail.name,
-        project_path=tmp_microjail.project_path,
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
         lockdown=Lockdown(caps=[], gates=[net, ro]),
     )
     mark_workshop_ready(monkeypatch, microjail)

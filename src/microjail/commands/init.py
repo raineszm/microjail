@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 
 from microjail.adapters import workshop
+from microjail.adapters.workshop import Workshop
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
 
@@ -79,7 +80,10 @@ def adopt_workshop(name: str, project: Path, base: str | None = None) -> None:
             err=True,
         )
         raise typer.Exit(code=1)
-    config = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
+    config = MicroJail(
+        workshop=Workshop(name=name, project=project),
+        lockdown=Lockdown.default(),
+    )
     config.save()
     if config.purge_path:
         (project / config.purge_path).mkdir(parents=True, exist_ok=True)

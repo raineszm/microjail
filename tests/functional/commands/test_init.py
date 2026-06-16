@@ -428,7 +428,7 @@ def test_lock_loads_config_from_resolved_project_path(
     microjail_config = proj / ".microjail" / "config.yaml"
     microjail_config.parent.mkdir()
     microjail_config.write_text(
-        f"name: test-jail\nproject_path: {proj}\nlockdown:\n  caps: []\n  gates: []\n",
+        f"workshop:\n  name: test-jail\n  project: {proj}\nlockdown:\n  caps: []\n  gates: []\n",
         encoding="utf-8",
     )
     monkeypatch.chdir("/")

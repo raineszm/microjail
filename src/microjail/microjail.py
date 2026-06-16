@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import msgspec
 
 from microjail.adapters import lxc, workshop
+from microjail.adapters.workshop import Workshop
 from microjail.caps.base import Capability
 from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.gates.base import Gate
@@ -98,21 +99,25 @@ def dec_hook(expected: type, obj: object) -> object:
 
 class MicroJail(msgspec.Struct):
     """Configuration for a single microjail.
-
     Parameters
     ----------
-    name:
-        Name of the associated workshop.
-    project_path:
-        Path to the workshop project that this microjail governs.
+    workshop:
+        The workshop instance this microjail governs.
     lockdown:
         The policy applied while workloads execute.
     """
 
-    name: str
-    project_path: Path
+    workshop: Workshop
     lockdown: Lockdown
     purge_path: str = "data"
+
+    @property
+    def name(self) -> str:
+        return self.workshop.name
+
+    @property
+    def project_path(self) -> Path:
+        return self.workshop.project
 
     @property
     def config_dir(self) -> Path:
@@ -124,7 +129,7 @@ class MicroJail(msgspec.Struct):
 
     def workshop_info(self) -> workshop.WorkshopInfo | None:
         """Return workshop info, or None if the workshop is not launched."""
-        return workshop.info(self.name, project=self.project_path)
+        return self.workshop.info()
 
     def ensure_workshop_ready(self) -> None:
         """Verify the associated workshop is launched and ready."""
@@ -142,7 +147,7 @@ class MicroJail(msgspec.Struct):
 
     def exec_(self, command: list[str], **kwargs) -> subprocess.CompletedProcess:
         """Execute *command* inside the associated workshop container."""
-        return workshop.exec_(self.name, self.project_path, command, **kwargs)
+        return self.workshop.exec_(command, **kwargs)
 
     def popen(
         self,
@@ -152,13 +157,7 @@ class MicroJail(msgspec.Struct):
         **kwargs,
     ) -> subprocess.Popen:
         """Execute *command* inside the associated workshop container and return a Workload process handle."""
-        return workshop.popen(
-            self.name,
-            self.project_path,
-            command,
-            interactive=interactive,
-            **kwargs,
-        )
+        return self.workshop.popen(command, interactive=interactive, **kwargs)
 
     def container_name(self) -> str:
         """Return the LXD container name, raising if the workshop is not launched."""
@@ -171,7 +170,7 @@ class MicroJail(msgspec.Struct):
 
     def restore_workshop(self) -> None:
         """Restore the Workshop environment to its last launch/refresh point."""
-        workshop.restore(self.name, project=self.project_path)
+        self.workshop.restore()
 
     def lxd_project(self) -> str:
         """Return the workshop LXD project name."""
@@ -299,7 +298,7 @@ class MicroJail(msgspec.Struct):
         import time
 
         while True:
-            info = workshop.info(self.name, self.project_path)
+            info = self.workshop.info()
             if not info:
                 break
             if info.status == "pending":
@@ -310,12 +309,12 @@ class MicroJail(msgspec.Struct):
             elif info.status == "off":
                 if echo:
                     echo("Workshop is off, starting before removal...")
-                workshop.start(self.name, self.project_path)
+                self.workshop.start()
                 break
             else:
                 break
 
-        workshop.remove(self.name, self.project_path)
+        self.workshop.remove()
 
         if delete_project:
             shutil.rmtree(self.project_path)
@@ -349,15 +348,11 @@ class MicroJail(msgspec.Struct):
         sdks: list[str] | None = None,
         base: str | None = None,
     ) -> MicroJail:
-        """Initialize a new microjail: create Workshop and persist config.
-
-        Raises
-        ------
-        WorkshopExistsError:
-            If a Workshop with *name* already exists at *project_path*.
-        """
         workshop.init(name, project=project_path, sdks=sdks, base=base)
-        config = cls(name=name, project_path=project_path, lockdown=Lockdown.default())
+        config = cls(
+            workshop=Workshop(name=name, project=project_path),
+            lockdown=Lockdown.default(),
+        )
         config.save()
         if config.purge_path:
             (project_path / config.purge_path).mkdir(parents=True, exist_ok=True)

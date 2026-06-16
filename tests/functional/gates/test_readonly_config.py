@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from microjail.adapters import workshop
+from microjail.adapters.workshop import Workshop
 from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import Lockdown
 from microjail.microjail import (
@@ -32,7 +33,9 @@ def launched_workshop(tmp_path_factory):
     try:
         os.chdir(project)
         workshop.init(name, project=project)
-        mj = MicroJail(name=name, project_path=project, lockdown=Lockdown.default())
+        mj = MicroJail(
+            workshop=Workshop(name=name, project=project), lockdown=Lockdown.default()
+        )
         mj.save()
         workshop.launch(name, project=project)
         yield SharedWorkshop(name=name, path=project)
@@ -61,8 +64,7 @@ def test_readonly_config_blocks_write_on_application_and_restores_on_release(
 
     lockdown = Lockdown(caps=[], gates=[ReadonlyConfig()])
     microjail = MicroJail(
-        name=launched_workshop.name,
-        project_path=launched_workshop.path,
+        workshop=Workshop(name=launched_workshop.name, project=launched_workshop.path),
         lockdown=lockdown,
     )
 

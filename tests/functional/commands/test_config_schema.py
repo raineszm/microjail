@@ -17,8 +17,9 @@ def write_config(project: Path) -> None:
     config = project / ".microjail" / "config.yaml"
     config.parent.mkdir()
     config.write_text(
-        f"""name: mj-workshop
-project_path: {project}
+        f"""workshop:
+  name: mj-workshop
+  project: {project}
 lockdown:
   caps:
     - type: endpoint-tunnel

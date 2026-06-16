@@ -6,8 +6,9 @@ import msgspec
 if TYPE_CHECKING:
     from microjail.microjail import MicroJail
 
+from microjail.policy import EGRESS_PROBE_TIMEOUT
+
 EGRESS_PROBE = ["bash", "-c", ": >/dev/tcp/1.1.1.1/443"]
-EGRESS_PROBE_TIMEOUT = 10
 
 
 class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):

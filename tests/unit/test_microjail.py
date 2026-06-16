@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from microjail.adapters.workshop import Workshop
 from microjail.gates.network_drop import NetworkDrop
 from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import Lockdown
@@ -14,8 +15,7 @@ if TYPE_CHECKING:
 @pytest.fixture
 def tmp_microjail(tmp_path: Path, project_name: str) -> MicroJail:
     return MicroJail(
-        name=project_name,
-        project_path=tmp_path,
+        workshop=Workshop(name=project_name, project=tmp_path),
         lockdown=Lockdown(caps=[], gates=[]),
     )
 
@@ -40,8 +40,7 @@ def test_load_round_trips_saved_config(tmp_microjail: MicroJail) -> None:
 
 def test_load_round_trips_default_gates(tmp_path: Path, project_name: str) -> None:
     microjail = MicroJail(
-        name=project_name,
-        project_path=tmp_path,
+        workshop=Workshop(name=project_name, project=tmp_path),
         lockdown=Lockdown.default(),
     )
     microjail.save()

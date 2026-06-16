@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from microjail.adapters import workshop
-from microjail.adapters.workshop import WorkshopExistsError
+from microjail.adapters.workshop import Workshop, WorkshopExistsError
 from tests.marks import requires_workshop
 
 pytestmark = [
@@ -194,8 +194,7 @@ def test_microjail_popen_executes_command_in_background(launched_workshop) -> No
     from microjail.microjail import MicroJail
 
     mj = MicroJail(
-        name=launched_workshop.name,
-        project_path=launched_workshop.path,
+        workshop=Workshop(name=launched_workshop.name, project=launched_workshop.path),
         lockdown=Lockdown.default(),
     )
     proc = mj.popen(["sleep", "2"])

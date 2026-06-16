@@ -4,6 +4,7 @@ from unittest.mock import Mock
 from typer.testing import CliRunner
 
 from microjail import policy
+from microjail.adapters.workshop import Workshop
 from microjail.cli import app
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
@@ -37,8 +38,7 @@ def test_unlock_reports_success_with_counts(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(
             caps=[RecordingCapability("endpoint")],
             gates=[RecordingGate("network-egress"), RecordingGate("readonly-config")],
@@ -66,8 +66,7 @@ def test_unlock_gate_release_failure_returns_policy_code_and_name(
 ) -> None:
     gate = FailingReleaseGate("network-egress")
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[], gates=[gate]),
     )
     load_as(microjail, monkeypatch)
@@ -85,8 +84,7 @@ def test_unlock_capability_release_failure_returns_policy_code_and_name(
 ) -> None:
     cap = FailingRevokeCapability("endpoint")
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[cap], gates=[]),
     )
     load_as(microjail, monkeypatch)
@@ -103,8 +101,7 @@ def test_unlock_combined_release_failures_return_combined_policy_code(
     cap = FailingRevokeCapability("endpoint")
     gate = FailingReleaseGate("network-egress")
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(caps=[cap], gates=[gate]),
     )
     load_as(microjail, monkeypatch)
@@ -124,8 +121,7 @@ def test_unlock_attempts_all_release_and_revoke_operations_after_failures(
     first_cap = FailingRevokeCapability("endpoint")
     second_cap = RecordingCapability("other-endpoint")
     microjail = MicroJail(
-        name="test-jail",
-        project_path=microjail_project,
+        workshop=Workshop(name="test-jail", project=microjail_project),
         lockdown=Lockdown(
             caps=[second_cap, first_cap],
             gates=[second_gate, first_gate],

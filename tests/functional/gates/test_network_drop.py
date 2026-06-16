@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from microjail.adapters import workshop
+from microjail.adapters.workshop import Workshop
 from microjail.gates.network_drop import NetworkDrop
 from microjail.lockdown import Lockdown
 from microjail.microjail import (
@@ -49,8 +50,7 @@ def test_network_drop_blocks_egress_on_application_and_restores_it_on_release(
 
     lockdown = Lockdown(caps=[], gates=[NetworkDrop()])
     microjail = MicroJail(
-        name=launched_workshop.name,
-        project_path=launched_workshop.path,
+        workshop=Workshop(name=launched_workshop.name, project=launched_workshop.path),
         lockdown=lockdown,
     )
 

@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from microjail import policy
 from microjail.adapters import workshop
+from microjail.adapters.workshop import Workshop
 from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.cli import app
 from microjail.lockdown import Lockdown
@@ -50,8 +51,9 @@ def endpoint_microjail(
     """A saved MicroJail config with one endpoint capability."""
     host, port = host_tcp_listener
     mj = MicroJail(
-        name=endpoint_e2e_workshop.name,
-        project_path=endpoint_e2e_workshop.path,
+        workshop=Workshop(
+            name=endpoint_e2e_workshop.name, project=endpoint_e2e_workshop.path
+        ),
         lockdown=Lockdown(
             caps=[
                 WorkshopEndpointCapability(
@@ -129,8 +131,7 @@ def test_run_does_not_start_workload_when_endpoint_capability_cannot_be_applied(
     e2e_workshop: SharedWorkshop,
 ) -> None:
     mj = MicroJail(
-        name=e2e_workshop.name,
-        project_path=e2e_workshop.path,
+        workshop=Workshop(name=e2e_workshop.name, project=e2e_workshop.path),
         lockdown=Lockdown(
             caps=[
                 WorkshopEndpointCapability(

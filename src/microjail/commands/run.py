@@ -1,3 +1,4 @@
+import subprocess
 from typing import Annotated
 
 import typer
@@ -31,5 +32,12 @@ def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) 
     except CapabilityPolicyViolation as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(policy.FATAL_RUNTIME_CAPABILITY_VIOLATION) from exc
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
 
     raise typer.Exit(exit_code)
