@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING
 import msgspec
 
 from microjail.adapters import lxc
-from microjail.adapters.workshop import Workshop, WorkshopInfo, WorkshopNotLaunchedError
+from microjail.adapters.workshop import (
+    CommandExecutor,
+    Workshop,
+    WorkshopInfo,
+    WorkshopNotLaunchedError,
+)
 from microjail.caps.base import Capability
 from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.gates.base import Gate
@@ -327,7 +332,9 @@ class MicroJail(msgspec.Struct):
                 shutil.rmtree(purge_dir)
 
     @classmethod
-    def load(cls, project_path: Path) -> MicroJail:
+    def load(
+        cls, project_path: Path, executor: CommandExecutor | None = None
+    ) -> MicroJail:
         """Load the microjail config stored under ``project_path``.
 
         Raises
@@ -341,7 +348,10 @@ class MicroJail(msgspec.Struct):
         except FileNotFoundError as exc:
             raise ConfigNotFoundError(project_path=project_path) from exc
 
-        return msgspec.yaml.decode(raw, type=cls, dec_hook=dec_hook)
+        config = msgspec.yaml.decode(raw, type=cls, dec_hook=dec_hook)
+        if executor is not None:
+            config.workshop.executor = executor
+        return config
 
     @classmethod
     def init(
@@ -350,10 +360,13 @@ class MicroJail(msgspec.Struct):
         project_path: Path,
         sdks: list[str] | None = None,
         base: str | None = None,
+        executor: CommandExecutor | None = None,
     ) -> MicroJail:
-        Workshop.init(name, project=project_path, sdks=sdks, base=base)
+        Workshop.init(
+            name, project=project_path, sdks=sdks, base=base, executor=executor
+        )
         config = cls(
-            workshop=Workshop(name=name, project=project_path),
+            workshop=Workshop(name=name, project=project_path, executor=executor),
             lockdown=Lockdown.default(),
         )
         config.save()
