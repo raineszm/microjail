@@ -24,8 +24,10 @@ class FakeExecutor:
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=b"")
 
     def popen(self, cmd, *args, **kwargs):
+        from unittest.mock import MagicMock
+
         self.calls.append((cmd, args, kwargs))
-        return subprocess.Popen(["sleep", "0"])
+        return MagicMock(spec=subprocess.Popen)
 
 
 @pytest.fixture
