@@ -8,7 +8,6 @@ Built for running AI coding agents in a controlled environment. Let an agent loo
 
 [demo.webm](https://github.com/user-attachments/assets/c6e361ff-9e28-43c0-9f7b-0b1489edd941)
 
-
 ______________________________________________________________________
 
 ## Goals
