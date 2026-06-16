@@ -25,7 +25,7 @@ def test_init_delegates_to_workshop_and_writes_config(
     result = CliRunner().invoke(app, ["init", project_name])
 
     mock_init.assert_called_once_with(
-        project_name, project=tmp_path, sdks=None, base=None
+        project_name, project=tmp_path, sdks=None, base=None, executor=None
     )
     assert result.exit_code == 0
     loaded = MicroJail.load(tmp_path)
@@ -50,7 +50,7 @@ def test_init_bails_if_exists(
     result = CliRunner().invoke(app, ["init", project_name])
 
     mock_init.assert_called_once_with(
-        project_name, project=tmp_path, sdks=None, base=None
+        project_name, project=tmp_path, sdks=None, base=None, executor=None
     )
     assert result.exit_code == 1
     assert "already exists" in result.stderr
@@ -97,7 +97,7 @@ def test_init_overwrite_warns_if_doesnt_exist(
     result = CliRunner().invoke(app, ["init", "bad-name", "--overwrite"])
 
     mock_init.assert_called_once_with(
-        "bad-name", project=tmp_path, sdks=None, base=None
+        "bad-name", project=tmp_path, sdks=None, base=None, executor=None
     )
     assert result.exit_code == 0
     assert "does not exist" in result.stderr
@@ -133,7 +133,7 @@ def test_init_delegates_to_workshop_with_default_sdks(
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(
-        project_name, project=tmp_path, sdks=None, base=None
+        project_name, project=tmp_path, sdks=None, base=None, executor=None
     )
     loaded = MicroJail.load(tmp_path)
     assert loaded.name == project_name
@@ -169,7 +169,7 @@ def test_init_forwards_single_sdk(
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(
-        project_name, project=tmp_path, sdks=["golang"], base=None
+        project_name, project=tmp_path, sdks=["golang"], base=None, executor=None
     )
 
 
@@ -186,7 +186,11 @@ def test_init_forwards_multiple_sdks(
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(
-        project_name, project=tmp_path, sdks=["golang", "java"], base=None
+        project_name,
+        project=tmp_path,
+        sdks=["golang", "java"],
+        base=None,
+        executor=None,
     )
 
 
@@ -240,7 +244,7 @@ def test_init_forwards_base(
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(
-        project_name, project=tmp_path, sdks=None, base="ubuntu@22.04"
+        project_name, project=tmp_path, sdks=None, base="ubuntu@22.04", executor=None
     )
 
 
@@ -363,7 +367,11 @@ def test_overwrite_forwards_sdks_and_base(
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(
-        project_name, project=tmp_path, sdks=["golang"], base="ubuntu@22.04"
+        project_name,
+        project=tmp_path,
+        sdks=["golang"],
+        base="ubuntu@22.04",
+        executor=None,
     )
     assert (tmp_path / ".microjail" / "config.yaml").exists()
 
