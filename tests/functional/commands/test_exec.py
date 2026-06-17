@@ -32,14 +32,14 @@ def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_run_requires_workload_command(microjail_project: Path) -> None:
-    result = CliRunner().invoke(app, ["run"])
+def test_exec_requires_workload_command(microjail_project: Path) -> None:
+    result = CliRunner().invoke(app, ["exec"])
 
     assert result.exit_code != 0
     assert "command" in result.stderr.lower()
 
 
-def test_run_propagates_workload_exit_status(
+def test_exec_propagates_workload_exit_status(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
@@ -53,14 +53,14 @@ def test_run_propagates_workload_exit_status(
     supervise = Mock(return_value=7)
     monkeypatch.setattr(Warden, "supervise", supervise)
 
-    result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 7"])
+    result = CliRunner().invoke(app, ["exec", "--", "sh", "-c", "exit 7"])
 
     assert result.exit_code == 7
     popen.assert_called_once_with(["sh", "-c", "exit 7"], interactive=False)
     supervise.assert_called_once()
 
 
-def test_run_capability_failure_blocks_workload_and_skips_gates(
+def test_exec_capability_failure_blocks_workload_and_skips_gates(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     cap = RecordingCapability("local-inference", checks=[False, False])
@@ -73,7 +73,7 @@ def test_run_capability_failure_blocks_workload_and_skips_gates(
     popen = Mock()
     monkeypatch.setattr(MicroJail, "popen", popen)
 
-    result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "echo started"])
+    result = CliRunner().invoke(app, ["exec", "--", "sh", "-c", "echo started"])
 
     assert result.exit_code == policy.CAPABILITY_APPLICATION_FAILURE
     assert "local-inference" in result.stderr
@@ -82,7 +82,7 @@ def test_run_capability_failure_blocks_workload_and_skips_gates(
     popen.assert_not_called()
 
 
-def test_run_gate_failure_blocks_workload(
+def test_exec_gate_failure_blocks_workload(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     gate = RecordingGate("network-egress", checks=[False, False])
@@ -94,7 +94,7 @@ def test_run_gate_failure_blocks_workload(
     popen = Mock()
     monkeypatch.setattr(MicroJail, "popen", popen)
 
-    result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "echo started"])
+    result = CliRunner().invoke(app, ["exec", "--", "sh", "-c", "echo started"])
 
     assert result.exit_code == policy.GATE_APPLICATION_FAILURE
     assert "network-egress" in result.stderr
@@ -102,7 +102,7 @@ def test_run_gate_failure_blocks_workload(
     popen.assert_not_called()
 
 
-def test_run_rolls_back_applied_policy_on_pre_workload_failure(
+def test_exec_rolls_back_applied_policy_on_pre_workload_failure(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     cap = RecordingCapability("endpoint", checks=[False, True])
@@ -121,7 +121,7 @@ def test_run_rolls_back_applied_policy_on_pre_workload_failure(
     assert gate.calls == ["check", "enforce", "check", "release"]
 
 
-def test_run_uses_warden_supervision(
+def test_exec_uses_warden_supervision(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
@@ -137,14 +137,14 @@ def test_run_uses_warden_supervision(
     mock_supervise = Mock(return_value=0)
     monkeypatch.setattr(Warden, "supervise", mock_supervise)
 
-    result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 0"])
+    result = CliRunner().invoke(app, ["exec", "--", "sh", "-c", "exit 0"])
 
     assert result.exit_code == 0
     mock_popen.assert_called_once_with(["sh", "-c", "exit 0"], interactive=False)
     mock_supervise.assert_called_once()
 
 
-def test_run_exits_with_84_on_gate_violation(
+def test_exec_exits_with_84_on_gate_violation(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
@@ -161,12 +161,12 @@ def test_run_exits_with_84_on_gate_violation(
 
     monkeypatch.setattr(Warden, "supervise", raising_supervise)
 
-    result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 0"])
+    result = CliRunner().invoke(app, ["exec", "--", "sh", "-c", "exit 0"])
 
     assert result.exit_code == 84
 
 
-def test_run_exits_with_82_on_fatal_capability_violation(
+def test_exec_exits_with_82_on_fatal_capability_violation(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
@@ -183,12 +183,12 @@ def test_run_exits_with_82_on_fatal_capability_violation(
 
     monkeypatch.setattr(Warden, "supervise", raising_supervise)
 
-    result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 0"])
+    result = CliRunner().invoke(app, ["exec", "--", "sh", "-c", "exit 0"])
 
     assert result.exit_code == 82
 
 
-def test_run_launches_workshop_if_not_launched(
+def test_exec_launches_workshop_if_not_launched(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
@@ -205,18 +205,18 @@ def test_run_launches_workshop_if_not_launched(
 
     # Mock popen, Warden supervise, ensure_lockdown to do nothing/success
     monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
-    monkeypatch.setattr("microjail.commands.run.ensure_lockdown", Mock())
+    monkeypatch.setattr("microjail.commands.exec.ensure_lockdown", Mock())
     monkeypatch.setattr(MicroJail, "popen", Mock())
     monkeypatch.setattr(Warden, "supervise", Mock(return_value=0))
 
-    result = CliRunner().invoke(app, ["run", "--", "true"])
+    result = CliRunner().invoke(app, ["exec", "--", "true"])
 
     assert result.exit_code == 0
     mock_workshop_info.assert_called_once()
     mock_launch.assert_called_once()
 
 
-def test_run_remains_non_interactive_after_shell_addition(
+def test_exec_remains_non_interactive_by_default(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
     microjail = MicroJail(
@@ -229,7 +229,7 @@ def test_run_remains_non_interactive_after_shell_addition(
     monkeypatch.setattr(MicroJail, "popen", popen)
     monkeypatch.setattr(Warden, "supervise", Mock(return_value=0))
 
-    result = CliRunner().invoke(app, ["run", "--", "bash"])
+    result = CliRunner().invoke(app, ["exec", "--", "bash"])
 
     assert result.exit_code == 0
     popen.assert_called_once_with(["bash"], interactive=False)

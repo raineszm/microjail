@@ -97,7 +97,7 @@ def test_lockdown_application_applies_endpoint_capability(
     assert endpoint_microjail.workshop.tunnel.endpoint_reachable(host, str(port))
 
 
-def test_run_with_endpoint_capability_reaches_declared_endpoint_and_blocks_other_egress(
+def test_exec_with_endpoint_capability_reaches_declared_endpoint_and_blocks_other_egress(
     endpoint_microjail: MicroJail,
     host_tcp_listener: tuple[str, int],
 ) -> None:
@@ -109,7 +109,7 @@ def test_run_with_endpoint_capability_reaches_declared_endpoint_and_blocks_other
     result = CliRunner().invoke(
         app,
         [
-            "run",
+            "exec",
             "--",
             "bash",
             "-c",
@@ -123,7 +123,7 @@ def test_run_with_endpoint_capability_reaches_declared_endpoint_and_blocks_other
     assert not has_network_egress(ws)
 
 
-def test_run_does_not_start_workload_when_endpoint_capability_cannot_be_applied(
+def test_exec_does_not_start_workload_when_endpoint_capability_cannot_be_applied(
     e2e_workshop: Workshop,
 ) -> None:
     mj = MicroJail(
@@ -141,7 +141,7 @@ def test_run_does_not_start_workload_when_endpoint_capability_cannot_be_applied(
 
     result = CliRunner().invoke(
         app,
-        ["run", "--", "sh", "-c", "touch /project/started"],
+        ["exec", "--", "sh", "-c", "touch /project/started"],
     )
 
     assert result.exit_code == policy.CAPABILITY_APPLICATION_FAILURE
@@ -154,7 +154,7 @@ def test_unlock_revokes_declared_endpoint_capability(
 ) -> None:
     host, port = host_tcp_listener
 
-    result = CliRunner().invoke(app, ["run", "--", "true"])
+    result = CliRunner().invoke(app, ["exec", "--", "true"])
     assert result.exit_code == 0, result.stderr
     assert endpoint_microjail.workshop.tunnel.endpoint_reachable(host, str(port))
 

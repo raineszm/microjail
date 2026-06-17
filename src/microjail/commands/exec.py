@@ -10,7 +10,15 @@ from microjail.commands.lock import (
 from microjail.commands.supervision import supervise_workload
 
 
-def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) -> None:
+def exec_command(
+    ctx: typer.Context,
+    command: Annotated[list[str], typer.Argument(...)],
+    interactive: bool = typer.Option(
+        False,
+        "--interactive/--non-interactive",
+        help="Use interactive mode (PTY allocation) or non-interactive mode",
+    ),
+) -> None:
     project = get_project(ctx)
     microjail = load_microjail_or_exit(project)
     if microjail.workshop_info() is None:
@@ -19,5 +27,5 @@ def run(ctx: typer.Context, command: Annotated[list[str], typer.Argument(...)]) 
 
     ensure_lockdown(microjail)
 
-    process = microjail.popen(command, interactive=False)
+    process = microjail.popen(command, interactive=interactive)
     supervise_workload(microjail, process)

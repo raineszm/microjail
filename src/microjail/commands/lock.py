@@ -47,20 +47,20 @@ def ensure_lockdown(microjail: MicroJail) -> None:
     if result.status is ApplicationStatus.GATE_APPLICATION_FAILURE:
         gate_failure = result.gate_failure
         assert gate_failure is not None
-        typer.echo(f"run failed: gate {gate_failure.name} failed", err=True)
+        typer.echo(f"exec failed: gate {gate_failure.name} failed", err=True)
         if result.capability_failures:
             typer.echo(
-                f"run also had capability failures: {names(result.capability_failures)}",
+                f"exec also had capability failures: {names(result.capability_failures)}",
                 err=True,
             )
-        report_rollback_failures("run", result)
+        report_rollback_failures("exec", result)
         raise typer.Exit(policy.GATE_APPLICATION_FAILURE)
 
     typer.echo(
-        f"run failed: capability {names(result.capability_failures)} failed",
+        f"exec failed: capability {names(result.capability_failures)} failed",
         err=True,
     )
-    report_rollback_failures("run", result)
+    report_rollback_failures("exec", result)
     raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE)
 
 

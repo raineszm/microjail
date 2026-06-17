@@ -72,7 +72,7 @@ def test_full_lifecycle_smoke(e2e_workshop: Workshop) -> None:
 
     result = CliRunner().invoke(
         app,
-        ["run", "--", "sh", "-c", "cat /project/input.txt > /project/out.txt"],
+        ["exec", "--", "sh", "-c", "cat /project/input.txt > /project/out.txt"],
     )
     assert result.exit_code == 0, result.stderr
     assert (e2e_workshop.project / "out.txt").read_text(encoding="utf-8") == "ok"

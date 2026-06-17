@@ -71,18 +71,18 @@ def test_lock_makes_config_readonly(e2e_workshop: Workshop) -> None:
     assert not can_write_config(e2e_workshop)
 
 
-# -- run --
+# -- exec --
 
 
-def test_run_propagates_exit_code(e2e_unlaunched_workshop: Workshop) -> None:
-    """`microjail run -- <cmd>` returns the workload's exit code."""
-    result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "exit 7"])
+def test_exec_propagates_exit_code(e2e_unlaunched_workshop: Workshop) -> None:
+    """`microjail exec -- <cmd>` returns the workload's exit code."""
+    result = CliRunner().invoke(app, ["exec", "--", "sh", "-c", "exit 7"])
 
     assert result.exit_code == 7
 
 
-def test_run_enforces_lockdown_before_workload(e2e_workshop: Workshop) -> None:
-    """`microjail run` applies lockdown before starting the workload.
+def test_exec_enforces_lockdown_before_workload(e2e_workshop: Workshop) -> None:
+    """`microjail exec` applies lockdown before starting the workload.
 
     A network probe run inside the jail should fail because the gate blocks egress.
     """
@@ -92,7 +92,7 @@ def test_run_enforces_lockdown_before_workload(e2e_workshop: Workshop) -> None:
     result = CliRunner().invoke(
         app,
         [
-            "run",
+            "exec",
             "--",
             "python3",
             "-c",
@@ -103,13 +103,13 @@ def test_run_enforces_lockdown_before_workload(e2e_workshop: Workshop) -> None:
     assert result.exit_code != 0
 
 
-def test_run_workload_succeeds(e2e_unlaunched_workshop: Workshop) -> None:
-    """`microjail run` executes the workload and returns its exit code (0 on success).
+def test_exec_workload_succeeds(e2e_unlaunched_workshop: Workshop) -> None:
+    """`microjail exec` executes the workload and returns its exit code (0 on success).
 
     ``CliRunner`` cannot capture ``subprocess.run`` stdout, so we only check
     the exit code.
     """
-    result = CliRunner().invoke(app, ["run", "--", "sh", "-c", "true"])
+    result = CliRunner().invoke(app, ["exec", "--", "sh", "-c", "true"])
 
     assert result.exit_code == 0
 
@@ -129,13 +129,13 @@ def test_lock_fails_without_config(
     assert "No microjail config found" in result.stderr
 
 
-def test_run_fails_without_config(
+def test_exec_fails_without_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`microjail run` fails with a helpful message when no config exists."""
+    """`microjail exec` fails with a helpful message when no config exists."""
     monkeypatch.chdir(tmp_path)
 
-    result = CliRunner().invoke(app, ["run", "--", "true"])
+    result = CliRunner().invoke(app, ["exec", "--", "true"])
 
     assert result.exit_code == 1
     assert "No microjail config found" in result.stderr
