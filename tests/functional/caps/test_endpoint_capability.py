@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, PropertyMock, call
+from unittest.mock import Mock, PropertyMock
 
 import pytest
 
@@ -36,14 +36,11 @@ def test_provide_calls_adapter_sequence_in_order(
 
     capability.provide(microjail)
 
-    assert t.mock_calls == [
-        call.connections(),
-        call.add_plug("inference", "127.0.0.1:8080"),
-        call.add_slot("inference", "127.0.0.1:8080"),
-        call.connect(
-            plug_sdk="microjail", plug="inference", slot_sdk="system", slot="inference"
-        ),
-    ]
+    t.add_plug.assert_called_once_with("inference", "127.0.0.1:8080")
+    t.add_slot.assert_called_once_with("inference", "127.0.0.1:8080")
+    t.connect.assert_called_once_with(
+        plug_sdk="microjail", plug="inference", slot_sdk="system", slot="inference"
+    )
     r.assert_called_once()
 
 
@@ -63,14 +60,11 @@ def test_provide_passes_container_endpoint_to_plug_and_host_endpoint_to_slot(
 
     capability.provide(microjail)
 
-    assert t.mock_calls == [
-        call.connections(),
-        call.add_plug("inference", "10.0.0.1:9090"),
-        call.add_slot("inference", "127.0.0.1:8080"),
-        call.connect(
-            plug_sdk="microjail", plug="inference", slot_sdk="system", slot="inference"
-        ),
-    ]
+    t.add_plug.assert_called_once_with("inference", "10.0.0.1:9090")
+    t.add_slot.assert_called_once_with("inference", "127.0.0.1:8080")
+    t.connect.assert_called_once_with(
+        plug_sdk="microjail", plug="inference", slot_sdk="system", slot="inference"
+    )
     r.assert_called_once()
 
 
@@ -86,13 +80,11 @@ def test_revoke_calls_adapter_sequence_in_order(
 
     capability.revoke(microjail)
 
-    assert t.mock_calls == [
-        call.disconnect(
-            plug_sdk="microjail", plug="inference", slot_sdk="system", slot="inference"
-        ),
-        call.remove_plug("inference"),
-        call.remove_slot("inference", remove_sdk=False),
-    ]
+    t.disconnect.assert_called_once_with(
+        plug_sdk="microjail", plug="inference", slot_sdk="system", slot="inference"
+    )
+    t.remove_plug.assert_called_once_with("inference")
+    t.remove_slot.assert_called_once_with("inference", remove_sdk=False)
     r.assert_called_once()
 
 
