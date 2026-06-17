@@ -53,6 +53,16 @@ Workshop); pass `--slow` to include them.
 Markers `lxd` and `workshop` auto-skip when the required binaries (`lxc`, `workshop`) are
 not on `$PATH`.
 
+### Marker Requirements
+
+When writing tests, you MUST:
+
+- Mark any test requiring LXD with `@pytest.mark.lxd` (use `requires_lxd()` from `tests/marks.py`)
+- Mark any test requiring Workshop with `@pytest.mark.workshop` (use `requires_workshop()` from `tests/marks.py`)
+- Mark any test whose codepath calls `launch` with `@pytest.mark.slow`
+
+This ensures tests auto-skip when dependencies are missing and keeps the fast test suite fast.
+
 ## Agent skills
 
 ### Issue tracker
