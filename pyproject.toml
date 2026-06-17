@@ -7,7 +7,6 @@ authors = [{ name = "Zachary Raines", email = "zachary.raines@canonical.com" }]
 license = "GPL-3.0-only"
 requires-python = ">=3.14"
 dependencies = [
-    "anyio>=4.13.0",
     "msgspec>=0.21.1",
     "pyyaml>=6.0.3",
     "rich>=14.2.0",
@@ -54,7 +53,6 @@ ignore = [
 python-version = "3.14"
 
 [tool.pytest.ini_options]
-anyio_mode = "auto"
 markers = [
     "lxd: requires a running LXD daemon (lxc available and responsive)",
     "workshop: requires the Workshop CLI (workshop binary on PATH)",
