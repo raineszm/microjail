@@ -265,12 +265,66 @@ class MicroJail:
         if errors:
             raise ExceptionGroup("lockdown release failures", errors)
 
+    def _reconcile_endpoint_declarations(self) -> list[CapabilityError]:
+        """Remove Microjail-owned Workshop endpoint declarations not in the Lockdown.
+
+        Before providing declared capabilities, clean up stale endpoint plug/slot
+        declarations from the Microjail SDK YAML that are not represented by a
+        declared Endpoint Capability in the Lockdown.
+
+        Stale declaration removal is not rolled back on later failures.
+        Returns capability errors for any removals that failed.
+        """
+        from microjail.adapters.workshop import (
+            MicrojailSdkConfigError,
+            read_microjail_sdk,
+        )
+
+        try:
+            sdk = read_microjail_sdk(self.project_path)
+        except MicrojailSdkConfigError:
+            # No microjail SDK file — no stale declarations to clean
+            return []
+        except Exception:
+            return []
+
+        declared_names: set[str] = set()
+        for cap in self.lockdown.caps:
+            if isinstance(cap, WorkshopEndpointCapability):
+                declared_names.add(cap.name)
+
+        failures: list[CapabilityError] = []
+        t = self.workshop.tunnel
+
+        for plug_name in list(sdk.plugs):
+            if plug_name not in declared_names:
+                try:
+                    remaining = t.remove_plug(plug_name)
+                    t.remove_slot(plug_name, remove_sdk=not remaining)
+                except Exception:
+                    failures.append(CapabilityError(name=plug_name))
+
+        return failures
+
     def ensure(self, intent: ApplicationIntent) -> ApplicationResult:
         """Ensure this microjail's lockdown holds for the requested intent."""
         self.ensure_workshop_ready()
         provided_capabilities: list[Capability] = []
         enforced_gates: list[Gate] = []
         capability_failures: list[CapabilityError] = []
+
+        # Reconcile endpoint declarations before providing capabilities.
+        # Stale cleanup failures block gate enforcement (unlike normal
+        # capability failures, which only block gates for RUN intent).
+        stale_failures = self._reconcile_endpoint_declarations()
+        capability_failures.extend(stale_failures)
+
+        if stale_failures:
+            return ApplicationResult(
+                intent=intent,
+                status=ApplicationStatus.CAPABILITY_APPLICATION_FAILURE,
+                capability_failures=tuple(capability_failures),
+            )
 
         for cap in self.lockdown.caps:
             try:

@@ -1,3 +1,4 @@
+import re
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -5,6 +6,49 @@ import msgspec
 
 if TYPE_CHECKING:
     from microjail.microjail import MicroJail
+
+
+ENDPOINT_NAME_RE = re.compile(r"^[a-zA-Z][-a-zA-Z0-9]*$")
+SIMPLE_HOST_RE = re.compile(r"^[a-zA-Z0-9.-]+$")
+
+
+def validate_endpoint_name(name: str) -> str | None:
+    """Return an error message if *name* is not a valid Endpoint name, or None."""
+    if not ENDPOINT_NAME_RE.match(name):
+        return (
+            f"invalid endpoint name '{name}': must start with a letter, "
+            "followed by letters, digits, or hyphens"
+        )
+    return None
+
+
+def validate_endpoint_address(address: str) -> str | None:
+    """Return an error message if *address* is not a valid HOST:PORT, or None."""
+    if ":" not in address:
+        return (
+            f"invalid endpoint address '{address}': missing port (expected HOST:PORT)"
+        )
+
+    host, port_str = address.rsplit(":", 1)
+
+    if not host:
+        return f"invalid endpoint address '{address}': empty host"
+
+    if "/" in host or " " in host or ":" in host:
+        return f"invalid endpoint address '{address}': host contains invalid characters"
+
+    if not SIMPLE_HOST_RE.match(host):
+        return f"invalid endpoint address '{address}': host contains invalid characters"
+
+    try:
+        port = int(port_str)
+    except ValueError:
+        return f"invalid endpoint address '{address}': port is not an integer"
+
+    if port < 1 or port > 65535:
+        return f"invalid endpoint address '{address}': port out of range (1-65535)"
+
+    return None
 
 
 class WorkshopEndpointCapability(

@@ -185,7 +185,7 @@ lockdown:
   caps:
     - type: endpoint-tunnel
       name: inference
-      endpoint: localhost:8080
+      host_endpoint: localhost:8080
   gates:
     - type: network-egress
     - type: readonly-config
