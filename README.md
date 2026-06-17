@@ -54,7 +54,7 @@ ______________________________________________________________________
 
 ## Usage
 
-A microjail session has five commands.
+A microjail session has six commands.
 
 ### `microjail init`
 
@@ -94,8 +94,10 @@ Run the command against a specific project directory instead of the current work
 ```bash
 microjail --project /path/to/project init my-project
 microjail --project /path/to/project lock
-microjail --project /path/to/project unlock
+microjail --project /path/to/project exec -- ./cmd
 microjail --project /path/to/project shell
+microjail --project /path/to/project unlock
+microjail --project /path/to/project destroy
 ```
 
 ### `microjail lock`
@@ -106,19 +108,25 @@ Apply the configured Lockdown without running a workload. Capabilities are provi
 microjail lock
 ```
 
-### `microjail run`
+### `microjail exec`
 
 Apply the Lockdown and run a workload inside the Workshop environment under Warden supervision. The workload only starts if the full Lockdown is successfully applied. The Warden monitors policy continuously and terminates the workload on any gate or (if configured) capability violation. The environment is not unlocked when the workload exits.
 
 ```bash
-microjail run -- opencode run "refactor the parser module"
+microjail exec -- opencode run "refactor the parser module"
 ```
 
 Workload exit codes are passed through. If microjail itself fails before or during execution, a bitmask exit code in the `0x40` range is returned instead (see *Exit codes* below).
 
+By default the workload runs in non-interactive mode. Pass `--interactive` for a PTY allocation:
+
+```bash
+microjail exec --interactive -- bash
+```
+
 ### `microjail shell`
 
-Apply the Lockdown and start an interactive shell inside the Workshop environment under Warden supervision. The command requires both stdin and stdout to be attached to a terminal; use `microjail run` for non-interactive scripts and CI jobs.
+Apply the Lockdown and start an interactive shell inside the Workshop environment under Warden supervision. The command requires both stdin and stdout to be attached to a terminal. Use `microjail exec --interactive` for non-interactive scripts and CI jobs.
 
 ```bash
 microjail shell
@@ -131,8 +139,6 @@ microjail shell -- bash -l
 microjail shell -- zsh
 ```
 
-The shell starts only after Capabilities and Gates apply successfully, runs through Workshop interactive execution, passes through the shell process exit code, and does not unlock the environment when the shell exits.
-
 ### `microjail unlock`
 
 Explicitly release the Lockdown — terminate any supervised workload, release gates, revoke capabilities. This is the only command that weakens the policy.
@@ -140,6 +146,17 @@ Explicitly release the Lockdown — terminate any supervised workload, release g
 ```bash
 microjail unlock
 ```
+
+### `microjail destroy`
+
+Remove a microjail — stop the Workshop environment and delete its configuration. By default only the purge path is removed; use `--all` to delete the entire project directory.
+
+```bash
+microjail destroy
+microjail destroy --all
+```
+
+The `--all` flag requires interactive confirmation unless `--yes-i-really-mean-it` is passed.
 
 ### Full example
 
@@ -182,18 +199,11 @@ ______________________________________________________________________
 
 ## How the Lockdown works
 
-A **Lockdown** is declarative policy: a list of **Capabilities** and a list of **Gates**. It describes what should be available and what must be restricted — not whether the environment is currently locked.
+A **Lockdown** is declarative policy: a list of **Capabilities** (what to allow) and a list of **Gates** (what to restrict). Capabilities are provisioned first, gates are enforced second. Release reverses the order — always explicit, never automatic.
 
-**Applying** a Lockdown follows a two-phase sequence:
+No runtime state is persisted. Every `lock` or `unlock` reads live system state directly — crash-safe and safe after manual intervention.
 
-1. **Capabilities first** — each capability is checked and provisioned if absent, then verified. Failures are collected; by default they block workload launch.
-1. **Gates second** — each gate is checked and enforced if unsatisfied, then verified. The first gate failure stops enforcement.
-
-Ordering matters: authorised access is established before broad denial policies are applied.
-
-**Releasing** a Lockdown reverses this: gates release in reverse order, then capabilities are revoked in reverse order. Release is always explicit — there is no automatic unlock.
-
-**Stateless safety** — no runtime state is persisted. `microjail lock` does not read a cached flag; it runs `gate.check()` and `capability.check()` against live system state. This makes the tool crash-resistant and safe after manual intervention or Workshop modifications.
+See [`DESIGN.md`](DESIGN.md) for the full lifecycle specification.
 
 ### Implemented gates
 
@@ -214,8 +224,11 @@ Microjail uses a bitmask scheme so callers can distinguish policy failures from 
 | `68` | Gate application failure |
 | `82` | Fatal runtime capability policy violation |
 | `84` | Runtime gate policy violation |
+| `88` | Runtime workload termination failure |
 | `98` | Capability release failure |
 | `100` | Gate release failure |
+| `102` | Combined capability and gate release failure |
+| `104` | Release blocked by active workload termination failure |
 
 If the workload ran and no fatal policy issue occurred, its own exit code is passed through unchanged.
 
@@ -223,16 +236,7 @@ ______________________________________________________________________
 
 ## Technical summary
 
-`microjail` is a Python 3.14 CLI built with [Typer](https://typer.tiangolo.com/), [msgspec](https://jcristharif.com/msgspec/), and [Rich](https://rich.readthedocs.io/). It uses `workshop` and `lxc` as subprocesses; it does not link against any LXD or Workshop library directly.
-
-The configuration file is `.microjail/config.yaml`, serialised with msgspec. No runtime state is written to disk.
-
-The Warden polls policy at a configurable interval (default: 1 second). Gate violations are always fatal. Capability violations are warnings by default and can be promoted to fatal per-capability in config.
-
-```
-.microjail/
-  config.yaml       # persisted Lockdown declaration
-```
+`microjail` is a Python 3.14 CLI built with [Typer](https://typer.tiangolo.com/) and [msgspec](https://jcristharif.com/msgspec/). The Warden polls policy every second. Gate violations are always fatal; capability violations are warnings by default and can be promoted to fatal per-capability in config.
 
 ______________________________________________________________________
 
@@ -255,14 +259,6 @@ uv run pytest --slow     # all tests, including container-based e2e tests
 
 Slow tests require `lxc` and `workshop` on `PATH`. Tests marked `lxd` and `workshop` are skipped automatically when those binaries are absent.
 
-**Generate the demo GIF:**
-
-Requires [vhs](https://github.com/charmbracelet/vhs).
-
-```bash
-vhs demo.tape
-```
-
 **Lint and type-check:**
 
 ```bash
@@ -271,22 +267,7 @@ uv run ruff format --check src tests
 uv run ty check src
 ```
 
-### Project layout
-
-```
-src/microjail/
-  cli.py              # Typer app; registers commands
-  microjail.py        # MicroJail config struct and core operations
-  lockdown.py         # Lockdown, CapabilityError, GateError
-  commands/           # init, lock, run, unlock
-  gates/              # Gate implementations (NetworkDrop, ReadonlyConfig)
-  caps/               # Capability protocol and implementations
-  adapters/           # Thin wrappers over lxc and workshop CLIs
-tests/
-  unit/               # Pure logic, no subprocesses
-  functional/         # Adapter and command tests with mock Workshop/LXD
-  e2e/                # Full container-based workflow tests (--slow)
-```
+For the project layout, see the `src/microjail/` and `tests/` directory trees.
 
 ______________________________________________________________________
 
@@ -296,16 +277,15 @@ Early development. The CLI, configuration schema, and gate set will change.
 
 **Currently implemented:**
 
-- `init`, `lock`, `run`, `unlock` commands
+- `init`, `lock`, `exec`, `shell`, `unlock`, `destroy` commands
+- Endpoint capabilities (Workshop tunnel provisioning for declared host services)
 - `network-egress` gate (LXD NIC removal + egress probe)
 - `readonly-config` gate (read-only config mount)
+- Warden runtime monitoring loop
 - Stateless Lockdown apply/release lifecycle
 
 **Planned:**
 
-- Endpoint capabilities (Workshop tunnel provisioning for declared host services)
-- Warden runtime monitoring loop
-- `destroy` command (stop workload + release Lockdown + remove Workshop environment)
 - Expanded gate set (filesystem-mode assertions, Linux capability drops)
 - Snap packaging
 
@@ -313,6 +293,5 @@ ______________________________________________________________________
 
 ## Warnings
 
-- **The workflow is the boundary.** Start a workload outside `microjail run` and the Warden is not watching. Run it through the gates or the guarantees do not apply.
-- **Egress control, not escape prevention.** `microjail` removes network access and enforces declared restrictions. It is not a defence against a workload trying to break out of the LXD container.
-- **Declare everything.** Pre-existing Workshop tunnels or connections not represented in the Lockdown are unauthorised. If they must be removed to enforce the network-egress gate, `microjail` requires explicit confirmation (`--force`). Without it, gate enforcement fails.
+- **The workflow is the boundary.** Start a workload outside `microjail exec` and the Warden is not watching. Run it through the gates or the guarantees do not apply.
+- **Declare everything.** Pre-existing Workshop tunnels or connections not represented in the Lockdown are unauthorised. If they must be removed to enforce the network-egress gate, enforcement fails without confirmation.
