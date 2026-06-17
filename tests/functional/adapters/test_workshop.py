@@ -5,9 +5,10 @@ import pytest
 
 from microjail.adapters import workshop
 from microjail.adapters.workshop import Workshop, WorkshopExistsError
-from tests.marks import requires_workshop
+from tests.marks import requires_lxd, requires_workshop
 
 pytestmark = [
+    requires_lxd(),
     requires_workshop(),
 ]
 
