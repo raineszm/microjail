@@ -1,11 +1,9 @@
-import os
-import subprocess
-import uuid
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from microjail.adapters.workshop import Workshop
+if TYPE_CHECKING:
+    from microjail.adapters.workshop import Workshop
 from microjail.gates.readonly_config import ReadonlyConfig
 from microjail.lockdown import Lockdown
 from microjail.microjail import (
@@ -20,26 +18,6 @@ pytestmark = [
     requires_workshop(),
     pytest.mark.slow,
 ]
-
-
-@pytest.fixture(scope="module")
-def launched_workshop(tmp_path_factory):
-    project = tmp_path_factory.mktemp("readonly-config-workshop")
-    name = f"mj-workshop-{uuid.uuid4().hex[:8]}"
-    cwd = Path.cwd()
-
-    try:
-        os.chdir(project)
-        Workshop.init(name, project=project)
-        mj = MicroJail(
-            workshop=Workshop(name=name, project=project), lockdown=Lockdown.default()
-        )
-        mj.save()
-        Workshop(name=name, project=project).launch()
-        yield Workshop(name=name, project=project)
-    finally:
-        os.chdir(cwd)
-        subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
 
 
 def can_write_config(ws: Workshop) -> bool:

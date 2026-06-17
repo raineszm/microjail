@@ -5,28 +5,27 @@ import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Generator
-from pathlib import Path
 
 from microjail.adapters.workshop import Workshop
 
 
 @pytest.fixture
-def tmp_workshop(tmpdir, project_name, monkeypatch) -> Generator[Workshop]:
-    """A tempory directory for creating a workshop.
+def tmp_workshop(tmp_path, project_name, monkeypatch) -> Generator[Workshop]:
+    """A temporary directory for creating a workshop.
 
     Ensure that the workshop is removed when it's done."""
 
-    monkeypatch.chdir(tmpdir)
+    monkeypatch.chdir(tmp_path)
 
     yield Workshop(
         name=project_name,
-        project=Path(tmpdir),
+        project=tmp_path,
     )
 
     # Clean up the workshop before we move on.
     # Don't check the return code since its possible the workshop was never
     # launched
-    subprocess.run(["workshop", "remove", "--project", tmpdir], check=False)
+    subprocess.run(["workshop", "remove", "--project", str(tmp_path)], check=False)
 
 
 def pytest_collection_modifyitems(items):

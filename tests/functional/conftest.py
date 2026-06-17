@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from microjail.adapters.workshop import Workshop
+from microjail.lockdown import Lockdown
+from microjail.microjail import MicroJail
 
 
 @pytest.fixture(scope="module")
@@ -21,6 +23,8 @@ def launched_workshop(tmp_path_factory):
         os.chdir(project)
         Workshop.init(name, project=project)
         ws = Workshop(name=name, project=project)
+        mj = MicroJail(workshop=ws, lockdown=Lockdown.default())
+        mj.save()
         ws.launch()
         yield ws
     finally:
