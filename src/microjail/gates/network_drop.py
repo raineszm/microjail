@@ -3,12 +3,14 @@ from typing import TYPE_CHECKING, Any
 
 import msgspec
 
+from microjail.adapters.lxc import LxcCommandError
+from microjail.policy import EGRESS_PROBE_TIMEOUT
+
 if TYPE_CHECKING:
     from microjail.microjail import MicroJail
 
-from microjail.policy import EGRESS_PROBE_TIMEOUT
-
 EGRESS_PROBE = ["bash", "-c", ": >/dev/tcp/1.1.1.1/443"]
+DEFAULT_NETWORK = "workshopbr0"
 
 
 class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
@@ -47,24 +49,35 @@ class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
             microjail.remove_device(device)
 
     def release(self, microjail: MicroJail) -> None:
-        """Restore network devices removed by enforce()."""
+        """Restore network devices removed by enforce().
+
+        Tries, in order: recorded state, the LXD profile, and finally a
+        fresh attach of :data:`DEFAULT_NETWORK`. The attach itself can
+        fail (e.g. the bridge is gone); in that case we hand off to
+        ``workshop restore`` as a last resort, which still works when
+        LXD-level recovery is impossible.
+        """
+        if self.removed_devices:
+            for device, config in self.removed_devices.items():
+                microjail.add_device(device, config)
+            self.removed_devices = {}
+            return
+
         profile_devices = microjail.profile_devices()
-        if not isinstance(profile_devices, dict):
-            profile_devices = {}
-        devices = self.removed_devices or {
+        devices = {
             name: config
             for name, config in profile_devices.items()
             if config.get("type") == "nic"
         }
         if not devices:
-            microjail.restore_workshop()
+            try:
+                microjail.attach_network(DEFAULT_NETWORK)
+            except LxcCommandError:
+                microjail.restore_workshop()
             return
-        if self.removed_devices:
-            for device, config in devices.items():
+
+        current_devices = microjail.lxc_instance().devices
+        for device, config in devices.items():
+            if device not in current_devices:
                 microjail.add_device(device, config)
-        else:
-            current_devices = microjail.lxc_instance().devices
-            for device, config in devices.items():
-                if device not in current_devices:
-                    microjail.add_device(device, config)
         self.removed_devices = {}

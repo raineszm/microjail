@@ -5,6 +5,30 @@ from typing import Any
 import msgspec
 
 
+class LxcCommandError(RuntimeError):
+    """Raised when an ``lxc`` subprocess returns non-zero.
+
+    Carries the command, returncode, and stderr so callers can decide
+    whether to fall back, surface the error, or re-raise.
+    """
+
+    def __init__(self, cmd: list[str], returncode: int, stderr: str) -> None:
+        super().__init__(
+            f"lxc {' '.join(cmd)} failed (rc={returncode}): {stderr.strip()}"
+        )
+        self.cmd = cmd
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+def run_lxc_command(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run *cmd* and raise :class:`LxcCommandError` on non-zero exit."""
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise LxcCommandError(cmd, result.returncode, result.stderr)
+    return result
+
+
 @dataclass(frozen=True)
 class InstanceInfo:
     name: str
@@ -34,6 +58,21 @@ def get_profile_devices(name: str, project: str) -> dict[str, dict[str, Any]]:
     )
     raw = msgspec.json.decode(result.stdout)
     return raw.get("devices", {})
+
+
+def attach_network(network: str, container: str, project: str) -> None:
+    """Attach a managed *network* to *container* in *project*.
+
+    *network* is resolved in the default project; *project* scopes the
+    container reference. This is the standard cross-project attach
+    pattern: a managed network in ``default`` is visible to other
+    projects whose ``features.networks`` is ``false`` (e.g. the
+
+    The device name is left for LXD to choose (typically ``eth0``).
+    """
+    run_lxc_command(
+        ["lxc", "network", "attach", network, container, "--project", project]
+    )
 
 
 def remove_device(container: str, device: str, project: str) -> None:

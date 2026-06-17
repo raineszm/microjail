@@ -1,6 +1,7 @@
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock, call
 
 import pytest
@@ -15,6 +16,46 @@ PROJECT = Path("/project")
 
 def gate() -> NetworkDrop:
     return NetworkDrop()
+
+
+class FakeMicroJail:
+    """Hand-rolled stand-in for MicroJail that tracks device mutations.
+
+    Used by the release tests so we can assert on the resulting
+    container state (what nics are attached, whether workshop was
+    restored) rather than on call sequences.
+    """
+
+    def __init__(
+        self,
+        *,
+        profile_devices: dict[str, dict[str, object]] | None = None,
+        devices: dict[str, dict[str, object]] | None = None,
+    ) -> None:
+        self.profile_devices_data = (
+            profile_devices if profile_devices is not None else {}
+        )
+        self.devices_data = devices if devices is not None else {}
+        self.attached_networks: list[str] = []
+        self.restored = False
+
+    def profile_devices(self) -> dict[str, dict[str, object]]:
+        return self.profile_devices_data
+
+    def lxc_instance(self) -> SimpleNamespace:
+        return SimpleNamespace(devices=self.devices_data)
+
+    def add_device(self, device: str, config: dict[str, object]) -> None:
+        self.devices_data[device] = config
+
+    def remove_device(self, device: str) -> None:
+        self.devices_data.pop(device, None)
+
+    def attach_network(self, network: str) -> None:
+        self.attached_networks.append(network)
+
+    def restore_workshop(self) -> None:
+        self.restored = True
 
 
 def test_network_drop_has_gate_name() -> None:
@@ -62,8 +103,7 @@ def test_enforce_removes_all_network_devices_from_workshop_container() -> None:
 
 
 def test_release_restores_network_devices_removed_by_enforce() -> None:
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.lxc_instance.return_value = SimpleNamespace(
+    mj = FakeMicroJail(
         devices={
             "root": {"type": "disk", "path": "/"},
             "eth0": {"type": "nic", "nictype": "bridged", "parent": "lxdbr0"},
@@ -71,26 +111,61 @@ def test_release_restores_network_devices_removed_by_enforce() -> None:
     )
 
     network_gate = gate()
-    network_gate.enforce(mock_mj)
-    network_gate.release(mock_mj)
+    network_gate.enforce(cast("MicroJail", mj))
+    network_gate.release(cast("MicroJail", mj))
 
-    mock_mj.add_device.assert_called_once_with(
-        "eth0",
-        {"type": "nic", "nictype": "bridged", "parent": "lxdbr0"},
-    )
+    # the eth0 nic that enforce() removed is back in the container's
+    # device list, and we did not need to fall back to attach/restore
+    assert mj.devices_data["eth0"] == {
+        "type": "nic",
+        "nictype": "bridged",
+        "parent": "lxdbr0",
+    }
+    assert not mj.restored
+    assert mj.attached_networks == []
 
 
-def test_release_restores_workshop_when_removed_network_device_cannot_be_derived() -> (
-    None
-):
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.profile_devices.return_value = {}
+def test_release_attaches_default_network_when_no_recorded_state_or_profile() -> None:
+    mj = FakeMicroJail(profile_devices={}, devices={})
 
-    network_gate = gate()
-    network_gate.release(mock_mj)
+    gate().release(cast("MicroJail", mj))
 
-    mock_mj.restore_workshop.assert_called_once()
-    mock_mj.add_device.assert_not_called()
+    assert mj.attached_networks == ["workshopbr0"]
+    assert not mj.restored
+
+
+def test_release_falls_back_to_workshop_restore_when_attach_fails() -> None:
+    from microjail.adapters.lxc import LxcCommandError
+
+    class FailingAttachMicroJail(FakeMicroJail):
+        def __init__(self) -> None:
+            super().__init__(profile_devices={}, devices={})
+            self.attach_calls: list[str] = []
+
+        def attach_network(self, network: str) -> None:
+            self.attach_calls.append(network)
+            raise LxcCommandError(
+                cmd=[
+                    "lxc",
+                    "network",
+                    "attach",
+                    network,
+                    "container",
+                    "--project",
+                    "p",
+                ],
+                returncode=1,
+                stderr="network not found",
+            )
+
+    mj = FailingAttachMicroJail()
+
+    gate().release(cast("MicroJail", mj))
+
+    # the new behaviour: try to attach workshopbr0 first, fall back to
+    # workshop restore when that fails (rather than always restoring)
+    assert mj.attach_calls == ["workshopbr0"]
+    assert mj.restored
 
 
 def test_enforce_fails_if_workshop_container_is_not_available() -> None:

@@ -337,6 +337,16 @@ class MicroJail:
             self.container_name(), device, config, project=self.lxd_project()
         )
 
+    def attach_network(self, network: str) -> None:
+        """Attach *network* to the workshop container with a default device name.
+
+        Used by the network-egress gate as a fallback when removed nics
+        cannot be reconstructed from recorded state or the container's
+        profiles. The network is resolved in the default project; the
+        container reference is scoped to the workshop project.
+        """
+        lxc.attach_network(network, self.container_name(), project=self.lxd_project())
+
     def release(self) -> None:
         """Release this microjail's lockdown policy."""
         errors: list[Exception] = []
