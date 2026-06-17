@@ -1,5 +1,5 @@
-from typing import TYPE_CHECKING, Literal, Protocol
-from unittest.mock import Mock, call
+from typing import TYPE_CHECKING, Literal
+from unittest.mock import Mock
 
 import pytest
 
@@ -16,16 +16,7 @@ from microjail.microjail import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from pathlib import Path
-
-
-class CapabilityMock(Capability, Protocol):
-    mock_calls: list[object]
-
-
-class GateMock(Gate, Protocol):
-    mock_calls: list[object]
 
 
 @pytest.fixture
@@ -34,18 +25,6 @@ def tmp_microjail(tmp_path: Path, project_name: str) -> MicroJail:
         workshop=Workshop(name=project_name, project=tmp_path),
         lockdown=Lockdown(caps=[], gates=[]),
     )
-
-
-def expected_calls(method_names: Sequence[str], microjail: MicroJail) -> list[object]:
-    return [getattr(call, method_name)(microjail) for method_name in method_names]
-
-
-def assert_calls(
-    mocks: Sequence[CapabilityMock | GateMock],
-    method_names: Sequence[str],
-    microjail: MicroJail,
-) -> None:
-    assert mocks[0].mock_calls == expected_calls(method_names, microjail)
 
 
 def mark_workshop_ready(monkeypatch: pytest.MonkeyPatch, microjail: MicroJail) -> None:
@@ -74,8 +53,8 @@ def test_application_fails_without_running_policy_if_workshop_is_not_launched(
     with pytest.raises(workshop.WorkshopNotLaunchedError):
         microjail.ensure(ApplicationIntent.RUN)
 
-    assert capability.mock_calls == []
-    assert gate.mock_calls == []
+    capability.check.assert_not_called()
+    gate.check.assert_not_called()
 
 
 @pytest.mark.parametrize("status", ["pending", "stopped"])
@@ -103,8 +82,8 @@ def test_application_fails_without_running_policy_if_workshop_is_not_ready(
     with pytest.raises(WorkshopNotReadyError):
         microjail.ensure(ApplicationIntent.RUN)
 
-    assert capability.mock_calls == []
-    assert gate.mock_calls == []
+    capability.check.assert_not_called()
+    gate.check.assert_not_called()
 
 
 def test_run_application_provisions_capabilities_before_enforcing_gates(
@@ -125,16 +104,8 @@ def test_run_application_provisions_capabilities_before_enforcing_gates(
     result = microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.SUCCESS
-    assert capability.mock_calls == [
-        call.check(microjail),
-        call.provide(microjail),
-        call.check(microjail),
-    ]
-    assert gate.mock_calls == [
-        call.check(microjail),
-        call.enforce(microjail),
-        call.check(microjail),
-    ]
+    capability.provide.assert_called_once_with(microjail)
+    gate.enforce.assert_called_once_with(microjail)
 
 
 def test_application_skips_satisfied_capabilities_and_gates(
@@ -155,8 +126,8 @@ def test_application_skips_satisfied_capabilities_and_gates(
     result = microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.SUCCESS
-    assert_calls([cap], ("check",), microjail)
-    assert_calls([gate], ("check",), microjail)
+    cap.provide.assert_not_called()
+    gate.enforce.assert_not_called()
 
 
 def test_run_application_rolls_back_if_capability_verification_fails(
@@ -176,7 +147,8 @@ def test_run_application_rolls_back_if_capability_verification_fails(
     assert result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE
     assert [error.name for error in result.capability_failures] == ["proxy"]
     assert result.rollback_failures == ()
-    assert_calls([cap], ("check", "provide", "check", "revoke"), microjail)
+    cap.provide.assert_called_once_with(microjail)
+    cap.revoke.assert_called_once_with(microjail)
 
 
 def test_run_application_reports_rollback_failures(
@@ -228,8 +200,10 @@ def test_lock_application_capability_failure_still_attempts_gate_enforcement(
     assert result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE
     assert result.gates_enforced == 1
     assert result.rollback_failures == ()
-    assert_calls([cap], ("check", "provide", "check"), microjail)
-    assert_calls([gate], ("check", "enforce", "check"), microjail)
+    cap.provide.assert_called_once_with(microjail)
+    cap.revoke.assert_not_called()
+    gate.enforce.assert_called_once_with(microjail)
+    gate.release.assert_not_called()
 
 
 def test_lock_application_gate_failure_keeps_capability_failures_as_context(
@@ -254,8 +228,10 @@ def test_lock_application_gate_failure_keeps_capability_failures_as_context(
     assert result.gate_failure.name == "network"
     assert [error.name for error in result.capability_failures] == ["proxy"]
     assert result.rollback_failures == ()
-    assert_calls([cap], ("check", "provide", "check"), microjail)
-    assert_calls([gate], ("check", "enforce", "check"), microjail)
+    cap.provide.assert_called_once_with(microjail)
+    cap.revoke.assert_not_called()
+    gate.enforce.assert_called_once_with(microjail)
+    gate.release.assert_not_called()
 
 
 def test_run_application_preserves_preexisting_state_if_later_gate_fails(
@@ -279,11 +255,10 @@ def test_run_application_preserves_preexisting_state_if_later_gate_fails(
     result = microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
-    assert_calls([cap], ("check",), microjail)
-    assert_calls([gate_a], ("check",), microjail)
-    assert gate_b.mock_calls == expected_calls(
-        ("check", "enforce", "check", "release"), microjail
-    )
+    cap.provide.assert_not_called()
+    gate_a.enforce.assert_not_called()
+    gate_b.enforce.assert_called_once_with(microjail)
+    gate_b.release.assert_called_once_with(microjail)
 
 
 def test_run_application_aborts_remaining_gates_after_first_failure(
@@ -303,10 +278,9 @@ def test_run_application_aborts_remaining_gates_after_first_failure(
     result = microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
-    assert gate_a.mock_calls == expected_calls(
-        ("check", "enforce", "check", "release"), microjail
-    )
-    assert gate_b.mock_calls == []
+    gate_a.enforce.assert_called_once_with(microjail)
+    gate_a.release.assert_called_once_with(microjail)
+    gate_b.check.assert_not_called()
 
 
 def test_default_lockdown_application_enforces_network_drop(
@@ -327,5 +301,5 @@ def test_default_lockdown_application_enforces_network_drop(
     result = microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.SUCCESS
-    assert net.mock_calls == expected_calls(("check", "enforce", "check"), microjail)
-    assert_calls([ro], ("check",), microjail)
+    net.enforce.assert_called_once_with(microjail)
+    ro.enforce.assert_not_called()

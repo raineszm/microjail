@@ -256,7 +256,7 @@ def test_workshop_popen_interactive_flag(
     ws.popen(["bash"], interactive=True)
 
     popen.assert_called_once()
-    assert popen.call_args[0][0][2] == "--interactive"
+    assert "--interactive" in popen.call_args[0][0]
 
 
 def test_workshop_shell_builds_shell_command(

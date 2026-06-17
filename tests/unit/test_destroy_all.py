@@ -26,34 +26,25 @@ def mock_microjail(tmp_path: Path):
 
 @patch.object(Workshop, "remove")
 @patch.object(Workshop, "info")
-@patch("microjail.commands.destroy.typer.confirm")
-def test_destroy_all_interactive_yes(
-    mock_confirm, mock_info, mock_remove, mock_microjail, tmp_path
-):
+def test_destroy_all_interactive_yes(mock_info, mock_remove, mock_microjail, tmp_path):
     mock_info.return_value = None  # Workshop is already removed or doesn't exist
-    mock_confirm.return_value = True
 
-    result = CliRunner().invoke(app, ["--project", str(tmp_path), "destroy", "--all"])
+    result = CliRunner().invoke(
+        app, ["--project", str(tmp_path), "destroy", "--all"], input="y\n"
+    )
 
     assert result.exit_code == 0
-    mock_confirm.assert_called_once()
     assert not tmp_path.exists()
     mock_remove.assert_called_once()
 
 
 @patch.object(Workshop, "remove")
 @patch.object(Workshop, "info")
-@patch("microjail.commands.destroy.typer.confirm")
-def test_destroy_all_interactive_no(
-    mock_confirm, mock_info, mock_remove, mock_microjail, tmp_path
-):
-    import typer
-
-    mock_confirm.side_effect = typer.Abort()
-
-    result = CliRunner().invoke(app, ["--project", str(tmp_path), "destroy", "--all"])
+def test_destroy_all_interactive_no(mock_info, mock_remove, mock_microjail, tmp_path):
+    result = CliRunner().invoke(
+        app, ["--project", str(tmp_path), "destroy", "--all"], input="n\n"
+    )
     assert result.exit_code == 1  # aborts
-    mock_confirm.assert_called_once()
     assert tmp_path.exists()  # project is kept
     mock_remove.assert_not_called()
 

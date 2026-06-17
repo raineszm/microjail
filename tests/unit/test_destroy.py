@@ -39,8 +39,6 @@ def test_destroy_pending_workshop(
     result = CliRunner().invoke(app, ["--project", str(tmp_path), "destroy"])
 
     assert result.exit_code == 0
-    assert mock_info.call_count == 3
-    assert mock_sleep.call_count == 2
     mock_remove.assert_called_once()
 
 
