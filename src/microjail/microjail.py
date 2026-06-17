@@ -11,6 +11,7 @@ from microjail.adapters import lxc
 from microjail.adapters.workshop import (
     CommandExecutor,
     Workshop,
+    WorkshopConfig,
     WorkshopInfo,
     WorkshopNotLaunchedError,
 )
@@ -88,8 +89,6 @@ def enc_hook(obj: object) -> object:
     """Serialize types msgspec does not handle natively."""
     if isinstance(obj, Path):
         return str(obj)
-    if hasattr(obj, "run") and hasattr(obj, "popen"):
-        return None
     raise NotImplementedError(f"cannot encode object of type {type(obj).__name__}")
 
 
@@ -104,19 +103,61 @@ def dec_hook(expected: type, obj: object) -> object:
     raise NotImplementedError(f"cannot decode object of type {expected.__name__}")
 
 
-class MicroJail(msgspec.Struct):
-    """Configuration for a single microjail.
-    Parameters
-    ----------
-    workshop:
-        The workshop instance this microjail governs.
-    lockdown:
-        The policy applied while workloads execute.
+class MicroJailConfig(msgspec.Struct, omit_defaults=True):
+    """DTO form of a microjail, suitable for YAML serialization.
+
+    Holds only the fields that belong in configuration; the workshop's executor
+    is a runtime dependency that is injected at construction time, not
+    serialized.
+    """
+
+    workshop: WorkshopConfig
+    lockdown: Lockdown
+    purge_path: str = "data"
+
+
+@dataclass
+class MicroJail:
+    """Runtime microjail: a per-project binding between a workshop, a Lockdown,
+    and a purge path.
+
+    Constructed directly for tests and ad-hoc use, or via
+    :meth:`from_config` from a :class:`MicroJailConfig` loaded from disk.
+    Use :meth:`to_config` to produce the DTO form for :meth:`save`.
     """
 
     workshop: Workshop
     lockdown: Lockdown
     purge_path: str = "data"
+
+    def to_config(self) -> MicroJailConfig:
+        """Return the serializable DTO form of this microjail.
+
+        The workshop's executor is dropped; it is a runtime dependency, not
+        configuration.
+        """
+        return MicroJailConfig(
+            workshop=self.workshop.to_config(),
+            lockdown=self.lockdown,
+            purge_path=self.purge_path,
+        )
+
+    @classmethod
+    def from_config(
+        cls,
+        config: MicroJailConfig,
+        executor: CommandExecutor | None = None,
+    ) -> MicroJail:
+        """Construct a runtime microjail from a ``MicroJailConfig`` DTO.
+
+        The executor is injected into the inner workshop at construction
+        time; it never appears in the DTO or in on-disk configuration.
+        """
+        return cls(
+            workshop=Workshop.from_config(config.workshop, executor),
+            lockdown=config.lockdown,
+            purge_path=config.purge_path,
+        )
 
     @property
     def name(self) -> str:
@@ -289,12 +330,9 @@ class MicroJail(msgspec.Struct):
     def save(self) -> None:
         """Persist this microjail to ``.microjail/config.yaml``."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        executor = self.workshop.executor
-        self.workshop.executor = None
-        try:
-            self.config_path.write_bytes(msgspec.yaml.encode(self, enc_hook=enc_hook))
-        finally:
-            self.workshop.executor = executor
+        self.config_path.write_bytes(
+            msgspec.yaml.encode(self.to_config(), enc_hook=enc_hook)
+        )
 
     def destroy(
         self,
@@ -352,10 +390,8 @@ class MicroJail(msgspec.Struct):
         except FileNotFoundError as exc:
             raise ConfigNotFoundError(project_path=project_path) from exc
 
-        config = msgspec.yaml.decode(raw, type=cls, dec_hook=dec_hook)
-        if executor is not None:
-            config.workshop.executor = executor
-        return config
+        config = msgspec.yaml.decode(raw, type=MicroJailConfig, dec_hook=dec_hook)
+        return cls.from_config(config, executor)
 
     @classmethod
     def init(

@@ -10,11 +10,11 @@ from microjail.adapters.workshop import (
     TunnelEntry,
     TunnelInterface,
     Workshop,
-    WorkshopConfig,
     WorkshopInfo,
     WorkshopNotFoundError,
     WorkshopNotLaunchedError,
     WorkshopSdk,
+    WorkshopYamlConfig,
 )
 
 
@@ -531,7 +531,7 @@ class TestTunnelInterface:
 
     def test_add_slot_creates_new(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ti = self.make_tunnel()
-        read = Mock(return_value=WorkshopConfig(name="test"))
+        read = Mock(return_value=WorkshopYamlConfig(name="test"))
         write = Mock()
         monkeypatch.setattr(workshop, "read_workshop_yaml", read)
         monkeypatch.setattr(workshop, "write_workshop_yaml", write)
@@ -546,7 +546,7 @@ class TestTunnelInterface:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         ti = self.make_tunnel()
-        data = WorkshopConfig(name="test")
+        data = WorkshopYamlConfig(name="test")
         project_sdk = WorkshopSdk(name="project-microjail")
         system = WorkshopSdk(name="system")
         system.slots["api"] = TunnelEntry(interface="tunnel", endpoint="127.0.0.1:8080")
@@ -562,7 +562,7 @@ class TestTunnelInterface:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         ti = self.make_tunnel()
-        data = WorkshopConfig(name="test")
+        data = WorkshopYamlConfig(name="test")
         project_sdk = WorkshopSdk(name="project-microjail")
         system = WorkshopSdk(name="system")
         system.slots["api"] = TunnelEntry(interface="tunnel", endpoint="127.0.0.1:8080")
@@ -580,7 +580,7 @@ class TestTunnelInterface:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         ti = self.make_tunnel()
-        data = WorkshopConfig(name="test")
+        data = WorkshopYamlConfig(name="test")
         data.sdks.append(WorkshopSdk(name="system"))
         read = Mock(return_value=data)
         write = Mock()

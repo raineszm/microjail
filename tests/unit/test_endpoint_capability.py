@@ -8,7 +8,7 @@ import pytest
 from microjail.adapters.workshop import Workshop
 from microjail.caps.endpoint import WorkshopEndpointCapability
 from microjail.lockdown import Lockdown
-from microjail.microjail import MicroJail, dec_hook
+from microjail.microjail import MicroJail, MicroJailConfig, dec_hook
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -189,7 +189,8 @@ lockdown:
       host_endpoint: localhost:8080
   gates: []
 """
-    loaded = msgspec.yaml.decode(raw, type=MicroJail, dec_hook=dec_hook)
+    config = msgspec.yaml.decode(raw, type=MicroJailConfig, dec_hook=dec_hook)
+    loaded = MicroJail.from_config(config)
     assert isinstance(loaded.lockdown.caps[0], WorkshopEndpointCapability)
     assert loaded.lockdown.caps[0].name == "inference"
     assert loaded.lockdown.caps[0].host_endpoint == "localhost:8080"
@@ -208,7 +209,8 @@ lockdown:
       container_endpoint: 127.0.0.1:9090
   gates: []
 """
-    loaded = msgspec.yaml.decode(raw, type=MicroJail, dec_hook=dec_hook)
+    config = msgspec.yaml.decode(raw, type=MicroJailConfig, dec_hook=dec_hook)
+    loaded = MicroJail.from_config(config)
     assert isinstance(loaded.lockdown.caps[0], WorkshopEndpointCapability)
     assert loaded.lockdown.caps[0].name == "inference"
     assert loaded.lockdown.caps[0].host_endpoint == "127.0.0.1:8080"

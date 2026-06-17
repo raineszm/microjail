@@ -74,12 +74,33 @@ class LocalExecutor:
         return subprocess.Popen(command, **kwargs)
 
 
-class Workshop(msgspec.Struct, omit_defaults=True):
+@dataclass
+class Workshop:
     """A workshop instance identified by name and project directory."""
 
     name: str
     project: Path
     executor: CommandExecutor | None = None
+
+    def to_config(self) -> WorkshopConfig:
+        """Return the serializable DTO form of this workshop.
+
+        The executor is dropped; it is a runtime dependency, not configuration.
+        """
+        return WorkshopConfig(name=self.name, project=self.project)
+
+    @classmethod
+    def from_config(
+        cls,
+        config: WorkshopConfig,
+        executor: CommandExecutor | None = None,
+    ) -> Workshop:
+        """Construct a runtime workshop from a ``WorkshopConfig`` DTO.
+
+        The executor is injected at construction time; it never appears in the
+        DTO or in on-disk configuration.
+        """
+        return cls(name=config.name, project=config.project, executor=executor)
 
     def _run(self, *args, **kwargs):
         executor = self.executor or LocalExecutor()
@@ -297,6 +318,17 @@ class Workshop(msgspec.Struct, omit_defaults=True):
         )
 
 
+class WorkshopConfig(msgspec.Struct):
+    """DTO form of a workshop, suitable for YAML serialization.
+
+    Holds only the fields that belong in configuration; the executor is a
+    runtime dependency that is injected at construction time, not serialized.
+    """
+
+    name: str
+    project: Path
+
+
 class TunnelInterface:
     """Tunnel plug/slot/connection operations for a workshop."""
 
@@ -452,7 +484,7 @@ class WorkshopSdk(msgspec.Struct, omit_defaults=True):
     slots: dict[str, TunnelEntry] = msgspec.field(default_factory=dict)
 
 
-class WorkshopConfig(msgspec.Struct, omit_defaults=True):
+class WorkshopYamlConfig(msgspec.Struct, omit_defaults=True):
     name: str
     base: str = ""
     sdks: list[WorkshopSdk] = msgspec.field(default_factory=list)
@@ -482,7 +514,7 @@ def _tunnel_entry(endpoint: str) -> TunnelEntry:
     return TunnelEntry(interface=_TUNNEL_INTERFACE, endpoint=endpoint)
 
 
-def _sdk_entry(workshop_data: WorkshopConfig, name: str) -> WorkshopSdk | None:
+def _sdk_entry(workshop_data: WorkshopYamlConfig, name: str) -> WorkshopSdk | None:
     for entry in workshop_data.sdks:
         if entry.name == name:
             return entry
@@ -503,21 +535,21 @@ def lxd_project() -> str:
     return f"workshop.{project_suffix()}"
 
 
-def read_workshop_yaml(name: str, project: Path) -> WorkshopConfig:
+def read_workshop_yaml(name: str, project: Path) -> WorkshopYamlConfig:
     path = project / _WORKSHOP_DIRNAME / f"{name}.yaml"
     if not path.exists():
-        return WorkshopConfig(name=name)
+        return WorkshopYamlConfig(name=name)
     try:
         return msgspec.yaml.decode(
             path.read_bytes(),
-            type=WorkshopConfig,
+            type=WorkshopYamlConfig,
             dec_hook=_workshop_dec_hook,
         )
     except msgspec.ValidationError as exc:
         raise WorkshopConfigError(name, project) from exc
 
 
-def write_workshop_yaml(name: str, project: Path, data: WorkshopConfig) -> None:
+def write_workshop_yaml(name: str, project: Path, data: WorkshopYamlConfig) -> None:
     _atomic_write_yaml(project / _WORKSHOP_DIRNAME / f"{name}.yaml", data)
 
 
