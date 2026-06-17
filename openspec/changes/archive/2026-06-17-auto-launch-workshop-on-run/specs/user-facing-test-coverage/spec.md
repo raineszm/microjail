@@ -18,6 +18,6 @@ The project MUST provide slow e2e coverage proving that `microjail run` applies 
 
 #### Scenario: Run auto-launches workshop if not launched
 - **GIVEN** a microjail-configured project where the workshop has not been launched
-- **WHEN** `microjail run -- true` is run
+- **WHEN** `microjail exec -- true` is run
 - **THEN** the workshop is automatically launched
 - **AND** the command completes successfully

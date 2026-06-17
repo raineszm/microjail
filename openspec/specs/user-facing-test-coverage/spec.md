@@ -41,6 +41,13 @@ The project MUST provide slow e2e coverage proving that `microjail run` applies 
 - **WHEN** `microjail run -- <command>` reads a normal project file from `/project` and writes a normal project output file
 - **THEN** the project file workflow succeeds while implemented Microjail Gates remain applied
 
+#### Scenario: Run auto-launches workshop if not launched
+
+- **GIVEN** a microjail-configured project where the workshop has not been launched
+- **WHEN** `microjail exec -- true` is run
+- **THEN** the workshop is automatically launched
+- **AND** the command completes successfully
+
 ---
 
 ### Requirement: E2E tests cover explicit unlock behavior
