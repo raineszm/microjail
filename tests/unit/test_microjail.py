@@ -1,3 +1,4 @@
+import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
@@ -57,3 +58,149 @@ def test_load_raises_when_config_missing(tmp_path: Path) -> None:
         MicroJail.load(tmp_path)
 
     assert exc_info.value.project_path == tmp_path
+
+
+def test_status_returns_workshop_info_and_lockdown_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    from unittest.mock import Mock, PropertyMock
+
+    from microjail.adapters.workshop import WorkshopInfo
+    from microjail.caps.endpoint import WorkshopEndpointCapability
+
+    cap = WorkshopEndpointCapability(name="inference", host_endpoint="127.0.0.1:8080")
+    microjail = MicroJail(
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
+        lockdown=Lockdown(caps=[cap], gates=[]),
+    )
+    monkeypatch.setattr(
+        microjail.workshop,
+        "info",
+        Mock(return_value=WorkshopInfo(name=microjail.name, status="ready")),
+    )
+    mock_tunnel = Mock()
+    mock_tunnel.connections.return_value = [
+        (f"{microjail.name}/microjail:inference", f"{microjail.name}/system:inference"),
+    ]
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+    result = microjail.status()
+
+    assert result.workshop_name == microjail.name
+    assert result.workshop_status == "ready"
+    assert result.capabilities == ("inference",)
+    assert result.gates == ()
+    assert result.connections == (
+        (f"{microjail.name}/microjail:inference", f"{microjail.name}/system:inference"),
+    )
+
+
+def test_status_reports_unavailable_when_workshop_not_launched(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    from unittest.mock import Mock, PropertyMock
+
+    from microjail.adapters.workshop import Workshop
+
+    monkeypatch.setattr(tmp_microjail.workshop, "info", Mock(return_value=None))
+    mock_tunnel = Mock()
+    mock_tunnel.connections.return_value = []
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+    result = tmp_microjail.status()
+
+    assert result.workshop_status == "unavailable"
+    assert result.connections == ()
+
+
+def test_status_handles_connection_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    from unittest.mock import Mock, PropertyMock
+
+    from microjail.adapters.workshop import Workshop
+
+    monkeypatch.setattr(
+        tmp_microjail.workshop,
+        "info",
+        Mock(return_value=Mock(name="test", status="ready")),
+    )
+    mock_tunnel = Mock()
+    mock_tunnel.connections.side_effect = subprocess.CalledProcessError(
+        1, ["workshop", "connections"]
+    )
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+    result = tmp_microjail.status()
+
+    assert result.workshop_status == "ready"
+    assert result.connections == ()
+
+
+def test_validate_returns_no_errors_for_valid_config() -> None:
+    from pathlib import Path
+
+    from microjail.caps.endpoint import WorkshopEndpointCapability
+
+    cap = WorkshopEndpointCapability(name="inference", host_endpoint="127.0.0.1:8080")
+    microjail = MicroJail(
+        workshop=Workshop(name="test", project=Path("/tmp/test")),
+        lockdown=Lockdown(caps=[cap], gates=[]),
+    )
+
+    errors = microjail.validate()
+
+    assert errors == []
+
+
+def test_validate_detects_duplicate_cap_names() -> None:
+    from pathlib import Path
+
+    from microjail.caps.endpoint import WorkshopEndpointCapability
+
+    cap_a = WorkshopEndpointCapability(name="inference", host_endpoint="127.0.0.1:8080")
+    cap_b = WorkshopEndpointCapability(name="inference", host_endpoint="127.0.0.1:9090")
+    microjail = MicroJail(
+        workshop=Workshop(name="test", project=Path("/tmp/test")),
+        lockdown=Lockdown(caps=[cap_a, cap_b], gates=[]),
+    )
+
+    errors = microjail.validate()
+
+    assert len(errors) == 1
+    assert any("duplicate" in e.message.lower() for e in errors)
+    assert any("inference" in e.message for e in errors)
+
+
+def test_validate_detects_bad_endpoint_name() -> None:
+    from pathlib import Path
+
+    from microjail.caps.endpoint import WorkshopEndpointCapability
+
+    cap = WorkshopEndpointCapability(name="_bad", host_endpoint="127.0.0.1:8080")
+    microjail = MicroJail(
+        workshop=Workshop(name="test", project=Path("/tmp/test")),
+        lockdown=Lockdown(caps=[cap], gates=[]),
+    )
+
+    errors = microjail.validate()
+
+    assert len(errors) == 1
+    assert any("endpoint name" in e.message.lower() for e in errors)
+
+
+def test_validate_detects_bad_endpoint_address() -> None:
+    from pathlib import Path
+
+    from microjail.caps.endpoint import WorkshopEndpointCapability
+
+    cap = WorkshopEndpointCapability(name="inf", host_endpoint="no-port")
+    microjail = MicroJail(
+        workshop=Workshop(name="test", project=Path("/tmp/test")),
+        lockdown=Lockdown(caps=[cap], gates=[]),
+    )
+
+    errors = microjail.validate()
+
+    assert len(errors) == 1
+    assert any("port" in e.message.lower() for e in errors)

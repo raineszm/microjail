@@ -1,5 +1,6 @@
 """The MicroJail configuration object and its on-disk persistence."""
 
+import subprocess
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -32,7 +33,6 @@ TaggedGate = NetworkDrop | ReadonlyConfig
 TaggedCapability = WorkshopEndpointCapability
 
 if TYPE_CHECKING:
-    import subprocess
     from collections.abc import Callable
 
     from microjail.adapters.workshop import TunnelBatch
@@ -118,6 +118,26 @@ class MicroJailConfig(msgspec.Struct, omit_defaults=True):
     purge_path: str = "data"
 
 
+@dataclass(frozen=True)
+class MicroJailStatus:
+    """Read-only snapshot of microjail and workshop state."""
+
+    workshop_name: str
+    workshop_status: str
+    capabilities: tuple[str, ...]
+    gates: tuple[str, ...]
+    connections: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class ValidateError:
+    """A single validation error found during ``microjail validate``."""
+
+    kind: str
+    message: str
+    hint: str
+
+
 @dataclass
 class MicroJail:
     """Runtime microjail: a per-project binding between a workshop, a Lockdown,
@@ -180,6 +200,75 @@ class MicroJail:
     def workshop_info(self) -> WorkshopInfo | None:
         """Return workshop info, or None if the workshop is not launched."""
         return self.workshop.info()
+
+    def status(self) -> MicroJailStatus:
+        """Return a snapshot of the current microjail and workshop state."""
+        info = self.workshop_info()
+        try:
+            connections = self.workshop.tunnel.connections()
+        except subprocess.CalledProcessError, OSError:
+            connections = []
+        return MicroJailStatus(
+            workshop_name=self.name,
+            workshop_status=info.status if info else "unavailable",
+            capabilities=tuple(cap.name for cap in self.lockdown.caps),
+            gates=tuple(gate.name for gate in self.lockdown.gates),
+            connections=tuple(connections),
+        )
+
+    def validate(self) -> list[ValidateError]:
+        """Validate the lockdown configuration without applying policy.
+
+        Checks schema conformance (loaded config) and semantic rules:
+        duplicate capability names, endpoint name format, endpoint address format.
+        """
+        errors: list[ValidateError] = []
+
+        # Check for duplicate capability names
+        seen: set[str] = set()
+        for cap in self.lockdown.caps:
+            if cap.name in seen:
+                errors.append(
+                    ValidateError(
+                        kind="duplicate_name",
+                        message=f"duplicate capability name '{cap.name}' in config",
+                        hint="Remove or rename one of the duplicate capabilities",
+                    )
+                )
+            seen.add(cap.name)
+
+        # Validate endpoint capabilities
+        from microjail.caps.endpoint import (
+            WorkshopEndpointCapability,
+            validate_endpoint_address,
+            validate_endpoint_name,
+        )
+
+        for cap in self.lockdown.caps:
+            if not isinstance(cap, WorkshopEndpointCapability):
+                continue
+
+            name_err = validate_endpoint_name(cap.name)
+            if name_err:
+                errors.append(
+                    ValidateError(
+                        kind="endpoint_name",
+                        message=name_err,
+                        hint="Use a name starting with a letter, followed by letters, digits, or hyphens",
+                    )
+                )
+
+            addr_err = validate_endpoint_address(cap.host_endpoint)
+            if addr_err:
+                errors.append(
+                    ValidateError(
+                        kind="endpoint_syntax",
+                        message=addr_err,
+                        hint="Use HOST:PORT format (e.g., 127.0.0.1:8080)",
+                    )
+                )
+
+        return errors
 
     def ensure_workshop_ready(self) -> None:
         """Verify the associated workshop is launched and ready."""
