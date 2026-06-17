@@ -21,8 +21,16 @@ The act of applying a Lockdown to a Microjail instance: verifying the Workshop e
 _Avoid_: policy execution, sandbox setup, runtime lock state
 
 **Capability**:
-Functionality or access intentionally made available to a workload that would otherwise be unavailable.
+Functionality or access intentionally made available to a workload that would otherwise be unavailable. Capability names identify declared workload access within a Lockdown and must be unique across all Capability types in that Lockdown.
 _Avoid_: permission, exception, restriction
+
+**Capability declaration**:
+A Lockdown entry stating that functionality or access should be available to a workload. A declaration is not proof that the functionality has been provisioned; provisioning happens during Lockdown application.
+_Avoid_: provided capability, live capability, permission
+
+**Unauthorized access**:
+Functionality or access available to a workload that is not represented by a current Capability declaration in the Lockdown. Unauthorized access is more dangerous than missing declared access because it expands what the workload can reach beyond the reviewed policy.
+_Avoid_: stale capability, extra permission
 
 **Gate**:
 A security invariant that must hold for a workload by removing, limiting, or continuously enforcing against ambient access. Gates are always fatal when they cannot be established or stop holding.
