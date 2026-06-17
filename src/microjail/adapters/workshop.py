@@ -4,14 +4,18 @@ import pwd
 import re
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import msgspec
 
 from microjail.policy import EGRESS_PROBE_TIMEOUT
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class WorkshopInfo(msgspec.Struct):
@@ -317,6 +321,26 @@ class Workshop:
             self.name, self.project, exec_=self.exec_, executor=self.executor
         )
 
+    @contextmanager
+    def batch(self) -> Iterator[TunnelBatch]:
+        """Context manager that defers refresh and connect/disconnect.
+
+        YAML mutations (add_plug, add_slot, remove_plug, remove_slot)
+        execute immediately as they are called. On normal exit, issues
+        at most one ``workshop refresh`` then replays deferred connects.
+        On exception, skips refresh entirely — writes already hit disk
+        but the daemon never picks them up.
+        """
+        tb = TunnelBatch(self)
+        try:
+            yield tb
+        except Exception:
+            # On exception: skip flush. YAML writes already happened but
+            # the daemon never refreshed, so it never saw partial state.
+            raise
+        else:
+            tb.flush()
+
 
 class WorkshopConfig(msgspec.Struct):
     """DTO form of a workshop, suitable for YAML serialization.
@@ -327,6 +351,54 @@ class WorkshopConfig(msgspec.Struct):
 
     name: str
     project: Path
+
+
+class TunnelBatch:
+    """Collects tunnel connect operations to defer them, issuing a
+    single ``workshop refresh`` before replaying them."""
+
+    def __init__(self, workshop: Workshop) -> None:
+        self._workshop = workshop
+        self._dirty = False
+        self._deferred_connects: list[tuple[str, str, str, str]] = []
+        self._flushed = False
+
+    def mark_dirty(self) -> None:
+        """Mark that YAML mutations have occurred and a refresh is needed."""
+        self._dirty = True
+
+    def defer_connect(
+        self,
+        plug_sdk: str,
+        plug: str,
+        slot_sdk: str,
+        slot: str,
+    ) -> None:
+        """Defer a ``workshop connect`` call until flush."""
+        self._deferred_connects.append((plug_sdk, plug, slot_sdk, slot))
+
+    def flush(self) -> None:
+        """Issue refresh if dirty, then replay all deferred connects.
+
+        Safe to call multiple times; only the first call has effect.
+        """
+        if self._flushed:
+            return
+        self._flushed = True
+
+        if self._dirty:
+            self._workshop.refresh()
+
+        t = self._workshop.tunnel
+        for plug_sdk, plug, slot_sdk, slot in self._deferred_connects:
+            t.connect(
+                plug_sdk=plug_sdk,
+                plug=plug,
+                slot_sdk=slot_sdk,
+                slot=slot,
+            )
+
+        self._deferred_connects.clear()
 
 
 class TunnelInterface:

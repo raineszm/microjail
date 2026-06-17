@@ -1,6 +1,6 @@
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, call
+from unittest.mock import Mock, PropertyMock, call
 
 import pytest
 
@@ -588,3 +588,152 @@ class TestTunnelInterface:
         monkeypatch.setattr(workshop, "write_workshop_yaml", write)
         ti.remove_slot("missing")
         write.assert_not_called()
+
+
+class TestTunnelBatch:
+    """Tests for TunnelBatch batching of tunnel operations."""
+
+    def test_flush_refreshes_once_and_replays_deferred_connects(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ws = Workshop(name="test", project=Path("/tmp/test"))
+        mock_refresh = Mock()
+        monkeypatch.setattr(ws, "refresh", mock_refresh)
+        mock_tunnel = Mock()
+        monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+        batch = workshop.TunnelBatch(ws)
+        batch.mark_dirty()
+        batch.defer_connect(
+            plug_sdk="microjail", plug="inf", slot_sdk="system", slot="inf"
+        )
+        batch.flush()
+
+        mock_refresh.assert_called_once()
+        mock_tunnel.connect.assert_called_once_with(
+            plug_sdk="microjail",
+            plug="inf",
+            slot_sdk="system",
+            slot="inf",
+        )
+
+    def test_flush_skips_refresh_when_not_dirty(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ws = Workshop(name="test", project=Path("/tmp/test"))
+        mock_refresh = Mock()
+        monkeypatch.setattr(ws, "refresh", mock_refresh)
+        mock_tunnel = Mock()
+        monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+        batch = workshop.TunnelBatch(ws)
+        batch.defer_connect(
+            plug_sdk="microjail", plug="inf", slot_sdk="system", slot="inf"
+        )
+        batch.flush()
+
+        mock_refresh.assert_not_called()
+        mock_tunnel.connect.assert_called_once_with(
+            plug_sdk="microjail",
+            plug="inf",
+            slot_sdk="system",
+            slot="inf",
+        )
+
+    def test_flush_replays_multiple_deferred_connects(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ws = Workshop(name="test", project=Path("/tmp/test"))
+        mock_refresh = Mock()
+        monkeypatch.setattr(ws, "refresh", mock_refresh)
+        mock_tunnel = Mock()
+        monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+        batch = workshop.TunnelBatch(ws)
+        batch.mark_dirty()
+        batch.defer_connect(
+            plug_sdk="microjail", plug="inf", slot_sdk="system", slot="inf"
+        )
+        batch.defer_connect(
+            plug_sdk="microjail", plug="db", slot_sdk="system", slot="db"
+        )
+        batch.flush()
+
+        mock_refresh.assert_called_once()
+        assert mock_tunnel.connect.call_count == 2
+        mock_tunnel.connect.assert_has_calls(
+            [
+                call(plug_sdk="microjail", plug="inf", slot_sdk="system", slot="inf"),
+                call(plug_sdk="microjail", plug="db", slot_sdk="system", slot="db"),
+            ]
+        )
+
+    def test_flush_is_idempotent(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ws = Workshop(name="test", project=Path("/tmp/test"))
+        mock_refresh = Mock()
+        monkeypatch.setattr(ws, "refresh", mock_refresh)
+        mock_tunnel = Mock()
+        monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+        batch = workshop.TunnelBatch(ws)
+        batch.mark_dirty()
+        batch.defer_connect(
+            plug_sdk="microjail", plug="inf", slot_sdk="system", slot="inf"
+        )
+        batch.flush()
+        batch.flush()
+
+        mock_refresh.assert_called_once()
+        mock_tunnel.connect.assert_called_once()
+
+
+class TestWorkshopBatch:
+    """Tests for Workshop.batch() context manager."""
+
+    def test_batch_flushes_on_normal_exit(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ws = Workshop(name="test", project=Path("/tmp/test"))
+        mock_refresh = Mock()
+        monkeypatch.setattr(ws, "refresh", mock_refresh)
+        mock_tunnel = Mock()
+        monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+        with ws.batch() as batch:
+            batch.mark_dirty()
+            batch.defer_connect(
+                plug_sdk="microjail", plug="inf", slot_sdk="system", slot="inf"
+            )
+
+        mock_refresh.assert_called_once()
+        mock_tunnel.connect.assert_called_once()
+
+    def test_batch_skips_refresh_on_exception(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ws = Workshop(name="test", project=Path("/tmp/test"))
+        mock_refresh = Mock()
+        monkeypatch.setattr(ws, "refresh", mock_refresh)
+        mock_tunnel = Mock()
+        monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+        class TestError(Exception):
+            pass
+
+        with pytest.raises(TestError), ws.batch() as batch:
+            batch.mark_dirty()
+            batch.defer_connect(
+                plug_sdk="microjail", plug="inf", slot_sdk="system", slot="inf"
+            )
+            raise TestError()
+
+        mock_refresh.assert_not_called()
+        mock_tunnel.connect.assert_not_called()

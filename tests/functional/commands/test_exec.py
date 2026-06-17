@@ -63,7 +63,13 @@ def test_exec_propagates_workload_exit_status(
 def test_exec_capability_failure_blocks_workload_and_skips_gates(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
-    cap = RecordingCapability("local-inference", checks=[False, False])
+    class FailingProvideCapability(RecordingCapability):
+        def provide(self, microjail: object, batch: object = None) -> None:
+            del microjail, batch
+            self.calls.append("provide")
+            raise RuntimeError("provision failed")
+
+    cap = FailingProvideCapability("local-inference", checks=[False])
     gate = RecordingGate("network-egress", checks=[False, True])
     microjail = MicroJail(
         workshop=Workshop(name="test-jail", project=microjail_project),
@@ -117,7 +123,7 @@ def test_exec_rolls_back_applied_policy_on_pre_workload_failure(
 
     assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
 
-    assert cap.calls == ["check", "provide", "check", "revoke"]
+    assert cap.calls == ["check", "provide", "revoke"]
     assert gate.calls == ["check", "enforce", "check", "release"]
 
 

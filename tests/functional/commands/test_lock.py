@@ -58,7 +58,13 @@ def test_lock_rejects_unexpected_arguments() -> None:
 def test_lock_capability_failure_still_attempts_gate_enforcement(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
-    cap = RecordingCapability("local-inference", checks=[False, False])
+    class FailingProvideCapability(RecordingCapability):
+        def provide(self, microjail: object, batch: object = None) -> None:
+            del microjail, batch
+            self.calls.append("provide")
+            raise RuntimeError("provision failed")
+
+    cap = FailingProvideCapability("local-inference", checks=[False])
     gate = RecordingGate("network-egress", checks=[False, True])
     microjail = MicroJail(
         workshop=Workshop(name="test-jail", project=microjail_project),
@@ -72,6 +78,25 @@ def test_lock_capability_failure_still_attempts_gate_enforcement(
     assert "lock incomplete" in result.stderr
     assert "1 capability failures" in result.stderr
     assert "1 gates enforced" in result.stderr
+    assert gate.calls == ["check", "enforce", "check"]
+
+
+def test_lock_does_not_rollback_successfully_applied_policy_after_failure(
+    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
+) -> None:
+    cap = RecordingCapability("endpoint", checks=[False, True])
+    gate = RecordingGate("network-egress", checks=[False, False])
+    microjail = MicroJail(
+        workshop=Workshop(name="test-jail", project=microjail_project),
+        lockdown=Lockdown(caps=[cap], gates=[gate]),
+    )
+    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
+
+    result = microjail.ensure(ApplicationIntent.LOCK)
+
+    assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
+    assert result.gate_failure is not None
+    assert cap.calls == ["check", "provide"]
     assert gate.calls == ["check", "enforce", "check"]
 
 
@@ -91,22 +116,3 @@ def test_lock_gate_failure_reports_name_and_exit_code(
     assert "lock failed" in result.stderr
     assert "network-egress" in result.stderr
     assert "GateError" not in result.stderr
-
-
-def test_lock_does_not_rollback_successfully_applied_policy_after_failure(
-    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
-) -> None:
-    cap = RecordingCapability("endpoint", checks=[False, True])
-    gate = RecordingGate("network-egress", checks=[False, False])
-    microjail = MicroJail(
-        workshop=Workshop(name="test-jail", project=microjail_project),
-        lockdown=Lockdown(caps=[cap], gates=[gate]),
-    )
-    monkeypatch.setattr(MicroJail, "ensure_workshop_ready", Mock())
-
-    result = microjail.ensure(ApplicationIntent.LOCK)
-
-    assert result.status is ApplicationStatus.GATE_APPLICATION_FAILURE
-    assert result.gate_failure is not None
-    assert cap.calls == ["check", "provide", "check"]
-    assert gate.calls == ["check", "enforce", "check"]

@@ -96,7 +96,13 @@ def test_shell_uses_explicit_command_interactively(
 def test_shell_capability_failure_blocks_workload_and_skips_gates(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:
-    cap = RecordingCapability("local-inference", checks=[False, False])
+    class FailingProvideCapability(RecordingCapability):
+        def provide(self, microjail: object, batch: object = None) -> None:
+            del microjail, batch
+            self.calls.append("provide")
+            raise RuntimeError("provision failed")
+
+    cap = FailingProvideCapability("local-inference", checks=[False])
     gate = RecordingGate("network-egress", checks=[False, True])
     microjail = MicroJail(
         workshop=Workshop(name="test-jail", project=microjail_project),

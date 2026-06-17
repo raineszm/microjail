@@ -49,12 +49,12 @@ class RecordingCapability:
             return self.checks.pop(0)
         return self.checks[0]
 
-    def provide(self, microjail: MicroJail) -> None:
-        del microjail
+    def provide(self, microjail: MicroJail, batch: object = None) -> None:
+        del microjail, batch
         self.calls.append("provide")
 
-    def revoke(self, microjail: MicroJail) -> None:
-        del microjail
+    def revoke(self, microjail: MicroJail, batch: object = None) -> None:
+        del microjail, batch
         self.calls.append("revoke")
 
 

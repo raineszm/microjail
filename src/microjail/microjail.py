@@ -35,6 +35,8 @@ if TYPE_CHECKING:
     import subprocess
     from collections.abc import Callable
 
+    from microjail.adapters.workshop import TunnelBatch
+
 CONFIG_DIRNAME = ".microjail"
 CONFIG_FILENAME = "config.yaml"
 
@@ -256,11 +258,16 @@ class MicroJail:
             except Exception:
                 errors.append(GateReleaseError(name=gate.name))
 
-        for cap in reversed(self.lockdown.caps):
+        with self.workshop.batch() as batch:
+            for cap in reversed(self.lockdown.caps):
+                try:
+                    cap.revoke(self, batch=batch)
+                except Exception:
+                    errors.append(CapabilityReleaseError(name=cap.name))
             try:
-                cap.revoke(self)
+                batch.flush()
             except Exception:
-                errors.append(CapabilityReleaseError(name=cap.name))
+                errors.append(CapabilityReleaseError(name="workshop-refresh"))
 
         if errors:
             raise ExceptionGroup("lockdown release failures", errors)
@@ -326,11 +333,16 @@ class MicroJail:
                 capability_failures=tuple(capability_failures),
             )
 
-        for cap in self.lockdown.caps:
+        with self.workshop.batch() as batch:
+            for cap in self.lockdown.caps:
+                try:
+                    _ensure_capability(self, cap, provided_capabilities, batch=batch)
+                except CapabilityError as exc:
+                    capability_failures.append(exc)
             try:
-                _ensure_capability(self, cap, provided_capabilities)
-            except CapabilityError as exc:
-                capability_failures.append(exc)
+                batch.flush()
+            except Exception:
+                capability_failures.append(CapabilityError(name="workshop-refresh"))
 
         if capability_failures and intent is ApplicationIntent.RUN:
             rollback_failures = _rollback(self, provided_capabilities, enforced_gates)
@@ -473,14 +485,19 @@ def _ensure_capability(
     microjail: MicroJail,
     cap: Capability,
     provided_capabilities: list[Capability],
+    batch: TunnelBatch | None = None,
 ) -> None:
-    """check → provide if missing → verify for one Capability."""
+    """check → provide if missing → verify for one Capability.
+
+    When *batch* is provided, the post-provide verification check is
+    skipped because the tunnel won't be connected until batch flush.
+    """
     try:
         if cap.check(microjail):
             return
         provided_capabilities.append(cap)
-        cap.provide(microjail)
-        if not cap.check(microjail):
+        cap.provide(microjail, batch=batch)
+        if batch is None and not cap.check(microjail):
             raise CapabilityError(name=cap.name)
     except CapabilityError:
         raise

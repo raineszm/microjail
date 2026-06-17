@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 import subprocess
 from typing import TYPE_CHECKING
@@ -5,6 +7,7 @@ from typing import TYPE_CHECKING
 import msgspec
 
 if TYPE_CHECKING:
+    from microjail.adapters.workshop import TunnelBatch
     from microjail.microjail import MicroJail
 
 
@@ -85,22 +88,37 @@ class WorkshopEndpointCapability(
         except subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError:
             return False
 
-    def provide(self, microjail: MicroJail) -> None:
+    def provide(self, microjail: MicroJail, batch: TunnelBatch | None = None) -> None:
         if self.check(microjail):
             return
         t = microjail.workshop.tunnel
         t.add_plug(self.name, self.resolved_endpoint)
         t.add_slot(self.name, self.host_endpoint)
-        microjail.workshop.refresh()
-        t.connect(
-            plug_sdk="microjail", plug=self.name, slot_sdk="system", slot=self.name
-        )
+        if batch is not None:
+            batch.mark_dirty()
+            batch.defer_connect(
+                plug_sdk="microjail",
+                plug=self.name,
+                slot_sdk="system",
+                slot=self.name,
+            )
+        else:
+            microjail.workshop.refresh()
+            t.connect(
+                plug_sdk="microjail",
+                plug=self.name,
+                slot_sdk="system",
+                slot=self.name,
+            )
 
-    def revoke(self, microjail: MicroJail) -> None:
+    def revoke(self, microjail: MicroJail, batch: TunnelBatch | None = None) -> None:
         t = microjail.workshop.tunnel
         t.disconnect(
             plug_sdk="microjail", plug=self.name, slot_sdk="system", slot=self.name
         )
         remaining = t.remove_plug(self.name)
         t.remove_slot(self.name, remove_sdk=not remaining)
-        microjail.workshop.refresh()
+        if batch is not None:
+            batch.mark_dirty()
+        else:
+            microjail.workshop.refresh()

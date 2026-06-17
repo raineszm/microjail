@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING, Literal
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 import pytest
 
@@ -7,7 +7,12 @@ from microjail.adapters import workshop
 from microjail.adapters.workshop import Workshop
 from microjail.caps.base import Capability
 from microjail.gates.base import Gate
-from microjail.lockdown import CapabilityReleaseError, GateReleaseError, Lockdown
+from microjail.lockdown import (
+    CapabilityError,
+    CapabilityReleaseError,
+    GateReleaseError,
+    Lockdown,
+)
 from microjail.microjail import (
     ApplicationIntent,
     ApplicationStatus,
@@ -104,7 +109,7 @@ def test_run_application_provisions_capabilities_before_enforcing_gates(
     result = microjail.ensure(ApplicationIntent.RUN)
 
     assert result.status is ApplicationStatus.SUCCESS
-    capability.provide.assert_called_once_with(microjail)
+    capability.provide.assert_called_once_with(microjail, batch=ANY)
     gate.enforce.assert_called_once_with(microjail)
 
 
@@ -130,9 +135,12 @@ def test_application_skips_satisfied_capabilities_and_gates(
     gate.enforce.assert_not_called()
 
 
-def test_run_application_rolls_back_if_capability_verification_fails(
+def test_standalone_provide_raises_when_verification_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
+    """Post-provide verification failure raises CapabilityError in standalone path."""
+    from microjail.microjail import _ensure_capability
+
     cap = Mock(spec=Capability)
     cap.name = "proxy"
     cap.check.side_effect = [False, False]
@@ -142,13 +150,13 @@ def test_run_application_rolls_back_if_capability_verification_fails(
     )
     mark_workshop_ready(monkeypatch, microjail)
 
-    result = microjail.ensure(ApplicationIntent.RUN)
+    provided = []
+    with pytest.raises(CapabilityError) as exc_info:
+        _ensure_capability(microjail, cap, provided, batch=None)
 
-    assert result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE
-    assert [error.name for error in result.capability_failures] == ["proxy"]
-    assert result.rollback_failures == ()
-    cap.provide.assert_called_once_with(microjail)
-    cap.revoke.assert_called_once_with(microjail)
+    assert exc_info.value.name == "proxy"
+    assert cap.provide.called
+    assert provided == [cap]
 
 
 def test_run_application_reports_rollback_failures(
@@ -185,7 +193,8 @@ def test_lock_application_capability_failure_still_attempts_gate_enforcement(
 ) -> None:
     cap = Mock(spec=Capability)
     cap.name = "proxy"
-    cap.check.side_effect = [False, False]
+    cap.check.side_effect = [False]
+    cap.provide.side_effect = RuntimeError("provision failed")
     gate = Mock(spec=Gate)
     gate.name = "network"
     gate.check.side_effect = [False, True]
@@ -200,7 +209,7 @@ def test_lock_application_capability_failure_still_attempts_gate_enforcement(
     assert result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE
     assert result.gates_enforced == 1
     assert result.rollback_failures == ()
-    cap.provide.assert_called_once_with(microjail)
+    cap.provide.assert_called_once_with(microjail, batch=ANY)
     cap.revoke.assert_not_called()
     gate.enforce.assert_called_once_with(microjail)
     gate.release.assert_not_called()
@@ -211,7 +220,8 @@ def test_lock_application_gate_failure_keeps_capability_failures_as_context(
 ) -> None:
     cap = Mock(spec=Capability)
     cap.name = "proxy"
-    cap.check.side_effect = [False, False]
+    cap.check.side_effect = [False]
+    cap.provide.side_effect = RuntimeError("provision failed")
     gate = Mock(spec=Gate)
     gate.name = "network"
     gate.check.side_effect = [False, False]
@@ -228,7 +238,7 @@ def test_lock_application_gate_failure_keeps_capability_failures_as_context(
     assert result.gate_failure.name == "network"
     assert [error.name for error in result.capability_failures] == ["proxy"]
     assert result.rollback_failures == ()
-    cap.provide.assert_called_once_with(microjail)
+    cap.provide.assert_called_once_with(microjail, batch=ANY)
     cap.revoke.assert_not_called()
     gate.enforce.assert_called_once_with(microjail)
     gate.release.assert_not_called()
@@ -303,3 +313,91 @@ def test_default_lockdown_application_enforces_network_drop(
     assert result.status is ApplicationStatus.SUCCESS
     net.enforce.assert_called_once_with(microjail)
     ro.enforce.assert_not_called()
+
+
+def test_ensure_with_two_endpoint_caps_triggers_one_refresh(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    """Two real WorkshopEndpointCapability instances in ensure() produce one refresh."""
+    from unittest.mock import PropertyMock
+
+    from microjail.adapters.workshop import Workshop
+    from microjail.caps.endpoint import WorkshopEndpointCapability
+    from microjail.microjail import MicroJail
+
+    cap_a = WorkshopEndpointCapability(name="inference", host_endpoint="127.0.0.1:8080")
+    cap_b = WorkshopEndpointCapability(name="storage", host_endpoint="127.0.0.1:9090")
+    microjail = MicroJail(
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
+        lockdown=Lockdown(caps=[cap_a, cap_b], gates=[]),
+    )
+    mark_workshop_ready(monkeypatch, microjail)
+
+    mock_refresh = Mock()
+    monkeypatch.setattr(microjail.workshop, "refresh", mock_refresh)
+    mock_tunnel = Mock()
+    mock_tunnel.connections.return_value = []
+    mock_tunnel.endpoint_reachable.return_value = False
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+    result = microjail.ensure(ApplicationIntent.LOCK)
+
+    assert result.status is ApplicationStatus.SUCCESS
+    assert mock_refresh.call_count == 1, (
+        f"expected 1 refresh, got {mock_refresh.call_count}"
+    )
+    assert mock_tunnel.connect.call_count == 2
+    assert mock_tunnel.add_plug.call_count == 2
+    assert mock_tunnel.add_slot.call_count == 2
+
+
+def test_ensure_zero_caps_triggers_no_refresh(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    """Ensure() with zero endpoint capabilities skips refresh entirely."""
+    from unittest.mock import PropertyMock
+
+    from microjail.adapters.workshop import Workshop
+    from microjail.microjail import MicroJail
+
+    microjail = MicroJail(
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
+        lockdown=Lockdown(caps=[], gates=[]),
+    )
+    mark_workshop_ready(monkeypatch, microjail)
+
+    mock_refresh = Mock()
+    monkeypatch.setattr(microjail.workshop, "refresh", mock_refresh)
+    mock_tunnel = Mock()
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+    result = microjail.ensure(ApplicationIntent.LOCK)
+
+    assert result.status is ApplicationStatus.SUCCESS
+    mock_refresh.assert_not_called()
+    mock_tunnel.connect.assert_not_called()
+
+
+def test_run_application_rolls_back_if_capability_provision_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    """Ensure(RUN) with a failing capability still rolls back."""
+    from microjail.microjail import MicroJail
+
+    cap = Mock(spec=Capability)
+    cap.name = "proxy"
+    cap.check.side_effect = [False]
+    cap.provide.side_effect = RuntimeError("provision failed")
+    microjail = MicroJail(
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
+        lockdown=Lockdown(caps=[cap], gates=[]),
+    )
+    mark_workshop_ready(monkeypatch, microjail)
+
+    result = microjail.ensure(ApplicationIntent.RUN)
+
+    assert result.status is ApplicationStatus.CAPABILITY_APPLICATION_FAILURE
+    assert [error.name for error in result.capability_failures] == ["proxy"]
+    assert result.rollback_failures == ()
+    cap.provide.assert_called_once_with(microjail, batch=ANY)
+    cap.revoke.assert_called_once_with(microjail)

@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from microjail.adapters.workshop import TunnelBatch
     from microjail.microjail import MicroJail
 
 
@@ -24,6 +25,9 @@ class Capability(Protocol):
 
     def check(self, microjail: MicroJail) -> bool: ...
 
-    def provide(self, microjail: MicroJail) -> None: ...
-
-    def revoke(self, microjail: MicroJail) -> None: ...
+    def provide(
+        self, microjail: MicroJail, batch: TunnelBatch | None = None
+    ) -> None: ...
+    def revoke(
+        self, microjail: MicroJail, batch: TunnelBatch | None = None
+    ) -> None: ...

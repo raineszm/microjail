@@ -28,8 +28,8 @@ class FailingReleaseGate(RecordingGate):
 
 
 class FailingRevokeCapability(RecordingCapability):
-    def revoke(self, microjail: MicroJail) -> None:
-        del microjail
+    def revoke(self, microjail: MicroJail, batch: object = None) -> None:
+        del microjail, batch
         self.calls.append("revoke")
         raise RuntimeError(self.name)
 
