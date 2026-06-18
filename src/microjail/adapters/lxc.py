@@ -4,8 +4,10 @@ from typing import Any
 
 import msgspec
 
+from microjail.exceptions import MicrojailError
 
-class LxcCommandError(RuntimeError):
+
+class LxcCommandError(MicrojailError, subprocess.CalledProcessError):
     """Raised when an ``lxc`` subprocess returns non-zero.
 
     Carries the command, returncode, and stderr so callers can decide
@@ -13,12 +15,10 @@ class LxcCommandError(RuntimeError):
     """
 
     def __init__(self, cmd: list[str], returncode: int, stderr: str) -> None:
-        super().__init__(
-            f"lxc {' '.join(cmd)} failed (rc={returncode}): {stderr.strip()}"
-        )
-        self.cmd = cmd
-        self.returncode = returncode
-        self.stderr = stderr
+        subprocess.CalledProcessError.__init__(self, returncode, cmd, stderr=stderr)
+
+    def __str__(self) -> str:
+        return f"lxc {' '.join(self.cmd)} failed (rc={self.returncode}): {self.stderr.strip()}"
 
 
 def run_lxc_command(cmd: list[str]) -> subprocess.CompletedProcess[str]:
@@ -66,7 +66,8 @@ def attach_network(network: str, container: str, project: str) -> None:
     *network* is resolved in the default project; *project* scopes the
     container reference. This is the standard cross-project attach
     pattern: a managed network in ``default`` is visible to other
-    projects whose ``features.networks`` is ``false`` (e.g. the
+    projects whose ``features.networks`` is ``false`` (e.g. the workshop
+    project).
 
     The device name is left for LXD to choose (typically ``eth0``).
     """

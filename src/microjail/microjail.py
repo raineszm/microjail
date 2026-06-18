@@ -18,6 +18,7 @@ from microjail.adapters.workshop import (
 )
 from microjail.caps.base import Capability
 from microjail.caps.endpoint import WorkshopEndpointCapability
+from microjail.exceptions import MicrojailError
 from microjail.gates.base import Gate
 from microjail.gates.network_drop import NetworkDrop
 from microjail.gates.readonly_config import ReadonlyConfig
@@ -42,14 +43,14 @@ CONFIG_FILENAME = "config.yaml"
 
 
 @dataclass(frozen=True)
-class ConfigNotFoundError(Exception):
+class ConfigNotFoundError(MicrojailError):
     """Raised when no microjail config exists for a project."""
 
     project_path: Path
 
 
 @dataclass(frozen=True)
-class WorkshopNotReadyError(Exception):
+class WorkshopNotReadyError(MicrojailError):
     """Raised when a workshop exists but is not ready for lockdown."""
 
     name: str

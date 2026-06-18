@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import msgspec
 
+from microjail.exceptions import MicrojailError
 from microjail.policy import EGRESS_PROBE_TIMEOUT
 
 if TYPE_CHECKING:
@@ -28,31 +29,31 @@ class ContainerInfo(msgspec.Struct):
 
 
 @dataclass
-class WorkshopExistsError(Exception):
+class WorkshopExistsError(MicrojailError):
     name: str
     project: Path
 
 
 @dataclass
-class WorkshopNotFoundError(Exception):
+class WorkshopNotFoundError(MicrojailError):
     name: str
     project: Path
 
 
 @dataclass
-class WorkshopNotLaunchedError(Exception):
+class WorkshopNotLaunchedError(MicrojailError):
     name: str
     project: Path
 
 
 @dataclass
-class WorkshopConfigError(Exception):
+class WorkshopConfigError(MicrojailError):
     name: str
     project: Path
 
 
 @dataclass
-class MicrojailSdkConfigError(Exception):
+class MicrojailSdkConfigError(MicrojailError):
     project: Path
 
 

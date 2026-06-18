@@ -51,11 +51,17 @@ class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
     def release(self, microjail: MicroJail) -> None:
         """Restore network devices removed by enforce().
 
-        Tries, in order: recorded state, the LXD profile, and finally a
-        fresh attach of :data:`DEFAULT_NETWORK`. The attach itself can
-        fail (e.g. the bridge is gone); in that case we hand off to
-        ``workshop restore`` as a last resort, which still works when
-        LXD-level recovery is impossible.
+        The recovery branch is chosen by the state of the container:
+
+        * If :attr:`removed_devices` is non-empty (the normal case
+          after :meth:`enforce` ran), replay those devices directly.
+        * Otherwise, re-add any nic devices from the LXD profile that
+          are missing from the container.
+        * If the profile has no nics, attach :data:`DEFAULT_NETWORK` to
+          give the container *some* interface. If that fails (e.g. the
+          bridge is gone), fall back to ``workshop restore``, which
+          works at a higher level when LXD-level recovery is
+          impossible.
         """
         if self.removed_devices:
             for device, config in self.removed_devices.items():
