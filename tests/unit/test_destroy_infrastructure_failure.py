@@ -39,4 +39,6 @@ def test_destroy_infrastructure_failure(
     )
 
     assert result.exit_code == 1
-    assert (tmp_path / "data").exists()  # File system untouched
+    # Config and purge dir are preserved when teardown fails.
+    assert MicroJail.load(tmp_path).name == "test-jail"
+    assert (tmp_path / "data").exists()

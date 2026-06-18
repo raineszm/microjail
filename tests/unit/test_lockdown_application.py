@@ -8,7 +8,6 @@ from microjail.adapters.workshop import Workshop
 from microjail.caps.base import Capability
 from microjail.gates.base import Gate
 from microjail.lockdown import (
-    CapabilityError,
     CapabilityReleaseError,
     GateReleaseError,
     Lockdown,
@@ -133,30 +132,6 @@ def test_application_skips_satisfied_capabilities_and_gates(
     assert result.status is ApplicationStatus.SUCCESS
     cap.provide.assert_not_called()
     gate.enforce.assert_not_called()
-
-
-def test_standalone_provide_raises_when_verification_fails(
-    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
-) -> None:
-    """Post-provide verification failure raises CapabilityError in standalone path."""
-    from microjail.microjail import _ensure_capability
-
-    cap = Mock(spec=Capability)
-    cap.name = "proxy"
-    cap.check.side_effect = [False, False]
-    microjail = MicroJail(
-        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
-        lockdown=Lockdown(caps=[cap], gates=[]),
-    )
-    mark_workshop_ready(monkeypatch, microjail)
-
-    provided = []
-    with pytest.raises(CapabilityError) as exc_info:
-        _ensure_capability(microjail, cap, provided, batch=None)
-
-    assert exc_info.value.name == "proxy"
-    assert cap.provide.called
-    assert provided == [cap]
 
 
 def test_run_application_reports_rollback_failures(

@@ -1,13 +1,14 @@
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from microjail.adapters import workshop
 from microjail.cli import app
 from microjail.gates.network_drop import NetworkDrop
 from microjail.gates.readonly_config import ReadonlyConfig
-from microjail.microjail import MicroJail
+from microjail.microjail import ConfigNotFoundError, MicroJail
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -56,7 +57,8 @@ def test_init_bails_if_exists(
     assert "already exists" in result.stderr
     assert "--overwrite" in result.stderr
     assert "--adopt" in result.stderr
-    assert not (tmp_path / ".microjail" / "config.yaml").exists()
+    with pytest.raises(ConfigNotFoundError):
+        MicroJail.load(tmp_path)
 
 
 @patch("microjail.adapters.workshop.Workshop.init")
@@ -71,7 +73,8 @@ def test_init_workshop_failure_exits_nonzero_without_config(
     assert result.exit_code == 1
     assert "Failed to initialize Workshop" in result.stderr
     assert "workshop unavailable" in result.stderr
-    assert not (tmp_path / ".microjail" / "config.yaml").exists()
+    with pytest.raises(ConfigNotFoundError):
+        MicroJail.load(tmp_path)
 
 
 @patch("microjail.adapters.workshop.Workshop.exists", return_value=False)
@@ -85,7 +88,8 @@ def test_init_adopt_fails_if_doesnt_exist(
     mock_exists.assert_called_once()
     assert result.exit_code == 1
     assert "does not exist" in result.stderr
-    assert not (tmp_path / ".microjail" / "config.yaml").exists()
+    with pytest.raises(ConfigNotFoundError):
+        MicroJail.load(tmp_path)
 
 
 @patch("microjail.adapters.workshop.Workshop.init")
@@ -296,7 +300,8 @@ def test_init_exits_nonzero_on_sdk_failure(
 
     assert result.exit_code != 0
     assert "Failed to initialize Workshop" in result.stderr
-    assert not (tmp_path / ".microjail" / "config.yaml").exists()
+    with pytest.raises(ConfigNotFoundError):
+        MicroJail.load(tmp_path)
 
 
 @patch("microjail.adapters.workshop.Workshop.exists", return_value=True)
@@ -373,7 +378,7 @@ def test_overwrite_forwards_sdks_and_base(
         base="ubuntu@22.04",
         executor=None,
     )
-    assert (tmp_path / ".microjail" / "config.yaml").exists()
+    assert MicroJail.load(tmp_path).name == project_name
 
 
 @patch("microjail.adapters.workshop.Workshop.init")
@@ -390,7 +395,7 @@ def test_project_flag_resolves_relative_to_absolute(
     result = CliRunner().invoke(app, ["--project", str(other), "init", project_name])
 
     assert result.exit_code == 0
-    assert (other / ".microjail" / "config.yaml").exists()
+    assert MicroJail.load(other).name == project_name
 
 
 @patch("microjail.adapters.workshop.Workshop.init")
@@ -407,7 +412,7 @@ def test_project_flag_accepts_absolute_path(
     result = CliRunner().invoke(app, ["--project", str(proj), "init", project_name])
 
     assert result.exit_code == 0
-    assert (proj / ".microjail" / "config.yaml").exists()
+    assert MicroJail.load(proj).name == project_name
 
 
 @patch("microjail.adapters.workshop.Workshop.init")
@@ -422,7 +427,7 @@ def test_project_flag_defaults_to_cwd(
     result = CliRunner().invoke(app, ["init", project_name])
 
     assert result.exit_code == 0
-    assert (tmp_path / ".microjail" / "config.yaml").exists()
+    assert MicroJail.load(tmp_path).name == project_name
 
 
 @patch("microjail.microjail.MicroJail.ensure")

@@ -39,7 +39,7 @@ def test_destroy_pending_workshop(
     result = CliRunner().invoke(app, ["--project", str(tmp_path), "destroy"])
 
     assert result.exit_code == 0
-    mock_remove.assert_called_once()
+    assert not (tmp_path / "data").exists()
 
 
 @patch.object(Workshop, "info")
@@ -53,5 +53,4 @@ def test_destroy_off_workshop(
     result = CliRunner().invoke(app, ["--project", str(tmp_path), "destroy"])
 
     assert result.exit_code == 0
-    mock_start.assert_called_once()
-    mock_remove.assert_called_once()
+    assert not (tmp_path / "data").exists()

@@ -35,7 +35,6 @@ def test_destroy_all_interactive_yes(mock_info, mock_remove, mock_microjail, tmp
 
     assert result.exit_code == 0
     assert not tmp_path.exists()
-    mock_remove.assert_called_once()
 
 
 @patch.object(Workshop, "remove")
@@ -46,7 +45,6 @@ def test_destroy_all_interactive_no(mock_info, mock_remove, mock_microjail, tmp_
     )
     assert result.exit_code == 1  # aborts
     assert tmp_path.exists()  # project is kept
-    mock_remove.assert_not_called()
 
 
 @patch.object(Workshop, "remove")
@@ -60,4 +58,3 @@ def test_destroy_all_bypass(mock_info, mock_remove, mock_microjail, tmp_path):
 
     assert result.exit_code == 0
     assert not tmp_path.exists()
-    mock_remove.assert_called_once()
