@@ -1,7 +1,6 @@
 """Fixtures for end-to-end tests — real Workshop, real CLI, no mocking."""
 
 import os
-import subprocess
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -22,10 +21,15 @@ pytestmark = [
 
 
 def clean_up_project(project: Path, name: str) -> None:
-    try:
-        MicroJail.load(project).destroy()
-    except Exception:
-        subprocess.run(["workshop", "remove", "--project", str(project)], check=False)
+    # No microjail config: nothing was ever initialized, skip the noisy
+    # `workshop remove` fallback that would otherwise fire.
+    if not (project / ".microjail" / "config.yaml").exists():
+        return
+    mj = MicroJail.load(project)
+    # Workshop never launched: there is no infrastructure to tear down.
+    if mj.workshop.info() is None:
+        return
+    mj.destroy()
 
 
 @pytest.fixture
