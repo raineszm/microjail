@@ -41,11 +41,10 @@ def init(
     try:
         MicroJail.init(name, project_path=project, sdks=sdks_list, base=base)
     except WorkshopExistsError as exc:
-        typer.echo(
+        error(
             f"Workshop '{exc.name}' already exists in {exc.project}. "
             "Use --overwrite to replace this workshop definition "
-            "or --adopt to configure that existing workshop with microjail.",
-            err=True,
+            "or --adopt to configure that existing workshop with microjail."
         )
         raise typer.Exit(code=1) from exc
     except Exception as exc:
@@ -63,10 +62,7 @@ def overwrite_workshop(
     if workshop_yaml.exists():
         workshop_yaml.unlink()
     else:
-        typer.echo(
-            f"WARN: Workshop '{name}' does not exist in {project} overwrite not needed",
-            err=True,
-        )
+        warning(f"Workshop '{name}' does not exist in {project} overwrite not needed")
     MicroJail.init(name, project_path=project, sdks=sdks, base=base)
 
 
@@ -75,10 +71,9 @@ def adopt_workshop(name: str, project: Path, base: str | None = None) -> None:
         warning("--base is ignored during adopt")
     ws = Workshop(name=name, project=project)
     if not ws.exists():
-        typer.echo(
+        error(
             f"Workshop '{name}' does not exist in {project}. "
-            "Cannot adopt non-existent workshop",
-            err=True,
+            "Cannot adopt non-existent workshop"
         )
         raise typer.Exit(code=1)
     config = MicroJail(

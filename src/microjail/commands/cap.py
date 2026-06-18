@@ -56,8 +56,13 @@ def preflight_workshop_state(
         return EditAction.ALLOW, None
 
     if info.status == "pending":
+        if apply:
+            return EditAction.DENY, (
+                "cannot apply while Workshop is pending. "
+                "Wait for the workshop to reach a stable state."
+            )
         return EditAction.DENY, (
-            "cannot apply while Workshop is pending. "
+            "cannot edit capability declarations while Workshop is pending. "
             "Wait for the workshop to reach a stable state."
         )
 

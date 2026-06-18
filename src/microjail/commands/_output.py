@@ -1,33 +1,53 @@
 """Console singletons and message helpers for CLI output.
 
 Two module-level Rich consoles resolve ``sys.stdout`` / ``sys.stderr``
-lazily, so they pick up the streams set by ``typer.testing.CliRunner`` or
-by a redirected process. ANSI is stripped automatically when the stream
-is not a TTY, so substring assertions in tests and piped output stay
-plain text.
+lazily. The helpers use Rich for color and icons when the destination
+is a TTY and fall back to plain ``sys.stdout.write`` /
+``sys.stderr.write`` in non-TTY streams (pipes, ``typer.testing.CliRunner``).
+
+The non-TTY fallback matters: when Rich can't auto-detect a terminal
+width it falls back to 80 columns, which word-wraps long single-line
+messages and inserts newlines mid-string. That breaks substring
+assertions in the existing functional tests (e.g. ``"workshop
+unavailable" in result.stderr``). Plain ``sys.stderr.write`` doesn't
+wrap.
 """
+
+import sys
 
 from rich.console import Console
 
-# Wide default so test substrings that span the full message stay intact
-# even when Rich can't auto-detect a terminal width (e.g. under
-# typer.testing.CliRunner, which substitutes sys.stdout with a non-TTY
-# wrapper and causes Rich to fall back to 80 columns).
-stdout_console = Console(width=200)
-stderr_console = Console(stderr=True, width=200)
+stdout_console = Console()
+stderr_console = Console(stderr=True)
 
 
 def success(message: str) -> None:
-    stdout_console.print(f"[green]✓[/green] {message}")
+    if stdout_console.is_terminal:
+        stdout_console.print(f"[green]✓[/green] {message}")
+    else:
+        sys.stdout.write(f"✓ {message}\n")
+        sys.stdout.flush()
 
 
 def error(message: str) -> None:
-    stderr_console.print(f"[red]✗[/red] error: {message}")
+    if stderr_console.is_terminal:
+        stderr_console.print(f"[red]✗[/red] error: {message}")
+    else:
+        sys.stderr.write(f"✗ error: {message}\n")
+        sys.stderr.flush()
 
 
 def warning(message: str) -> None:
-    stderr_console.print(f"[yellow]⚠[/yellow] warning: {message}")
+    if stderr_console.is_terminal:
+        stderr_console.print(f"[yellow]⚠[/yellow] warning: {message}")
+    else:
+        sys.stderr.write(f"⚠ warning: {message}\n")
+        sys.stderr.flush()
 
 
 def info(message: str) -> None:
-    stdout_console.print(message)
+    if stdout_console.is_terminal:
+        stdout_console.print(message)
+    else:
+        sys.stdout.write(f"{message}\n")
+        sys.stdout.flush()

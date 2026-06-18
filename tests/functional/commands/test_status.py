@@ -83,4 +83,38 @@ def test_status_displays_workshop_state(
     assert "10.0.0.1:443" in result.stdout
     assert "api:443" in result.stdout
     # Fatal cap marker
-    assert "✗" in result.stdout
+    # Fatal cap marker — the ✗ must be associated with the fatal cap's
+    # name, not appear anywhere. (A broad substring match would pass even
+    # if the marker showed up next to the non-fatal cap.)
+    assert "✗ critical" in result.stdout
+    assert "✗ inference" not in result.stdout
+
+
+def test_status_renders_none_when_no_endpoint_capabilities(
+    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
+) -> None:
+    microjail = MicroJail(
+        workshop=Workshop(name="test-jail", project=microjail_project),
+        lockdown=Lockdown(caps=[], gates=[]),
+    )
+    monkeypatch.setattr(MicroJail, "load", Mock(return_value=microjail))
+    monkeypatch.setattr(
+        microjail,
+        "status",
+        Mock(
+            return_value=MicroJailStatus(
+                workshop_name="test-jail",
+                workshop_status="ready",
+                capabilities=(),
+                gates=(),
+                connections=(),
+                endpoint_capabilities=(),
+            )
+        ),
+    )
+
+    result = CliRunner().invoke(app, ["status"])
+
+    assert result.exit_code == 0
+    assert "test-jail" in result.stdout
+    assert "(none declared)" in result.stdout

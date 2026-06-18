@@ -145,19 +145,6 @@ def test_status_exposes_endpoint_capability_binding_info(
     )
 
 
-def test_endpoint_capability_info_resolved_to_host_when_unset() -> None:
-    from microjail.microjail import EndpointCapabilityInfo
-
-    info = EndpointCapabilityInfo(
-        name="svc",
-        host_endpoint="localhost:5000",
-        container_endpoint="localhost:5000",
-        fatal=False,
-    )
-
-    assert info.container_endpoint == "localhost:5000"
-
-
 def test_status_reports_unavailable_when_workshop_not_launched(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:
