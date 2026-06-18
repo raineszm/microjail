@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 import typer
 
+from microjail.commands._output import error
 from microjail.microjail import ConfigNotFoundError, MicroJail
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ def destroy(
     try:
         mj = MicroJail.load(project)
     except ConfigNotFoundError as exc:
-        typer.echo(f"Cannot destroy: no microjail config found in {project}", err=True)
+        error(f"Cannot destroy: no microjail config found in {project}")
         raise typer.Exit(code=1) from exc
 
     if all and not force:
@@ -38,5 +39,5 @@ def destroy(
     try:
         mj.destroy(delete_project=all, echo=typer.echo)
     except subprocess.CalledProcessError as exc:
-        typer.echo(f"Infrastructure teardown failed: {exc}", err=True)
+        error(f"Infrastructure teardown failed: {exc}")
         raise typer.Exit(code=1) from exc

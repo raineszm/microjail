@@ -120,6 +120,16 @@ class MicroJailConfig(msgspec.Struct, omit_defaults=True):
 
 
 @dataclass(frozen=True)
+class EndpointCapabilityInfo:
+    """Read-only view of an endpoint capability for status display."""
+
+    name: str
+    host_endpoint: str
+    container_endpoint: str
+    fatal: bool
+
+
+@dataclass(frozen=True)
 class MicroJailStatus:
     """Read-only snapshot of microjail and workshop state."""
 
@@ -128,6 +138,7 @@ class MicroJailStatus:
     capabilities: tuple[str, ...]
     gates: tuple[str, ...]
     connections: tuple[tuple[str, str], ...]
+    endpoint_capabilities: tuple[EndpointCapabilityInfo, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -209,12 +220,23 @@ class MicroJail:
             connections = self.workshop.tunnel.connections()
         except subprocess.CalledProcessError, OSError:
             connections = []
+        endpoint_caps = tuple(
+            EndpointCapabilityInfo(
+                name=cap.name,
+                host_endpoint=cap.host_endpoint,
+                container_endpoint=cap.resolved_endpoint,
+                fatal=cap.fatal,
+            )
+            for cap in self.lockdown.caps
+            if isinstance(cap, WorkshopEndpointCapability)
+        )
         return MicroJailStatus(
             workshop_name=self.name,
             workshop_status=info.status if info else "unavailable",
             capabilities=tuple(cap.name for cap in self.lockdown.caps),
             gates=tuple(gate.name for gate in self.lockdown.gates),
             connections=tuple(connections),
+            endpoint_capabilities=endpoint_caps,
         )
 
     def validate(self) -> list[ValidateError]:

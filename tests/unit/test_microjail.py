@@ -95,6 +95,69 @@ def test_status_returns_workshop_info_and_lockdown_state(
     )
 
 
+def test_status_exposes_endpoint_capability_binding_info(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    from unittest.mock import Mock, PropertyMock
+
+    from microjail.adapters.workshop import Workshop, WorkshopInfo
+    from microjail.caps.endpoint import WorkshopEndpointCapability
+    from microjail.microjail import EndpointCapabilityInfo
+
+    cap_plain = WorkshopEndpointCapability(
+        name="plain",
+        host_endpoint="127.0.0.1:8080",
+    )
+    cap_remapped = WorkshopEndpointCapability(
+        name="remapped",
+        host_endpoint="10.0.0.1:443",
+        container_endpoint="api:443",
+        fatal=True,
+    )
+    microjail = MicroJail(
+        workshop=Workshop(name=tmp_microjail.name, project=tmp_microjail.project_path),
+        lockdown=Lockdown(caps=[cap_plain, cap_remapped], gates=[]),
+    )
+    monkeypatch.setattr(
+        microjail.workshop,
+        "info",
+        Mock(return_value=WorkshopInfo(name=microjail.name, status="ready")),
+    )
+    mock_tunnel = Mock()
+    mock_tunnel.connections.return_value = []
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+
+    result = microjail.status()
+
+    assert result.endpoint_capabilities == (
+        EndpointCapabilityInfo(
+            name="plain",
+            host_endpoint="127.0.0.1:8080",
+            container_endpoint="127.0.0.1:8080",
+            fatal=False,
+        ),
+        EndpointCapabilityInfo(
+            name="remapped",
+            host_endpoint="10.0.0.1:443",
+            container_endpoint="api:443",
+            fatal=True,
+        ),
+    )
+
+
+def test_endpoint_capability_info_resolved_to_host_when_unset() -> None:
+    from microjail.microjail import EndpointCapabilityInfo
+
+    info = EndpointCapabilityInfo(
+        name="svc",
+        host_endpoint="localhost:5000",
+        container_endpoint="localhost:5000",
+        fatal=False,
+    )
+
+    assert info.container_endpoint == "localhost:5000"
+
+
 def test_status_reports_unavailable_when_workshop_not_launched(
     monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
 ) -> None:

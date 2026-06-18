@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import typer
 
 from microjail.caps.endpoint import WorkshopEndpointCapability
+from microjail.commands._output import error, success, warning
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -33,41 +34,31 @@ def validate_no_duplicate_names(caps: list) -> str | None:
 
 def preflight_workshop_state(
     info: WorkshopInfo | None,
-    is_locked: bool = False,
-    apply: bool = False,
+    *,
+    is_locked: bool,
+    apply: bool,
 ) -> tuple[EditAction, str | None]:
     """Check Workshop state and return the action + optional message.
 
-    Parameters
-    ----------
-    info:
-        Workshop info, or None if the Workshop is not launched.
-    is_locked:
-        True if at least one Gate is currently active (Lockdown appears applied).
-        Only meaningful when ``info`` is not None and ``info.status == "ready"``.
-    apply:
-        True if ``--apply`` was passed (stricter state rules apply).
-
-    Returns
-    -------
-    (action, message):
-        - ALLOW: save and proceed (message is None).
-        - ALLOW_WITH_WARNING: save and emit warning message.
-        - DENY: fail before saving with error message.
+    When ``apply`` is True, the caller is asking to update runtime or
+    Workshop declaration state as well as the config. We must refuse
+    when the Workshop is not launched, is still pending, or is ready
+    but the policy is already enforced (locked). Otherwise we proceed
+    and let the caller apply the appropriate policy-update strategy.
     """
     if info is None:
         if apply:
-            return (
-                EditAction.DENY,
-                "Cannot apply cap changes without a running Workshop. "
-                "Omit --apply for declaration-only setup, or launch the Workshop first",
+            return EditAction.DENY, (
+                "cannot apply: Workshop is not launched. "
+                "Omit --apply to declare without applying, or launch the "
+                "workshop first."
             )
         return EditAction.ALLOW, None
 
     if info.status == "pending":
-        return (
-            EditAction.DENY,
-            "Workshop is pending; cannot edit capability declarations",
+        return EditAction.DENY, (
+            "cannot apply while Workshop is pending. "
+            "Wait for the workshop to reach a stable state."
         )
 
     if info.status in ("stopped", "off"):
@@ -82,24 +73,19 @@ def preflight_workshop_state(
 
     if info.status == "ready":
         if is_locked:
-            return (
-                EditAction.DENY,
-                "Capability declarations cannot be edited while the Lockdown is applied. "
-                "Run 'microjail unlock' first",
+            return EditAction.DENY, (
+                "cannot edit Capability declarations while the Lockdown is "
+                "applied. Run 'microjail unlock' before editing capabilities."
             )
         if apply:
             return EditAction.ALLOW, None
         return (
             EditAction.ALLOW_WITH_WARNING,
-            "Declaration saved but live Workshop state was not changed. "
-            "Use 'microjail lock' to apply the updated Lockdown",
+            "live Workshop state was not changed. Run 'microjail lock' to "
+            "apply the updated Lockdown.",
         )
 
-    # Unknown status
-    return (
-        EditAction.DENY,
-        f"Unknown Workshop status '{info.status}'; cannot edit safely",
-    )
+    return EditAction.DENY, f"unknown Workshop state '{info.status}'"
 
 
 cap_app = typer.Typer(
@@ -125,7 +111,7 @@ def add_endpoint(
     container_endpoint: str | None = typer.Option(
         None,
         "--container-endpoint",
-        help="Container-side endpoint address",
+        help="Address the workload uses inside the container; defaults to HOST_ENDPOINT",
     ),
     fatal: bool = typer.Option(
         False,
@@ -160,44 +146,40 @@ def add_endpoint(
     try:
         microjail = MicroJail.load(project)
     except ConfigNotFoundError as exc:
-        typer.echo(
+        error(
             f"No microjail config found for project {exc.project_path}. "
-            "Run 'microjail init' to create a microjail for this project.",
-            err=True,
+            "Run 'microjail init' to create a microjail for this project."
         )
         raise typer.Exit(policy.GENERIC_ERROR) from exc
 
     # Validate entire Lockdown before mutating
     dup_error = validate_no_duplicate_names(microjail.lockdown.caps)
     if dup_error:
-        typer.echo(f"error: {dup_error}", err=True)
+        error(dup_error)
         raise typer.Exit(policy.GENERIC_ERROR)
 
     # Validate inputs before mutating
     name_error = validate_endpoint_name(name)
     if name_error:
-        typer.echo(f"error: {name_error}", err=True)
+        error(name_error)
         raise typer.Exit(policy.GENERIC_ERROR)
 
     host_error = validate_endpoint_address(host_endpoint)
     if host_error:
-        typer.echo(f"error: {host_error}", err=True)
+        error(host_error)
         raise typer.Exit(policy.GENERIC_ERROR)
 
     if container_endpoint is not None:
         container_error = validate_endpoint_address(container_endpoint)
         if container_error:
-            typer.echo(f"error: {container_error}", err=True)
+            error(container_error)
             raise typer.Exit(policy.GENERIC_ERROR)
 
     # Preflight Workshop state
     try:
         info = microjail.workshop_info()
     except Exception as exc:
-        typer.echo(
-            f"error: cannot determine Workshop state: {exc}",
-            err=True,
-        )
+        error(f"cannot determine Workshop state: {exc}")
         raise typer.Exit(policy.GENERIC_ERROR) from exc
 
     is_locked = any(gate.check(microjail) for gate in microjail.lockdown.gates)
@@ -206,12 +188,12 @@ def add_endpoint(
 
     if action is EditAction.DENY:
         assert msg is not None
-        typer.echo(f"error: {msg}", err=True)
+        error(msg)
         raise typer.Exit(policy.GENERIC_ERROR)
 
     if action is EditAction.ALLOW_WITH_WARNING:
         assert msg is not None
-        typer.echo(f"warning: {msg}", err=True)
+        warning(msg)
 
     # Check for existing capability with same name
     existing = next(
@@ -221,10 +203,7 @@ def add_endpoint(
 
     if existing is not None:
         if not isinstance(existing, WorkshopEndpointCapability):
-            typer.echo(
-                f"error: capability '{name}' is not an Endpoint capability.",
-                err=True,
-            )
+            error(f"capability '{name}' is not an Endpoint capability.")
             raise typer.Exit(policy.GENERIC_ERROR)
 
         if (
@@ -233,14 +212,13 @@ def add_endpoint(
             and existing.fatal == fatal
         ):
             # Same-value add is idempotent
-            typer.echo(f"endpoint capability unchanged: {name} -> {host_endpoint}")
+            success(f"endpoint capability unchanged: {name} -> {host_endpoint}")
             return
 
         if not replace:
-            typer.echo(
-                f"error: endpoint capability '{name}' already exists with different values. "
-                "Use --replace to overwrite.",
-                err=True,
+            error(
+                f"endpoint capability '{name}' already exists with different values. "
+                "Use --replace to overwrite."
             )
             raise typer.Exit(policy.GENERIC_ERROR)
 
@@ -266,7 +244,7 @@ def add_endpoint(
     if apply:
         if info is None:
             # Shouldn't reach here (DENY would have blocked), but safety check
-            typer.echo("error: cannot apply; Workshop is not launched", err=True)
+            error("cannot apply; Workshop is not launched")
             raise typer.Exit(policy.GENERIC_ERROR)
 
         if info.status == "ready" and not is_locked:
@@ -275,9 +253,7 @@ def add_endpoint(
 
             result = microjail.ensure(ApplicationIntent.LOCK)
             if result.status is not ApplicationStatus.SUCCESS:
-                typer.echo(
-                    "warning: Lockdown application incomplete after cap edit", err=True
-                )
+                warning("Lockdown application incomplete after cap edit")
 
         elif info.status in ("stopped", "off"):
             # Update Workshop declaration files without starting/refreshing
@@ -287,7 +263,7 @@ def add_endpoint(
             t.add_plug(name, cap.resolved_endpoint)
             t.add_slot(name, cap.host_endpoint)
 
-    typer.echo(f"endpoint capability added: {name} -> {host_endpoint}")
+    success(f"endpoint capability added: {name} -> {host_endpoint}")
 
 
 remove_app = typer.Typer(
@@ -320,27 +296,23 @@ def remove_endpoint(
     try:
         microjail = MicroJail.load(project)
     except ConfigNotFoundError as exc:
-        typer.echo(
+        error(
             f"No microjail config found for project {exc.project_path}. "
-            "Run 'microjail init' to create a microjail for this project.",
-            err=True,
+            "Run 'microjail init' to create a microjail for this project."
         )
         raise typer.Exit(policy.GENERIC_ERROR) from exc
 
     # Validate entire Lockdown before mutating
     dup_error = validate_no_duplicate_names(microjail.lockdown.caps)
     if dup_error:
-        typer.echo(f"error: {dup_error}", err=True)
+        error(dup_error)
         raise typer.Exit(policy.GENERIC_ERROR)
 
     # Preflight Workshop state
     try:
         info = microjail.workshop_info()
     except Exception as exc:
-        typer.echo(
-            f"error: cannot determine Workshop state: {exc}",
-            err=True,
-        )
+        error(f"cannot determine Workshop state: {exc}")
         raise typer.Exit(policy.GENERIC_ERROR) from exc
 
     is_locked = any(gate.check(microjail) for gate in microjail.lockdown.gates)
@@ -349,12 +321,12 @@ def remove_endpoint(
 
     if action is EditAction.DENY:
         assert msg is not None
-        typer.echo(f"error: {msg}", err=True)
+        error(msg)
         raise typer.Exit(policy.GENERIC_ERROR)
 
     if action is EditAction.ALLOW_WITH_WARNING:
         assert msg is not None
-        typer.echo(f"warning: {msg}", err=True)
+        warning(msg)
 
     existing = next(
         (c for c in microjail.lockdown.caps if c.name == name),
@@ -362,17 +334,11 @@ def remove_endpoint(
     )
 
     if existing is None:
-        typer.echo(
-            f"error: endpoint capability '{name}' not found.",
-            err=True,
-        )
+        error(f"endpoint capability '{name}' not found.")
         raise typer.Exit(policy.GENERIC_ERROR)
 
     if not isinstance(existing, WorkshopEndpointCapability):
-        typer.echo(
-            f"error: capability '{name}' is not an Endpoint capability.",
-            err=True,
-        )
+        error(f"capability '{name}' is not an Endpoint capability.")
         raise typer.Exit(policy.GENERIC_ERROR)
 
     # Revoke existing endpoint before saving if --apply and ready+unlocked
@@ -385,7 +351,7 @@ def remove_endpoint(
     # Handle --apply after save
     if apply:
         if info is None:
-            typer.echo("error: cannot apply; Workshop is not launched", err=True)
+            error("cannot apply; Workshop is not launched")
             raise typer.Exit(policy.GENERIC_ERROR)
 
         if info.status == "ready" and not is_locked:
@@ -393,14 +359,11 @@ def remove_endpoint(
 
             result = microjail.ensure(ApplicationIntent.LOCK)
             if result.status is not ApplicationStatus.SUCCESS:
-                typer.echo(
-                    "warning: Lockdown application incomplete after cap remove",
-                    err=True,
-                )
+                warning("Lockdown application incomplete after cap remove")
 
         elif info.status in ("stopped", "off"):
             t = microjail.workshop.tunnel
             t.remove_plug(name)
             t.remove_slot(name, remove_sdk=False)
 
-    typer.echo(f"endpoint capability removed: {name}")
+    success(f"endpoint capability removed: {name}")

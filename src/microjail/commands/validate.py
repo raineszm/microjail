@@ -2,7 +2,9 @@
 
 import msgspec
 import typer
+from rich.panel import Panel
 
+from microjail.commands._output import error, stderr_console, success
 from microjail.commands.init import get_project
 from microjail.microjail import ConfigNotFoundError, MicroJail
 
@@ -13,21 +15,23 @@ def validate(ctx: typer.Context) -> None:
     try:
         microjail = MicroJail.load(project)
     except ConfigNotFoundError:
-        typer.echo("Not initialized. Run 'microjail init' first.", err=True)
+        error("Not initialized. Run 'microjail init' first.")
         raise typer.Exit(code=1) from None
     except msgspec.DecodeError as exc:
-        typer.echo(f"Config error: {exc}", err=True)
+        error(f"Config error: {exc}")
         raise typer.Exit(code=1) from None
 
     errors = microjail.validate()
 
     if not errors:
-        typer.echo("Configuration is valid.")
+        success("Configuration is valid.")
         return
 
+    stderr_console.print("[bold]Configuration errors:[/bold]")
     for err in errors:
-        typer.echo(f"Error: {err.message}", err=True)
+        body = err.message
         if err.hint:
-            typer.echo(f"  Hint: {err.hint}", err=True)
+            body = f"{err.message}\n\n[dim]Hint:[/dim] {err.hint}"
+        stderr_console.print(Panel(body, title=err.kind, border_style="red"))
 
     raise typer.Exit(code=1)

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 
 from microjail.adapters.workshop import Workshop, WorkshopExistsError
+from microjail.commands._output import error, success, warning
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
 
@@ -48,7 +49,7 @@ def init(
         )
         raise typer.Exit(code=1) from exc
     except Exception as exc:
-        typer.echo(f"Failed to initialize Workshop '{name}': {exc}", err=True)
+        error(f"Failed to initialize Workshop '{name}': {exc}")
         raise typer.Exit(code=1) from exc
 
 
@@ -71,7 +72,7 @@ def overwrite_workshop(
 
 def adopt_workshop(name: str, project: Path, base: str | None = None) -> None:
     if base is not None:
-        typer.echo("WARN: --base is ignored during adopt", err=True)
+        warning("--base is ignored during adopt")
     ws = Workshop(name=name, project=project)
     if not ws.exists():
         typer.echo(
@@ -87,4 +88,4 @@ def adopt_workshop(name: str, project: Path, base: str | None = None) -> None:
     config.save()
     if config.purge_path:
         (project / config.purge_path).mkdir(parents=True, exist_ok=True)
-    typer.echo(f"Adopted workshop {name}")
+    success(f"Adopted workshop {name}")

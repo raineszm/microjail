@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import typer
 
 from microjail import policy
+from microjail.commands._output import error
 from microjail.warden import CapabilityPolicyViolation, GatePolicyViolation, Warden
 
 if TYPE_CHECKING:
@@ -15,10 +16,10 @@ def supervise_workload(microjail: MicroJail, process: subprocess.Popen) -> None:
     try:
         exit_code = warden.supervise()
     except GatePolicyViolation as exc:
-        typer.echo(str(exc), err=True)
+        error(str(exc))
         raise typer.Exit(policy.RUNTIME_GATE_POLICY_VIOLATION) from exc
     except CapabilityPolicyViolation as exc:
-        typer.echo(str(exc), err=True)
+        error(str(exc))
         raise typer.Exit(policy.FATAL_RUNTIME_CAPABILITY_VIOLATION) from exc
     finally:
         if process.poll() is None:

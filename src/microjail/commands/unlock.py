@@ -1,6 +1,7 @@
 import typer
 
 from microjail import policy
+from microjail.commands._output import error, success
 from microjail.commands.init import get_project
 from microjail.lockdown import CapabilityReleaseError, GateReleaseError
 from microjail.microjail import ConfigNotFoundError, MicroJail
@@ -46,21 +47,20 @@ def unlock(ctx: typer.Context) -> None:
     try:
         microjail = MicroJail.load(project)
     except ConfigNotFoundError as exc:
-        typer.echo(
+        error(
             f"No microjail config found for project {exc.project_path}. "
-            "Run 'microjail init' to create a microjail for this project.",
-            err=True,
+            "Run 'microjail init' to create a microjail for this project."
         )
         raise typer.Exit(policy.GENERIC_ERROR) from exc
 
     try:
         microjail.release()
-        typer.echo(
-            "unlock released: "
+        success(
+            f"unlock released: "
             f"{len(microjail.lockdown.gates)} gates, "
             f"{len(microjail.lockdown.caps)} capabilities"
         )
     except ExceptionGroup as exc:
         failures = ", ".join(exception_messages(exc))
-        typer.echo(f"unlock failed: {failures}", err=True)
+        error(f"unlock failed: {failures}")
         raise typer.Exit(release_exit_code(exc)) from exc

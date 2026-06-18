@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 from microjail.adapters.workshop import Workshop
 from microjail.cli import app
 from microjail.lockdown import Lockdown
-from microjail.microjail import MicroJail, MicroJailStatus
+from microjail.microjail import EndpointCapabilityInfo, MicroJail, MicroJailStatus
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,10 +48,24 @@ def test_status_displays_workshop_state(
             return_value=MicroJailStatus(
                 workshop_name="test-jail",
                 workshop_status="ready",
-                capabilities=("inference",),
+                capabilities=("inference", "critical"),
                 gates=("network-egress",),
                 connections=(
                     ("test-jail/microjail:inference", "test-jail/system:inference"),
+                ),
+                endpoint_capabilities=(
+                    EndpointCapabilityInfo(
+                        name="inference",
+                        host_endpoint="127.0.0.1:8080",
+                        container_endpoint="127.0.0.1:8080",
+                        fatal=False,
+                    ),
+                    EndpointCapabilityInfo(
+                        name="critical",
+                        host_endpoint="10.0.0.1:443",
+                        container_endpoint="api:443",
+                        fatal=True,
+                    ),
                 ),
             )
         ),
@@ -64,3 +78,9 @@ def test_status_displays_workshop_state(
     assert "ready" in result.stdout
     assert "inference" in result.stdout
     assert "network-egress" in result.stdout
+    # Endpoint binding info from the new field
+    assert "127.0.0.1:8080" in result.stdout
+    assert "10.0.0.1:443" in result.stdout
+    assert "api:443" in result.stdout
+    # Fatal cap marker
+    assert "✗" in result.stdout
