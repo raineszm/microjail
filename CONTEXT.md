@@ -57,11 +57,11 @@ A failure to establish or verify a restriction that a Lockdown declared must hol
 _Avoid_: capability failure, runtime violation
 
 **Capability policy violation**:
-Runtime loss of functionality or access that a Lockdown declared should remain available to the workload, including failure to verify that the functionality or access still exists. Capability policy violations are fatal because the workload is operating outside its declared capability bounds.
+Loss of functionality or access that a Lockdown declared should remain available to the workload, detected at launch time. The Warden does not monitor capabilities during execution, so capability policy violations cannot occur at runtime — only at launch. A `fatal` capability policy violation blocks launch; a non-fatal one is reported as a warning and the workload proceeds.
 _Avoid_: gate violation, setup failure
 
 **Gate policy violation**:
-Runtime loss of a restriction that a Lockdown declared must hold for the workload, including failure to verify that the restriction still holds. Gate policy violations are fatal because they can expose access that should be denied.
+Runtime loss of a restriction that a Lockdown declared must hold for the workload, as detected by the Warden when a gate's configuration check fails during execution. Gate policy violations are fatal because they can expose access that should be denied.
 _Avoid_: capability violation, setup failure
 
 **Workload**:
@@ -73,7 +73,7 @@ The host-side control handle (specifically a `subprocess.Popen` instance) repres
 _Avoid_: Popen object, container process, background process
 
 **Warden**:
-The runtime supervisor for a workload running under an applied Lockdown. It monitors policy invariants and terminates the workload on violation, but never releases policy.
+The runtime supervisor for a workload running under an applied Lockdown. It continuously verifies that gate configuration still holds for the duration of the workload and terminates the workload on any configuration drift that violates a gate. It does not perform runtime behavioral checks; behavioral verification of gates and capabilities happens once at launch time. The Warden never releases policy.
 _Avoid_: unlocker, policy applier, cleanup manager
 
 **Release**:
