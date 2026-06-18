@@ -13,14 +13,19 @@ def project_name():
 
 
 def create_microjail_config(project: Path) -> Path:
-    """Create a minimal .microjail/config.yaml in *project*."""
-    config = project / ".microjail" / "config.yaml"
-    config.parent.mkdir()
-    config.write_text(
-        f"workshop:\n  name: test-jail\n  project: {project}\nlockdown:\n  caps: []\n  gates: []\n",
-        encoding="utf-8",
+    """Create a .microjail/config.yaml in *project* matching what ``microjail init`` writes."""
+    from microjail.adapters.workshop import Workshop
+    from microjail.lockdown import Lockdown
+    from microjail.microjail import MicroJail
+
+    config = MicroJail(
+        workshop=Workshop(name="test-jail", project=project),
+        lockdown=Lockdown.default(),
     )
-    return config
+    config.save()
+    if config.purge_path:
+        (project / config.purge_path).mkdir(parents=True, exist_ok=True)
+    return config.config_path
 
 
 @pytest.fixture

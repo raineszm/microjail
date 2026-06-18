@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 import msgspec
 
 from microjail.adapters.lxc import LxcCommandError
+from microjail.exceptions import MicrojailError
 from microjail.policy import EGRESS_PROBE_TIMEOUT
 
 if TYPE_CHECKING:
@@ -23,7 +24,15 @@ class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
         return "network-egress"
 
     def check(self, microjail: MicroJail) -> bool:
-        """Return true when egress from inside the workshop is blocked."""
+        """Return true when egress from inside the workshop is blocked.
+
+        Returns ``False`` when the restriction cannot be evaluated against
+        the current state (for example, the workshop has not been launched,
+        or no workshop exists in the project). This matches the contract
+        used by :class:`ReadonlyConfig` and lets callers iterate over all
+        gates to answer "is the lockdown currently applied?" without
+        special-casing each failure mode.
+        """
         try:
             result = microjail.exec_(
                 EGRESS_PROBE,
@@ -34,6 +43,8 @@ class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
             )
         except subprocess.TimeoutExpired:
             return True
+        except MicrojailError:
+            return False
         return result.returncode != 0
 
     def enforce(self, microjail: MicroJail) -> None:

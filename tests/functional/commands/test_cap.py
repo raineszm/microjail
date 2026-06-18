@@ -1225,3 +1225,44 @@ def test_cap_add_endpoint_rejects_duplicate_names_in_config(
 
     assert result.exit_code != 0
     assert "duplicate" in result.stderr.lower()
+
+
+def test_cap_add_endpoint_succeeds_after_init_when_workshop_unlaunched(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression: declaration-only add must succeed against the real default Lockdown
+    when the workshop has never been launched.
+
+    Before the fix, iterating gates to compute ``is_locked`` triggered
+    ``NetworkDrop.check()`` which called ``microjail.exec_()``, which raised
+    ``WorkshopNotLaunchedError`` (or ``WorkshopNotFoundError`` when no workshop
+    directory exists) and produced a raw traceback. The fix catches
+    ``MicrojailError`` in ``NetworkDrop.check()`` and returns ``False``, matching
+    the contract already used by ``ReadonlyConfig``.
+    """
+    create_microjail_config(tmp_path)
+    monkeypatch.setattr(Workshop, "info", Mock(return_value=None))
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--project",
+            str(tmp_path),
+            "cap",
+            "add",
+            "endpoint",
+            "inference",
+            "localhost:8080",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "endpoint capability added: inference -> localhost:8080" in result.stdout
+    assert "Traceback" not in result.output
+
+    loaded = MicroJail.load(tmp_path)
+    assert len(loaded.lockdown.caps) == 1
+    cap = loaded.lockdown.caps[0]
+    assert isinstance(cap, WorkshopEndpointCapability)
+    assert cap.name == "inference"
+    assert cap.host_endpoint == "localhost:8080"

@@ -84,6 +84,30 @@ def test_check_returns_true_when_egress_probe_fails() -> None:
     assert gate().check(mock_mj)
 
 
+def test_check_returns_false_when_workshop_not_launched() -> None:
+    """Unevaluable state must not raise: gate is not satisfied, lockdown not applied."""
+    from microjail.adapters.workshop import WorkshopNotLaunchedError
+
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.exec_.side_effect = WorkshopNotLaunchedError(
+        name=WORKSHOP_NAME, project=PROJECT
+    )
+
+    assert not gate().check(mock_mj)
+
+
+def test_check_returns_false_when_workshop_not_found() -> None:
+    """A missing workshop is also unevaluable: gate is not satisfied."""
+    from microjail.adapters.workshop import WorkshopNotFoundError
+
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.exec_.side_effect = WorkshopNotFoundError(
+        name=WORKSHOP_NAME, project=PROJECT
+    )
+
+    assert not gate().check(mock_mj)
+
+
 def test_enforce_removes_all_network_devices_from_workshop_container() -> None:
     mock_mj = Mock(spec=MicroJail)
     mock_mj.lxc_instance.return_value = SimpleNamespace(
