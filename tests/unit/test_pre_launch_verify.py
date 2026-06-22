@@ -130,3 +130,41 @@ def test_fatal_capability_raises_before_non_fatal_is_collected() -> None:
     with pytest.raises(CapabilityError) as exc_info:
         mj.pre_launch_verify()
     assert exc_info.value.name == "inference"
+    # The non-fatal capability's verify was actually invoked; the
+    # ordering guarantee depends on this. Without the assertion a
+    # regression that processes fatal-first would silently pass.
+    non_fatal.verify.assert_called_once_with(mj)
+
+
+def test_subsequent_capabilities_skipped_after_first_fatal_failure() -> None:
+    """The second fatal capability's verify() is not called after the first raises.
+
+    Per the spec: "Subsequent capabilities are not checked after the
+    first fatal failure." Any non-fatal failures seen before the fatal
+    are surfaced via the exception's ``non_fatal_failures`` field so
+    the caller can still warn about them.
+    """
+    non_fatal = Mock(spec=WorkshopEndpointCapability)
+    non_fatal.name = "non-fatal"
+    non_fatal.fatal = False
+    non_fatal.verify.return_value = False
+
+    first_fatal = Mock(spec=WorkshopEndpointCapability)
+    first_fatal.name = "first-fatal"
+    first_fatal.fatal = True
+    first_fatal.verify.return_value = False
+
+    second_fatal = Mock(spec=WorkshopEndpointCapability)
+    second_fatal.name = "second-fatal"
+    second_fatal.fatal = True
+    second_fatal.verify.return_value = False
+
+    mj = make_microjail(gates=[], caps=[non_fatal, first_fatal, second_fatal])
+
+    with pytest.raises(CapabilityError) as exc_info:
+        mj.pre_launch_verify()
+    assert exc_info.value.name == "first-fatal"
+    second_fatal.verify.assert_not_called()
+    # The non-fatal was collected and rides along on the exception so
+    # the caller can still surface it as a warning.
+    assert exc_info.value.non_fatal_failures == ("non-fatal",)

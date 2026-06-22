@@ -233,6 +233,10 @@ class MicroJail:
         capability that fails :meth:`verify` raises
         :class:`CapabilityError`; a non-fatal failure is collected
         and returned for the caller to surface as a warning.
+
+        If a non-fatal capability failure is seen before a fatal one,
+        the non-fatal names ride along on the :class:`CapabilityError`
+        so the caller can still surface them as warnings.
         """
         for gate in self.lockdown.gates:
             if not gate.verify(self):
@@ -243,7 +247,10 @@ class MicroJail:
             if cap.verify(self):
                 continue
             if getattr(cap, "fatal", False):
-                raise CapabilityError(name=cap.name)
+                raise CapabilityError(
+                    name=cap.name,
+                    non_fatal_failures=tuple(non_fatal_failures),
+                )
             non_fatal_failures.append(cap.name)
 
         return PreLaunchVerifyResult(

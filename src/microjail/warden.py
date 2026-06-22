@@ -1,5 +1,6 @@
 """The Warden: event-driven runtime supervisor for a workload under Lockdown."""
 
+import contextlib
 import queue
 import subprocess
 from typing import TYPE_CHECKING
@@ -59,7 +60,7 @@ class Warden:
         for _ in self._drain_events():
             for gate in self.microjail.lockdown.gates:
                 if not gate.check(self.microjail):
-                    self.terminate_workload()
+                    self._terminate_safely()
                     raise GatePolicyViolation(f"Gate policy violation: {gate.name}")
 
     def _drain_events(self) -> list[str]:
@@ -75,11 +76,25 @@ class Warden:
         """Re-raise :class:`LxdEnforcementLost` if the watcher died with one."""
         exc = getattr(self.watcher, "last_exception", None)
         if isinstance(exc, LxdEnforcementLost):
-            self.terminate_workload()
+            self._terminate_safely()
             raise GatePolicyViolation(
                 f"Gate policy violation: lost LXD event subscription "
                 f"for {self.microjail.name}"
             ) from exc
+
+    def _terminate_safely(self) -> None:
+        """Terminate the workload, swallowing any error from the terminate path.
+
+        The Warden has already decided to escalate (gate violation or
+        enforcement lost). A failure inside :meth:`terminate_workload`
+        — for instance ``lxc stop --force`` failing because LXD is
+        unreachable, which is the same condition that triggered the
+        escalation — cannot change that decision and must not mask the
+        security-relevant exception. The supervisor's caller will
+        translate the :class:`GatePolicyViolation` to exit code 84.
+        """
+        with contextlib.suppress(Exception):
+            self.terminate_workload()
 
     def terminate_workload(self) -> None:
         """Terminate the workload process and escalate to container force stop if needed."""

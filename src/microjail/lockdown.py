@@ -12,9 +12,16 @@ from microjail.gates.readonly_config import ReadonlyConfig
 
 @dataclass(frozen=True)
 class CapabilityError(MicrojailError):
-    """Raised when a capability could not be verified after provisioning."""
+    """Raised when a capability could not be verified after provisioning.
+
+    ``non_fatal_failures`` carries the names of any non-fatal
+    capabilities that failed their :meth:`verify` step earlier in the
+    same pass, so the caller can surface them as warnings alongside
+    the fatal failure.
+    """
 
     name: str
+    non_fatal_failures: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

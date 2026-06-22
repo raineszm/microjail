@@ -172,3 +172,75 @@ def test_warden_escalates_on_lxd_enforcement_lost() -> None:
         warden.supervise()
 
     process.terminate.assert_called_once()
+
+
+def test_warden_escalates_to_lxc_stop_when_terminate_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If SIGTERM doesn't stop the workload in 2s, escalate to `lxc stop --force`."""
+    events: queue.Queue[str] = queue.Queue()
+    events.put("reconnect")
+
+    process = Mock(spec=subprocess.Popen)
+    process.wait.side_effect = [
+        subprocess.TimeoutExpired(cmd="test", timeout=0.1),  # poll tick
+        subprocess.TimeoutExpired(cmd="test", timeout=2),  # terminate grace
+    ]
+    process.poll.return_value = None
+
+    gate = make_gate("network-egress", check_result=False)
+    microjail = Mock(spec=MicroJail)
+    microjail.lockdown = Mock()
+    microjail.lockdown.gates = [gate]
+    microjail.lockdown.caps = []
+    microjail.container_name.return_value = "test-container"
+    microjail.lxd_project.return_value = "test-project"
+
+    captured: dict[str, tuple[str, str, bool]] = {}
+
+    def fake_stop(name: str, project: str, force: bool = False) -> None:
+        captured["call"] = (name, project, force)
+
+    monkeypatch.setattr("microjail.adapters.lxc.stop_instance", fake_stop)
+
+    warden = Warden(microjail=microjail, process=process, events=events)
+
+    with pytest.raises(GatePolicyViolation):
+        warden.supervise()
+
+    process.terminate.assert_called_once()
+    assert captured["call"] == ("test-container", "test-project", True)
+
+
+def test_terminate_failure_does_not_mask_gate_violation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failure inside `lxc stop --force` (e.g., LXD unreachable) cannot hide the violation.
+
+    The gate violation is the security-relevant event; the terminate
+    failure is a follow-on that must not change the exit code from 84
+    to a raw traceback.
+    """
+    events: queue.Queue[str] = queue.Queue()
+    events.put("reconnect")
+
+    process = Mock(spec=subprocess.Popen)
+    process.wait.side_effect = [
+        subprocess.TimeoutExpired(cmd="test", timeout=0.1),
+        subprocess.TimeoutExpired(cmd="test", timeout=2),
+    ]
+    process.poll.return_value = None
+
+    gate = make_gate("network-egress", check_result=False)
+    microjail = Mock(spec=MicroJail)
+    microjail.lockdown = Mock()
+    microjail.lockdown.gates = [gate]
+    microjail.lockdown.caps = []
+    microjail.container_name.side_effect = RuntimeError("LXD unreachable")
+
+    warden = Warden(microjail=microjail, process=process, events=events)
+
+    with pytest.raises(GatePolicyViolation):
+        warden.supervise()
+
+    process.terminate.assert_called_once()

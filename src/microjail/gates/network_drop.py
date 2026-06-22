@@ -26,10 +26,15 @@ class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
         Under the threat model "LXD is the only thing with the power to enforce",
         a NIC device in the workshop instance is the only way a workload can
         reach the network. If no NIC is configured, egress is impossible.
+
+        Returns ``False`` (gate violation) if the instance cannot be
+        queried — the container is missing, the LXD daemon is
+        unreachable, or the workshop hasn't been launched. The Warden
+        will treat that as a gate failure and escalate.
         """
         try:
             instance = microjail.lxc_instance()
-        except WorkshopNotLaunchedError:
+        except WorkshopNotLaunchedError, LxcCommandError:
             return False
         return not any(
             device.get("type") == "nic" for device in instance.devices.values()

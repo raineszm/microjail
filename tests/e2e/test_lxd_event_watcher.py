@@ -74,31 +74,27 @@ def test_external_lxd_event_triggers_gate_escalation(
     supervisor = threading.Thread(target=run_workload, daemon=True)
     supervisor.start()
 
-    try:
-        # Wait for the workload process to actually be running inside
-        # the container before we touch LXD. The ``touch`` lands before
-        # ``microjail exec`` returns control past pre_launch_verify.
-        wait_for_workload_signal(e2e_workshop, "/tmp/watcher-ready")
+    # Wait for the workload process to actually be running inside
+    # the container before we touch LXD. The ``touch`` lands before
+    # ``microjail exec`` returns control past pre_launch_verify.
+    wait_for_workload_signal(e2e_workshop, "/tmp/watcher-ready")
 
-        # Attach a NIC from the host. This fires a lifecycle event that
-        # the watcher must observe. The container's existing profile
-        # uses ``workshopbr0`` so we re-use the same parent.
-        container = e2e_workshop.container_name()
-        assert container is not None  # workshop is launched
-        add_device(
-            container=container,
-            device="evil-egress",
-            config={"type": "nic", "nictype": "bridged", "parent": "workshopbr0"},
-            project=e2e_workshop.lxd_project,
-        )
+    # Attach a NIC from the host. This fires a lifecycle event that
+    # the watcher must observe. The container's existing profile
+    # uses ``workshopbr0`` so we re-use the same parent.
+    container = e2e_workshop.container_name()
+    assert container is not None  # workshop is launched
+    add_device(
+        container=container,
+        device="evil-egress",
+        config={"type": "nic", "nictype": "bridged", "parent": "workshopbr0"},
+        project=e2e_workshop.lxd_project,
+    )
 
-        supervisor.join(timeout=WORKLOAD_RUN_TIMEOUT)
-    finally:
-        if supervisor.is_alive():
-            # Test is unwinding unexpectedly: CliRunner will be torn
-            # down with the process. Best effort to keep the container
-            # from holding a NIC we added.
-            supervisor.join(timeout=0)
+    supervisor.join(timeout=WORKLOAD_RUN_TIMEOUT)
+    # No cleanup needed: if the supervisor thread is still alive at this
+    # point, the e2e_workshop fixture destroys the workshop on
+    # teardown, which kills the workload and the watcher.
 
     assert not supervisor.is_alive(), (
         "workload supervisor did not terminate after LXD event"

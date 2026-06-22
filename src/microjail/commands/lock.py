@@ -73,6 +73,8 @@ def pre_launch_verify_or_exit(microjail: MicroJail) -> None:
         error(f"verify failed: gate {exc.name} did not pass behavioral check")
         raise typer.Exit(policy.GATE_APPLICATION_FAILURE) from exc
     except CapabilityError as exc:
+        for name in exc.non_fatal_failures:
+            warning(f"non-fatal capability {name} did not pass behavioral check")
         error(f"verify failed: capability {exc.name} did not pass behavioral check")
         raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE) from exc
     for name in result.non_fatal_capability_failures:

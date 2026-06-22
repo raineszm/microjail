@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 
 DEFAULT_LXD_CONFIG_DIR = Path("~/.config/lxc").expanduser()
-DEFAULT_LXD_EVENT_URL = "wss://127.0.0.1:8443/1.0/events?type=lifecycle"
 
 
 def lxd_local_connect(

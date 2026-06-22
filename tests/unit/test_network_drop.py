@@ -98,6 +98,25 @@ def test_check_returns_false_when_workshop_not_launched() -> None:
     assert not gate().check(mock_mj)
 
 
+def test_check_returns_false_when_lxc_query_fails() -> None:
+    """A failed `lxc query` (container deleted, daemon unreachable) is a gate violation.
+
+    The Warden should escalate the same way it would for any other
+    unevaluable gate state: the contract is that ``check()`` returns a
+    boolean and never propagates a subprocess error.
+    """
+    from microjail.adapters.lxc import LxcCommandError
+
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance.side_effect = LxcCommandError(
+        cmd=["lxc", "query", "/1.0/instances/missing?project=p"],
+        returncode=1,
+        stderr="Instance not found",
+    )
+
+    assert not gate().check(mock_mj)
+
+
 def test_check_does_not_run_egress_probe() -> None:
     """The bash egress probe is removed; check() is config-only."""
     mock_mj = Mock(spec=MicroJail)

@@ -14,12 +14,19 @@ from microjail.gates.network_drop import NetworkDrop
 from microjail.gates.readonly_config import ReadonlyConfig
 
 
-def test_gate_protocol_declares_verify() -> None:
-    assert "verify" in Gate.__dict__
+def test_concrete_gates_satisfy_gate_protocol() -> None:
+    """Every concrete gate ``isinstance`` is ``Gate`` — runtime protocol check."""
+    assert isinstance(NetworkDrop(), Gate)
+    assert isinstance(ReadonlyConfig(), Gate)
 
 
-def test_capability_protocol_declares_verify() -> None:
-    assert "verify" in Capability.__dict__
+def test_concrete_capabilities_satisfy_capability_protocol() -> None:
+    """Every concrete cap ``isinstance`` is ``Capability`` — runtime protocol check."""
+    cap = WorkshopEndpointCapability(
+        name="inference",
+        host_endpoint="localhost:8080",
+    )
+    assert isinstance(cap, Capability)
 
 
 def test_network_drop_verify_returns_true() -> None:
