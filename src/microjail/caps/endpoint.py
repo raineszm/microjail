@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import re
 import subprocess
 from typing import TYPE_CHECKING
@@ -75,14 +73,21 @@ class WorkshopEndpointCapability(
         )
 
     def check(self, microjail: MicroJail) -> bool:
+        """Return true when the tunnel connection is present in the Workshop SDK."""
         try:
             t = microjail.workshop.tunnel
             rows = t.connections()
-            if (
-                f"{microjail.name}/microjail:{self.name}",
-                f"{microjail.name}/system:{self.name}",
-            ) not in rows:
-                return False
+        except subprocess.CalledProcessError, subprocess.TimeoutExpired:
+            return False
+        return (
+            f"{microjail.name}/microjail:{self.name}",
+            f"{microjail.name}/system:{self.name}",
+        ) in rows
+
+    def verify(self, microjail: MicroJail) -> bool:
+        """Return true when the resolved endpoint is TCP-reachable."""
+        try:
+            t = microjail.workshop.tunnel
             host, port = self.resolved_endpoint.rsplit(":", 1)
             return t.endpoint_reachable(host, port)
         except subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError:

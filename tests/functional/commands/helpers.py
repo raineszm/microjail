@@ -10,6 +10,7 @@ from microjail.microjail import MicroJail
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Any
 
     import pytest
 
@@ -49,6 +50,11 @@ class RecordingCapability:
             return self.checks.pop(0)
         return self.checks[0]
 
+    def verify(self, microjail: MicroJail) -> bool:
+        del microjail
+        self.calls.append("verify")
+        return True
+
     def provide(self, microjail: MicroJail, batch: object = None) -> None:
         del microjail, batch
         self.calls.append("provide")
@@ -70,6 +76,11 @@ class RecordingGate:
         if len(self.checks) > 1:
             return self.checks.pop(0)
         return self.checks[0]
+
+    def verify(self, microjail: MicroJail) -> bool:
+        del microjail
+        self.calls.append("verify")
+        return True
 
     def enforce(self, microjail: MicroJail) -> None:
         del microjail

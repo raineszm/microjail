@@ -1,64 +1,85 @@
+"""The Warden: event-driven runtime supervisor for a workload under Lockdown."""
+
+import queue
 import subprocess
 from typing import TYPE_CHECKING
 
+from microjail.adapters.lxd_events import LxdEnforcementLost
+
 if TYPE_CHECKING:
     from microjail.microjail import MicroJail
+
+
+SUPERVISE_POLL_INTERVAL = 0.1
 
 
 class GatePolicyViolation(Exception):
     """Raised when a gate policy violation is detected at runtime."""
 
 
-class CapabilityPolicyViolation(Exception):
-    """Raised when a fatal capability policy violation is detected at runtime."""
-
-
 class Warden:
-    """Runtime supervisor for executing workloads under an applied Lockdown."""
+    """Runtime supervisor for executing workloads under an applied Lockdown.
+
+    The Warden multiplexes between the workload's :class:`subprocess.Popen`
+    handle and the :class:`LxdEventWatcher` event queue. On every LXD
+    lifecycle event (and on every ``"reconnect"`` sentinel from the watcher),
+    every gate's :meth:`check` is re-run. The first failing gate terminates
+    the workload and escalates as a :class:`GatePolicyViolation`.
+
+    Capabilities are launch-time only and are *not* monitored at runtime.
+    Loss of the LXD event subscription escalates as a
+    :class:`GatePolicyViolation` (RUNTIME_GATE_POLICY_VIOLATION, 84) —
+    under the threat model "LXD is the only thing that can enforce," a
+    workload we cannot supervise is a security regression.
+    """
 
     def __init__(
         self,
         microjail: MicroJail,
         process: subprocess.Popen,
-        interval: float = 1.0,
+        events: queue.Queue[str],
+        watcher: object | None = None,
     ) -> None:
         self.microjail = microjail
         self.process = process
-        self.interval = interval
+        self.events = events
+        self.watcher = watcher
 
     def supervise(self) -> int:
         """Supervise the workload process and block until it terminates."""
         while True:
             try:
-                # Wait blocks up to interval seconds.
-                # If the process terminates, wait() returns its exit code.
-                exit_code = self.process.wait(timeout=self.interval)
-                return exit_code
+                return self.process.wait(timeout=SUPERVISE_POLL_INTERVAL)
             except subprocess.TimeoutExpired:
-                # The process is still running. Perform periodic checks.
-                self.check_policies()
+                self._poll()
 
-    def check_policies(self) -> None:
-        """Inspect all active gates and capabilities."""
-        for gate in self.microjail.lockdown.gates:
-            if not gate.check(self.microjail):
-                self.terminate_workload()
-                raise GatePolicyViolation(f"Gate policy violation: {gate.name}")
-
-        for cap in self.microjail.lockdown.caps:
-            if not cap.check(self.microjail):
-                if getattr(cap, "fatal", False):
+    def _poll(self) -> None:
+        """Drain pending events and validate every gate."""
+        self._raise_if_enforcement_lost()
+        for _ in self._drain_events():
+            for gate in self.microjail.lockdown.gates:
+                if not gate.check(self.microjail):
                     self.terminate_workload()
-                    raise CapabilityPolicyViolation(
-                        f"Capability policy violation: {cap.name}"
-                    )
-                else:
-                    import sys
+                    raise GatePolicyViolation(f"Gate policy violation: {gate.name}")
 
-                    print(
-                        f"Warning: Capability policy violation: {cap.name}",
-                        file=sys.stderr,
-                    )
+    def _drain_events(self) -> list[str]:
+        """Pop every pending event from the queue, non-blocking."""
+        drained: list[str] = []
+        while True:
+            try:
+                drained.append(self.events.get_nowait())
+            except queue.Empty:
+                return drained
+
+    def _raise_if_enforcement_lost(self) -> None:
+        """Re-raise :class:`LxdEnforcementLost` if the watcher died with one."""
+        exc = getattr(self.watcher, "last_exception", None)
+        if isinstance(exc, LxdEnforcementLost):
+            self.terminate_workload()
+            raise GatePolicyViolation(
+                f"Gate policy violation: lost LXD event subscription "
+                f"for {self.microjail.name}"
+            ) from exc
 
     def terminate_workload(self) -> None:
         """Terminate the workload process and escalate to container force stop if needed."""

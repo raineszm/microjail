@@ -5,7 +5,11 @@ import typer
 
 from microjail.commands._output import error, info
 from microjail.commands.init import get_project
-from microjail.commands.lock import ensure_lockdown, load_microjail_or_exit
+from microjail.commands.lock import (
+    ensure_lockdown,
+    load_microjail_or_exit,
+    pre_launch_verify_or_exit,
+)
 from microjail.commands.supervision import supervise_workload
 
 
@@ -32,6 +36,7 @@ def shell(
         microjail.workshop.launch()
 
     ensure_lockdown(microjail)
+    pre_launch_verify_or_exit(microjail)
 
     if command:
         process = microjail.popen(command, interactive=True)

@@ -1,232 +1,174 @@
+"""Tests for the event-driven ``Warden``."""
+
+import queue
 import subprocess
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 import pytest
 
+from microjail.adapters.lxd_events import LxdEnforcementLost
 from microjail.microjail import MicroJail
-from microjail.warden import CapabilityPolicyViolation, GatePolicyViolation, Warden
+from microjail.warden import GatePolicyViolation, Warden
 
 
-def test_warden_supervises_successful_exit() -> None:
-    # Arrange
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.lockdown = Mock()
-    mock_mj.lockdown.gates = []
-    mock_mj.lockdown.caps = []
-
-    mock_process = Mock(spec=subprocess.Popen)
-    mock_process.wait.return_value = 0
-
-    warden = Warden(mock_mj, mock_process, interval=0.01)
-
-    # Act
-    exit_code = warden.supervise()
-
-    # Assert
-    assert exit_code == 0
-    mock_process.wait.assert_called_once_with(timeout=0.01)
-
-
-def test_warden_supervises_non_zero_exit() -> None:
-    # Arrange
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.lockdown = Mock()
-    mock_mj.lockdown.gates = []
-    mock_mj.lockdown.caps = []
-
-    mock_process = Mock(spec=subprocess.Popen)
-    mock_process.wait.return_value = 42
-
-    warden = Warden(mock_mj, mock_process, interval=0.01)
-
-    # Act
-    exit_code = warden.supervise()
-
-    # Assert
-    assert exit_code == 42
-    mock_process.wait.assert_called_once_with(timeout=0.01)
-
-
-def test_warden_polls_on_interval() -> None:
-    # Arrange
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.lockdown = Mock()
-
-    mock_gate = Mock()
-    mock_gate.name = "mock-gate"
-    mock_gate.check.return_value = True
-
-    mock_cap = Mock()
-    mock_cap.name = "mock-cap"
-    mock_cap.check.return_value = True
-
-    mock_mj.lockdown.gates = [mock_gate]
-    mock_mj.lockdown.caps = [mock_cap]
-
-    mock_process = Mock(spec=subprocess.Popen)
-    # We raise TimeoutExpired twice, then exit with 0
-    mock_process.wait.side_effect = [
-        subprocess.TimeoutExpired(cmd="test", timeout=0.01),
-        subprocess.TimeoutExpired(cmd="test", timeout=0.01),
-        0,
-    ]
-
-    warden = Warden(mock_mj, mock_process, interval=0.01)
-
-    # Act
-    exit_code = warden.supervise()
-
-    # Assert
-    assert exit_code == 0
-    assert mock_gate.check.call_count == 2
-    assert mock_cap.check.call_count == 2
-    mock_gate.check.assert_has_calls([call(mock_mj), call(mock_mj)])
-    mock_cap.check.assert_has_calls([call(mock_mj), call(mock_mj)])
-
-
-def test_warden_terminates_on_gate_violation() -> None:
-    # Arrange
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.lockdown = Mock()
-
-    mock_gate = Mock()
-    mock_gate.name = "mock-gate"
-    # Returns True on first check, False on second
-    mock_gate.check.side_effect = [True, False]
-
-    mock_cap = Mock()
-    mock_cap.name = "mock-cap"
-    mock_cap.check.return_value = True
-
-    mock_mj.lockdown.gates = [mock_gate]
-    mock_mj.lockdown.caps = [mock_cap]
-    mock_mj.container_name.return_value = "test-container"
-    mock_mj.lxd_project.return_value = "test-project"
-
-    mock_process = Mock(spec=subprocess.Popen)
-    # Wait times out twice (we need it to poll twice to see the check change)
-    mock_process.wait.side_effect = [
-        subprocess.TimeoutExpired(cmd="test", timeout=0.01),
-        subprocess.TimeoutExpired(cmd="test", timeout=0.01),
-        0,
-    ]
-
-    warden = Warden(mock_mj, mock_process, interval=0.01)
-
-    # Act & Assert
-    with pytest.raises(GatePolicyViolation):
-        warden.supervise()
-
-    # Check that process termination was called
-    mock_process.terminate.assert_called_once()
-    # Wait should be called to wait for process termination with timeout of 2 seconds
-    mock_process.wait.assert_any_call(timeout=2)
-
-
-def test_warden_terminates_on_gate_violation_escalation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Arrange
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.lockdown = Mock()
-
-    mock_gate = Mock()
-    mock_gate.name = "mock-gate"
-    mock_gate.check.return_value = False
-
-    mock_mj.lockdown.gates = [mock_gate]
-    mock_mj.lockdown.caps = []
-    mock_mj.container_name.return_value = "test-container"
-    mock_mj.lxd_project.return_value = "test-project"
-
-    mock_process = Mock(spec=subprocess.Popen)
-    # First wait times out (initiates policy check)
-    # During terminate, we wait again, which also times out (escalation)
-    mock_process.wait.side_effect = [
-        subprocess.TimeoutExpired(cmd="test", timeout=0.01),
-        subprocess.TimeoutExpired(cmd="terminate", timeout=2),
-    ]
-
-    mock_stop_instance = Mock()
-    monkeypatch.setattr(
-        "microjail.adapters.lxc.stop_instance", mock_stop_instance, raising=False
-    )
-
-    warden = Warden(mock_mj, mock_process, interval=0.01)
-
-    # Act & Assert
-    with pytest.raises(GatePolicyViolation):
-        warden.supervise()
-
-    # Check process termination and container stop
-    mock_process.terminate.assert_called_once()
-    mock_process.wait.assert_any_call(timeout=2)
-    mock_stop_instance.assert_called_once_with(
-        "test-container", "test-project", force=True
+def make_warden(
+    *,
+    events: queue.Queue[str] | None = None,
+    watcher: Mock | None = None,
+    process: Mock | None = None,
+    gates: list[Mock] | None = None,
+    caps: list[Mock] | None = None,
+) -> Warden:
+    microjail = Mock(spec=MicroJail)
+    microjail.lockdown = Mock()
+    microjail.lockdown.gates = gates if gates is not None else []
+    microjail.lockdown.caps = caps if caps is not None else []
+    return Warden(
+        microjail=microjail,
+        process=process or Mock(spec=subprocess.Popen),
+        events=events if events is not None else queue.Queue(),
+        watcher=watcher,
     )
 
 
-def test_warden_warns_on_non_fatal_capability_violation(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    # Arrange
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.lockdown = Mock()
+def make_gate(name: str, check_result: bool) -> Mock:
+    gate = Mock()
+    gate.name = name
+    gate.check.return_value = check_result
+    return gate
 
-    mock_cap = Mock()
-    mock_cap.name = "mock-cap"
-    mock_cap.check.return_value = False
-    mock_cap.fatal = False
 
-    mock_mj.lockdown.gates = []
-    mock_mj.lockdown.caps = [mock_cap]
+def test_warden_returns_exit_code_when_process_terminates() -> None:
+    process = Mock(spec=subprocess.Popen)
+    process.wait.return_value = 0
+    warden = make_warden(process=process)
 
-    mock_process = Mock(spec=subprocess.Popen)
-    mock_process.wait.side_effect = [
-        subprocess.TimeoutExpired(cmd="test", timeout=0.01),
+    assert warden.supervise() == 0
+    process.wait.assert_called_once_with(timeout=0.1)
+
+
+def test_warden_returns_non_zero_exit_code() -> None:
+    process = Mock(spec=subprocess.Popen)
+    process.wait.return_value = 7
+    warden = make_warden(process=process)
+
+    assert warden.supervise() == 7
+
+
+def test_warden_drains_event_and_rechecks_gates() -> None:
+    events: queue.Queue[str] = queue.Queue()
+    events.put("reconnect")
+
+    process = Mock(spec=subprocess.Popen)
+    process.wait.side_effect = [
+        subprocess.TimeoutExpired(cmd="test", timeout=0.1),
         0,
     ]
 
-    warden = Warden(mock_mj, mock_process, interval=0.01)
+    gate = make_gate("network-egress", check_result=True)
+    microjail = Mock(spec=MicroJail)
+    microjail.lockdown = Mock()
+    microjail.lockdown.gates = [gate]
+    microjail.lockdown.caps = []
 
-    # Act
-    exit_code = warden.supervise()
+    warden = Warden(
+        microjail=microjail,
+        process=process,
+        events=events,
+    )
 
-    # Assert
-    assert exit_code == 0
-    mock_process.terminate.assert_not_called()
-
-    captured = capsys.readouterr()
-    assert "Warning: Capability policy violation" in captured.err
-    assert "mock-cap" in captured.err
+    assert warden.supervise() == 0
+    gate.check.assert_called_once_with(microjail)
 
 
-def test_warden_terminates_on_fatal_capability_violation() -> None:
-    # Arrange
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.lockdown = Mock()
+def test_warden_terminates_on_gate_violation_in_drain() -> None:
+    events: queue.Queue[str] = queue.Queue()
+    events.put("reconnect")
 
-    mock_cap = Mock()
-    mock_cap.name = "mock-cap"
-    mock_cap.check.return_value = False
-    mock_cap.fatal = True
-
-    mock_mj.lockdown.gates = []
-    mock_mj.lockdown.caps = [mock_cap]
-    mock_mj.container_name.return_value = "test-container"
-    mock_mj.lxd_project.return_value = "test-project"
-
-    mock_process = Mock(spec=subprocess.Popen)
-    mock_process.wait.side_effect = [
-        subprocess.TimeoutExpired(cmd="test", timeout=0.01),
-        0,
+    process = Mock(spec=subprocess.Popen)
+    process.wait.side_effect = [
+        subprocess.TimeoutExpired(cmd="test", timeout=0.1),
+        None,
     ]
+    process.poll.return_value = None
 
-    warden = Warden(mock_mj, mock_process, interval=0.01)
+    gate = make_gate("network-egress", check_result=False)
+    microjail = Mock(spec=MicroJail)
+    microjail.lockdown = Mock()
+    microjail.lockdown.gates = [gate]
+    microjail.lockdown.caps = []
 
-    # Act & Assert
-    with pytest.raises(CapabilityPolicyViolation):
+    warden = Warden(
+        microjail=microjail,
+        process=process,
+        events=events,
+    )
+
+    with pytest.raises(GatePolicyViolation):
         warden.supervise()
 
-    mock_process.terminate.assert_called_once()
-    mock_process.wait.assert_any_call(timeout=2)
+    process.terminate.assert_called_once()
+
+
+def test_warden_drains_multiple_events_in_a_row() -> None:
+    events: queue.Queue[str] = queue.Queue()
+    events.put("reconnect")
+    events.put("instance-updated")
+
+    process = Mock(spec=subprocess.Popen)
+    process.wait.side_effect = [
+        subprocess.TimeoutExpired(cmd="test", timeout=0.1),
+        0,
+    ]
+
+    gate = make_gate("network-egress", check_result=True)
+    microjail = Mock(spec=MicroJail)
+    microjail.lockdown = Mock()
+    microjail.lockdown.gates = [gate]
+    microjail.lockdown.caps = []
+
+    warden = Warden(
+        microjail=microjail,
+        process=process,
+        events=events,
+    )
+
+    assert warden.supervise() == 0
+    assert gate.check.call_count == 2
+
+
+def test_warden_does_not_check_capabilities_at_runtime() -> None:
+    """The capability loop is removed from the Warden entirely."""
+    process = Mock(spec=subprocess.Popen)
+    process.wait.return_value = 0
+
+    cap = Mock()
+    cap.name = "endpoint"
+
+    warden = make_warden(process=process, caps=[cap])
+
+    assert warden.supervise() == 0
+    cap.check.assert_not_called()
+    cap.verify.assert_not_called()
+
+
+def test_warden_escalates_on_lxd_enforcement_lost() -> None:
+    events: queue.Queue[str] = queue.Queue()
+
+    process = Mock(spec=subprocess.Popen)
+    process.wait.side_effect = [
+        subprocess.TimeoutExpired(cmd="test", timeout=0.1),
+        None,
+    ]
+    process.poll.return_value = None
+
+    watcher = Mock()
+    watcher.last_exception = LxdEnforcementLost("lost")
+    watcher.is_alive.return_value = False
+
+    warden = make_warden(process=process, events=events, watcher=watcher)
+
+    with pytest.raises(GatePolicyViolation):
+        warden.supervise()
+
+    process.terminate.assert_called_once()

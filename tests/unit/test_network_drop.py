@@ -1,4 +1,3 @@
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -62,50 +61,51 @@ def test_network_drop_has_gate_name() -> None:
     assert gate().name == "network-egress"
 
 
-def test_check_returns_false_when_egress_probe_succeeds() -> None:
+def test_check_returns_true_when_no_nic_devices() -> None:
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+    mock_mj.lxc_instance.return_value = SimpleNamespace(devices={})
 
-    assert not gate().check(mock_mj)
+    assert gate().check(mock_mj) is True
 
-    mock_mj.exec_.assert_called_once_with(
-        ["bash", "-c", ": >/dev/tcp/1.1.1.1/443"],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=10,
+
+def test_check_returns_false_when_nic_device_present() -> None:
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance.return_value = SimpleNamespace(
+        devices={"eth0": {"type": "nic", "network": "workshopbr0"}},
     )
 
+    assert gate().check(mock_mj) is False
 
-def test_check_returns_true_when_egress_probe_fails() -> None:
+
+def test_check_returns_true_when_devices_contain_only_non_nic() -> None:
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.return_value = subprocess.CompletedProcess(args=[], returncode=1)
+    mock_mj.lxc_instance.return_value = SimpleNamespace(
+        devices={
+            "root": {"type": "disk", "path": "/", "pool": "default"},
+        },
+    )
 
-    assert gate().check(mock_mj)
+    assert gate().check(mock_mj) is True
 
 
 def test_check_returns_false_when_workshop_not_launched() -> None:
     """Unevaluable state must not raise: gate is not satisfied, lockdown not applied."""
-    from microjail.adapters.workshop import WorkshopNotLaunchedError
-
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.side_effect = WorkshopNotLaunchedError(
+    mock_mj.lxc_instance.side_effect = WorkshopNotLaunchedError(
         name=WORKSHOP_NAME, project=PROJECT
     )
 
     assert not gate().check(mock_mj)
 
 
-def test_check_returns_false_when_workshop_not_found() -> None:
-    """A missing workshop is also unevaluable: gate is not satisfied."""
-    from microjail.adapters.workshop import WorkshopNotFoundError
-
+def test_check_does_not_run_egress_probe() -> None:
+    """The bash egress probe is removed; check() is config-only."""
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.side_effect = WorkshopNotFoundError(
-        name=WORKSHOP_NAME, project=PROJECT
-    )
+    mock_mj.lxc_instance.return_value = SimpleNamespace(devices={})
 
-    assert not gate().check(mock_mj)
+    gate().check(mock_mj)
+
+    mock_mj.exec_.assert_not_called()
 
 
 def test_enforce_removes_all_network_devices_from_workshop_container() -> None:

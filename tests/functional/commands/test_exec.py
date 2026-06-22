@@ -12,7 +12,7 @@ from microjail.microjail import (
     ApplicationStatus,
     MicroJail,
 )
-from microjail.warden import CapabilityPolicyViolation, GatePolicyViolation, Warden
+from microjail.warden import GatePolicyViolation, Warden
 from tests.functional.commands.helpers import (
     RecordingCapability,
     RecordingGate,
@@ -30,6 +30,10 @@ def load_as(microjail: MicroJail, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         MicroJail, "workshop_info", Mock(return_value=Mock(status="ready"))
     )
+    monkeypatch.setattr(
+        MicroJail, "container_name", Mock(return_value="test-container")
+    )
+    monkeypatch.setattr(MicroJail, "lxd_project", Mock(return_value="workshop.test"))
 
 
 def test_exec_requires_workload_command(microjail_project: Path) -> None:
@@ -172,26 +176,8 @@ def test_exec_exits_with_84_on_gate_violation(
     assert result.exit_code == 84
 
 
-def test_exec_exits_with_82_on_fatal_capability_violation(
-    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
-) -> None:
-    microjail = MicroJail(
-        workshop=Workshop(name="test-jail", project=microjail_project),
-        lockdown=Lockdown(caps=[], gates=[]),
-    )
-    load_as(microjail, monkeypatch)
-
-    mock_process = Mock()
-    monkeypatch.setattr(MicroJail, "popen", Mock(return_value=mock_process))
-
-    def raising_supervise(self):
-        raise CapabilityPolicyViolation("mock cap violation")
-
-    monkeypatch.setattr(Warden, "supervise", raising_supervise)
-
-    result = CliRunner().invoke(app, ["exec", "--", "sh", "-c", "exit 0"])
-
-    assert result.exit_code == 82
+# CapabilityPolicyViolation is removed: capabilities are not monitored at runtime.
+# See test_exec_exits_with_84_on_gate_violation for the runtime gate path.
 
 
 def test_exec_launches_workshop_if_not_launched(
@@ -214,7 +200,10 @@ def test_exec_launches_workshop_if_not_launched(
     monkeypatch.setattr("microjail.commands.exec.ensure_lockdown", Mock())
     monkeypatch.setattr(MicroJail, "popen", Mock())
     monkeypatch.setattr(Warden, "supervise", Mock(return_value=0))
-
+    monkeypatch.setattr(
+        MicroJail, "container_name", Mock(return_value="test-container")
+    )
+    monkeypatch.setattr(MicroJail, "lxd_project", Mock(return_value="workshop.test"))
     result = CliRunner().invoke(app, ["exec", "--", "true"])
 
     assert result.exit_code == 0

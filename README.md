@@ -12,7 +12,6 @@ ______________________________________________________________________
 
 ## Goals
 
-- Secure-by-default execution: no capabilities granted unless explicitly declared.
 - Explicit authorisation: every network path and mount is a named, declared capability.
 - Continuous enforcement: a Warden monitors policy invariants throughout execution and terminates the workload on violation.
 - Crash-resistant stateless safety: no runtime state is persisted; every check reads live system state, so a crash or manual intervention leaves no stale "locked" flags.
@@ -236,7 +235,7 @@ ______________________________________________________________________
 
 ## Technical summary
 
-`microjail` is a Python 3.14 CLI built with [Typer](https://typer.tiangolo.com/) and [msgspec](https://jcristharif.com/msgspec/). The Warden polls policy every second. Gate violations are always fatal; capability violations are warnings by default and can be promoted to fatal per-capability in config.
+`microjail` is a Python 3.14 CLI built with [Typer](https://typer.tiangolo.com/) and [msgspec](https://jcristharif.com/msgspec/). The Warden is event-driven: it subscribes to the LXD lifecycle event stream for the workload's container and re-validates every gate on each event (and on every successful reconnect). Gate violations are fatal; a non-fatal capability policy violation is reported as a warning at launch time, and a fatal one blocks the launch.
 
 ______________________________________________________________________
 

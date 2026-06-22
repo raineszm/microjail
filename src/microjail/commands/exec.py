@@ -7,6 +7,7 @@ from microjail.commands.init import get_project
 from microjail.commands.lock import (
     ensure_lockdown,
     load_microjail_or_exit,
+    pre_launch_verify_or_exit,
 )
 from microjail.commands.supervision import supervise_workload
 
@@ -27,6 +28,7 @@ def exec_command(
         microjail.workshop.launch()
 
     ensure_lockdown(microjail)
+    pre_launch_verify_or_exit(microjail)
 
     process = microjail.popen(command, interactive=interactive)
     supervise_workload(microjail, process)

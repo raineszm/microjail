@@ -3,11 +3,13 @@ from typing import TYPE_CHECKING
 import typer
 
 from microjail import policy
-from microjail.commands._output import error, success
+from microjail.commands._output import error, success, warning
 from microjail.commands.init import get_project
+from microjail.lockdown import GateError
 from microjail.microjail import (
     ApplicationIntent,
     ApplicationStatus,
+    CapabilityError,
     ConfigNotFoundError,
     MicroJail,
 )
@@ -57,6 +59,26 @@ def ensure_lockdown(microjail: MicroJail) -> None:
     raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE)
 
 
+def pre_launch_verify_or_exit(microjail: MicroJail) -> None:
+    """Run :meth:`MicroJail.pre_launch_verify` and translate failures to exits.
+
+    A gate verify failure exits with :data:`policy.GATE_APPLICATION_FAILURE`
+    (68). A fatal capability verify failure exits with
+    :data:`policy.CAPABILITY_APPLICATION_FAILURE` (66). Non-fatal capability
+    failures are surfaced as warnings and the caller continues.
+    """
+    try:
+        result = microjail.pre_launch_verify()
+    except GateError as exc:
+        error(f"verify failed: gate {exc.name} did not pass behavioral check")
+        raise typer.Exit(policy.GATE_APPLICATION_FAILURE) from exc
+    except CapabilityError as exc:
+        error(f"verify failed: capability {exc.name} did not pass behavioral check")
+        raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE) from exc
+    for name in result.non_fatal_capability_failures:
+        warning(f"non-fatal capability {name} did not pass behavioral check")
+
+
 def lock(ctx: typer.Context) -> None:
     project = get_project(ctx)
     microjail = load_microjail_or_exit(project)
@@ -81,5 +103,7 @@ def lock(ctx: typer.Context) -> None:
             f"{result.gates_enforced} gates enforced"
         )
         raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE)
+
+    pre_launch_verify_or_exit(microjail)
 
     success(f"lock applied: {cap_count} capabilities, {result.gates_enforced} gates")

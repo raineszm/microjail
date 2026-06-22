@@ -1,10 +1,43 @@
+import ssl
 import subprocess
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import msgspec
 
 from microjail.exceptions import MicrojailError
+
+if TYPE_CHECKING:
+    from websockets.sync.client import ClientConnection
+
+
+DEFAULT_LXD_CONFIG_DIR = Path("~/.config/lxc").expanduser()
+DEFAULT_LXD_EVENT_URL = "wss://127.0.0.1:8443/1.0/events?type=lifecycle"
+
+
+def lxd_local_connect(
+    uri: str,
+    *,
+    cert_dir: Path | None = None,
+) -> ClientConnection:
+    """Open a WebSocket to a local LXD daemon using the ``lxc`` CLI's client cert.
+
+    The cert files (``client.crt``, ``client.key``, ``client.ca``) are the ones
+    the ``lxc`` CLI writes when the user runs ``lxc init`` or
+    ``lxc remote add local https://127.0.0.1:8443``. They live under
+    ``~/.config/lxc/`` by default; pass *cert_dir* to override (used by tests).
+    """
+    import websockets.sync.client
+
+    if cert_dir is None:
+        cert_dir = DEFAULT_LXD_CONFIG_DIR
+    ctx = ssl.create_default_context(cafile=cert_dir / "client.ca")
+    ctx.load_cert_chain(
+        certfile=cert_dir / "client.crt",
+        keyfile=cert_dir / "client.key",
+    )
+    return websockets.sync.client.connect(uri, ssl=ctx)
 
 
 class LxcCommandError(MicrojailError, subprocess.CalledProcessError):

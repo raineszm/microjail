@@ -1,27 +1,30 @@
 import subprocess
-from typing import TYPE_CHECKING
 
 import typer
 
 from microjail import policy
+from microjail.adapters.lxc import lxd_local_connect
+from microjail.adapters.lxd_events import LxdEventWatcher
 from microjail.commands._output import error
-from microjail.warden import CapabilityPolicyViolation, GatePolicyViolation, Warden
-
-if TYPE_CHECKING:
-    from microjail.microjail import MicroJail
+from microjail.warden import GatePolicyViolation, Warden
 
 
-def supervise_workload(microjail: MicroJail, process: subprocess.Popen) -> None:
-    warden = Warden(microjail, process)
+def supervise_workload(microjail, process: subprocess.Popen) -> None:
+    """Start the LXD event watcher and run the Warden until the workload exits."""
+    watcher = LxdEventWatcher(
+        container_name=microjail.container_name(),
+        lxd_project=microjail.lxd_project(),
+        connect=lxd_local_connect,
+    )
+    watcher.start()
+    warden = Warden(microjail, process, events=watcher.events, watcher=watcher)
     try:
         exit_code = warden.supervise()
     except GatePolicyViolation as exc:
         error(str(exc))
         raise typer.Exit(policy.RUNTIME_GATE_POLICY_VIOLATION) from exc
-    except CapabilityPolicyViolation as exc:
-        error(str(exc))
-        raise typer.Exit(policy.FATAL_RUNTIME_CAPABILITY_VIOLATION) from exc
     finally:
+        watcher.stop()
         if process.poll() is None:
             process.terminate()
             try:

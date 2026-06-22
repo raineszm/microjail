@@ -130,6 +130,18 @@ class EndpointCapabilityInfo:
 
 
 @dataclass(frozen=True)
+class PreLaunchVerifyResult:
+    """Outcome of a behavioral verify pass over the lockdown.
+
+    Carries the names of capabilities that failed their behavioral
+    :meth:`verify` step but were non-fatal, so callers can surface
+    them as warnings. An empty tuple means no warnings.
+    """
+
+    non_fatal_capability_failures: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class MicroJailStatus:
     """Read-only snapshot of microjail and workshop state."""
 
@@ -212,6 +224,31 @@ class MicroJail:
     def workshop_info(self) -> WorkshopInfo | None:
         """Return workshop info, or None if the workshop is not launched."""
         return self.workshop.info()
+
+    def pre_launch_verify(self) -> PreLaunchVerifyResult:
+        """Run the behavioral :meth:`verify` step over the lockdown.
+
+        Iterates gates first and stops at the first failure with
+        :class:`GateError`. Then iterates capabilities: a fatal
+        capability that fails :meth:`verify` raises
+        :class:`CapabilityError`; a non-fatal failure is collected
+        and returned for the caller to surface as a warning.
+        """
+        for gate in self.lockdown.gates:
+            if not gate.verify(self):
+                raise GateError(name=gate.name)
+
+        non_fatal_failures: list[str] = []
+        for cap in self.lockdown.caps:
+            if cap.verify(self):
+                continue
+            if getattr(cap, "fatal", False):
+                raise CapabilityError(name=cap.name)
+            non_fatal_failures.append(cap.name)
+
+        return PreLaunchVerifyResult(
+            non_fatal_capability_failures=tuple(non_fatal_failures),
+        )
 
     def status(self) -> MicroJailStatus:
         """Return a snapshot of the current microjail and workshop state."""

@@ -172,14 +172,5 @@ def test_check_returns_false_when_no_connection(tmp_path: Path) -> None:
     assert cap.check(microjail) is False
 
 
-def test_check_returns_false_when_endpoint_unreachable(
-    tmp_path: Path,
-) -> None:
-    microjail = make_microjail(tmp_path)
-    tunnel = tunnel_of(microjail)
-    tunnel.reachable = True
-    cap = WorkshopEndpointCapability(name="inference", host_endpoint="127.0.0.1:8080")
-    cap.provide(microjail)
-    tunnel.reachable = False
-
-    assert cap.check(microjail) is False
+# After slice 7, check() is config-only. The unreachable-endpoint test moved
+# to test_check_returns_false_when_endpoint_unreachable -> verify.

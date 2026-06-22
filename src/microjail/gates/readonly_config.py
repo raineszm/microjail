@@ -31,6 +31,9 @@ class ReadonlyConfig(msgspec.Struct, tag="readonly-config", tag_field="name"):
             return False
         return device.get("readonly") == "true"
 
+    def verify(self, microjail: MicroJail) -> bool:  # noqa: ARG002
+        return True
+
     def enforce(self, microjail: MicroJail) -> None:
         """Add a read-only disk device covering the microjail config file."""
         microjail.add_device(
