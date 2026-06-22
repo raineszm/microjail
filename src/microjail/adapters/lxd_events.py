@@ -32,10 +32,9 @@ class LxdEventWatcher:
     and pushes matching events onto a thread-safe queue. The Warden drains the
     queue on its supervision loop.
 
-    Client-side filtering drops events whose ``metadata.name`` is not this
-    watcher's container or whose ``metadata.project`` is not this watcher's
-    LXD project, so the Warden only reacts to events for the workload it
-    supervises.
+    Client-side filtering drops events whose instance source is not this
+    watcher's container or whose top-level project is not this watcher's LXD
+    project, so the Warden only reacts to events for the workload it supervises.
 
     On unrecoverable loss of the subscription the watcher's reader thread
     captures the :class:`LxdEnforcementLost` in :attr:`last_exception` and
@@ -167,10 +166,21 @@ class LxdEventWatcher:
         metadata = data.get("metadata")
         if not isinstance(metadata, dict):
             return False
+        event_project = data.get("project", metadata.get("project"))
+        event_container = metadata.get("name")
+        source = metadata.get("source")
+        if event_container is None and isinstance(source, str):
+            event_container = self._container_name_from_source(source)
         return (
-            metadata.get("name") == self.container_name
-            and metadata.get("project") == self.lxd_project
+            event_container == self.container_name and event_project == self.lxd_project
         )
+
+    def _container_name_from_source(self, source: str) -> str | None:
+        """Return an instance name from an LXD lifecycle ``metadata.source`` path."""
+        prefix = "/1.0/instances/"
+        if not source.startswith(prefix):
+            return None
+        return source.removeprefix(prefix).split("/", maxsplit=1)[0].split("?", 1)[0]
 
     def _raise_enforcement_lost(self) -> None:
         raise LxdEnforcementLost(

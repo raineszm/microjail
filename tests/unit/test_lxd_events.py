@@ -208,6 +208,35 @@ def test_watcher_enqueues_matching_lifecycle_event() -> None:
     assert second == matching
 
 
+def test_watcher_enqueues_real_lxd_lifecycle_event() -> None:
+    """A real LXD lifecycle event identifies the instance by source and project."""
+
+    matching = (
+        '{"type":"lifecycle","project":"test-project","metadata":'
+        '{"source":"/1.0/instances/test-container","action":"instance-updated"}}'
+    )
+
+    mock_socket = Mock()
+    mock_socket.__iter__ = Mock(return_value=iter([matching]))
+    mock_connect = Mock(return_value=mock_socket)
+
+    watcher = LxdEventWatcher(
+        container_name="test-container",
+        lxd_project="test-project",
+        connect=mock_connect,
+    )
+
+    try:
+        watcher.start()
+        first = watcher.events.get(timeout=1.0)  # "reconnect"
+        second = watcher.events.get(timeout=1.0)  # the matching event
+    finally:
+        watcher.stop()
+
+    assert first == "reconnect"
+    assert second == matching
+
+
 def test_watcher_drops_event_for_other_container() -> None:
     """A lifecycle event for a different container is filtered out."""
     import queue

@@ -11,6 +11,46 @@ if TYPE_CHECKING:
     import pytest
 
 
+def test_lxd_local_connect_uses_unix_socket_when_available(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A default local LXD daemon is reached through its Unix socket."""
+    socket_path = tmp_path / "unix.socket"
+    socket_path.write_bytes(b"")
+
+    captured: dict[str, object] = {}
+
+    import websockets.sync.client
+
+    def fake_unix_connect(
+        path: str | None = None, uri: str | None = None, **_kwargs: object
+    ) -> Mock:
+        captured["path"] = path
+        captured["uri"] = uri
+        return Mock()
+
+    monkeypatch.setattr(websockets.sync.client, "unix_connect", fake_unix_connect)
+    monkeypatch.setattr(
+        websockets.sync.client,
+        "connect",
+        Mock(side_effect=AssertionError("HTTPS transport should not be used")),
+    )
+    monkeypatch.setattr(
+        ssl,
+        "create_default_context",
+        Mock(side_effect=AssertionError("client certs should not be loaded")),
+    )
+
+    result = lxd_local_connect(
+        "wss://127.0.0.1:8443/1.0/events?type=lifecycle",
+        socket_paths=(socket_path,),
+    )
+
+    assert captured["path"] == str(socket_path)
+    assert captured["uri"] == "ws://localhost/1.0/events?type=lifecycle"
+    assert result is not None
+
+
 def test_lxd_local_connect_loads_certs_and_passes_ssl_context(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -50,6 +90,7 @@ def test_lxd_local_connect_loads_certs_and_passes_ssl_context(
     result = lxd_local_connect(
         "wss://127.0.0.1:8443/1.0/events?type=lifecycle",
         cert_dir=cert_dir,
+        socket_paths=(),
     )
 
     assert captured["cafile"] == cert_dir / "client.ca"
@@ -94,7 +135,10 @@ def test_lxd_local_connect_uses_default_cert_dir_when_none_given(
 
     monkeypatch.setattr(websockets.sync.client, "connect", fake_connect)
 
-    lxd_local_connect("wss://127.0.0.1:8443/1.0/events?type=lifecycle")
+    lxd_local_connect(
+        "wss://127.0.0.1:8443/1.0/events?type=lifecycle",
+        socket_paths=(),
+    )
 
     assert str(captured["cafile"]).endswith("/.config/lxc/client.ca")
     assert str(captured["certfile"]).endswith("/.config/lxc/client.crt")

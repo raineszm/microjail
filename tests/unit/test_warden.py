@@ -110,6 +110,37 @@ def test_warden_terminates_on_gate_violation_in_drain() -> None:
     process.terminate.assert_called_once()
 
 
+def test_warden_converts_gate_check_error_to_policy_violation() -> None:
+    events: queue.Queue[str] = queue.Queue()
+    events.put("reconnect")
+
+    process = Mock(spec=subprocess.Popen)
+    process.wait.side_effect = [
+        subprocess.TimeoutExpired(cmd="test", timeout=0.1),
+        None,
+    ]
+
+    gate = Mock()
+    gate.name = "network-egress"
+    gate.check.side_effect = RuntimeError("LXD unavailable")
+    microjail = Mock(spec=MicroJail)
+    microjail.lockdown = Mock()
+    microjail.lockdown.gates = [gate]
+    microjail.lockdown.caps = []
+
+    warden = Warden(
+        microjail=microjail,
+        process=process,
+        events=events,
+    )
+
+    with pytest.raises(GatePolicyViolation) as exc_info:
+        warden.supervise()
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    process.terminate.assert_called_once()
+
+
 def test_warden_drains_multiple_events_in_a_row() -> None:
     events: queue.Queue[str] = queue.Queue()
     events.put("reconnect")

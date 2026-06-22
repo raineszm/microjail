@@ -59,7 +59,14 @@ class Warden:
         self._raise_if_enforcement_lost()
         for _ in self._drain_events():
             for gate in self.microjail.lockdown.gates:
-                if not gate.check(self.microjail):
+                try:
+                    gate_passed = gate.check(self.microjail)
+                except Exception as exc:
+                    self._terminate_safely()
+                    raise GatePolicyViolation(
+                        f"Gate policy violation: unable to verify {gate.name}"
+                    ) from exc
+                if not gate_passed:
                     self._terminate_safely()
                     raise GatePolicyViolation(f"Gate policy violation: {gate.name}")
 

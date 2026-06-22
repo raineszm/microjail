@@ -1,6 +1,7 @@
 import ssl
 import subprocess
 from dataclasses import dataclass
+from os import environ
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -13,21 +14,44 @@ if TYPE_CHECKING:
 
 
 DEFAULT_LXD_CONFIG_DIR = Path("~/.config/lxc").expanduser()
+DEFAULT_LXD_SOCKET_PATHS = (
+    Path("/var/snap/lxd/common/lxd/unix.socket"),
+    Path("/var/lib/lxd/unix.socket"),
+)
+
+
+def unix_socket_uri(uri: str) -> str:
+    """Return a non-TLS WebSocket URI for an LXD Unix socket connection."""
+    if uri.startswith("wss://127.0.0.1:8443/"):
+        return uri.replace("wss://127.0.0.1:8443/", "ws://localhost/", 1)
+    return uri
 
 
 def lxd_local_connect(
     uri: str,
     *,
     cert_dir: Path | None = None,
+    socket_paths: tuple[Path, ...] | None = None,
 ) -> ClientConnection:
-    """Open a WebSocket to a local LXD daemon using the ``lxc`` CLI's client cert.
+    """Open a WebSocket to a local LXD daemon.
 
-    The cert files (``client.crt``, ``client.key``, ``client.ca``) are the ones
-    the ``lxc`` CLI writes when the user runs ``lxc init`` or
-    ``lxc remote add local https://127.0.0.1:8443``. They live under
-    ``~/.config/lxc/`` by default; pass *cert_dir* to override (used by tests).
+    Prefer the Unix socket used by a default local LXD install. If no local
+    socket exists, fall back to HTTPS with the ``lxc`` CLI's client cert files
+    (``client.crt``, ``client.key``, ``client.ca``).
     """
     import websockets.sync.client
+
+    if socket_paths is None:
+        socket_paths = DEFAULT_LXD_SOCKET_PATHS
+        if "LXD_DIR" in environ:
+            socket_paths = (Path(environ["LXD_DIR"]) / "unix.socket", *socket_paths)
+
+    for socket_path in socket_paths:
+        if socket_path.exists():
+            return websockets.sync.client.unix_connect(
+                path=str(socket_path),
+                uri=unix_socket_uri(uri),
+            )
 
     if cert_dir is None:
         cert_dir = DEFAULT_LXD_CONFIG_DIR
