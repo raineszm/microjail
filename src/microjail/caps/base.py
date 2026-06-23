@@ -16,10 +16,11 @@ class Capability(Protocol):
 
     Lifecycle::
 
-        check(microjail)          # does the capability exist?
+        check(microjail)          # does the capability exist? (config-only)
         if not present:
             provide(microjail)    # create the capability
         check(microjail)          # verify provisioning succeeded
+        verify(microjail)         # behavioral probe (e.g. reachability)
     """
 
     name: str

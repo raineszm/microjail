@@ -21,10 +21,12 @@ class Gate(Protocol):
 
     Lifecycle::
 
-        check(microjail)          # is the restriction currently satisfied?
+        check(microjail)          # is the restriction currently satisfied? (config-only)
         if not satisfied:
             enforce(microjail)    # establish the restriction
         check(microjail)          # verify enforcement succeeded
+        verify(microjail)         # behavioral probe (UNSUPPORTED for gates
+                                  #   that are purely config-enforced)
     """
 
     name: str

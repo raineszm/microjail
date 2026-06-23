@@ -69,7 +69,7 @@ If a capability marked `fatal=False` has its `verify(microjail)` return `Verific
 - **AND** the method does not raise
 
 ### Requirement: CapabilityError carries the non-fatal failures collected before a fatal failure
-`CapabilityError` SHALL expose a `non_fatal_failures` field (a tuple of capability names) and an `unsupported_verifications` field (a tuple of capability names) that list the preceding failures and unsupported checks. This allows the CLI to surface them alongside the fatal one.
+`CapabilityError` SHALL expose a `non_fatal_failures` field (a tuple of capability names) and an `unsupported_verifications` field (a tuple of gate and capability names) that list the preceding failures and unsupported checks. This allows the CLI to surface them alongside the fatal one.
 
 #### Scenario: non_fatal_failures is empty when the fatal capability is the first failure
 - **GIVEN** a Lockdown with a single fatal capability whose `verify(microjail)` returns `VerificationResult.FAILED`

@@ -147,6 +147,69 @@ def test_shell_gate_failure_blocks_workload(
     shell.assert_not_called()
 
 
+def test_shell_pre_launch_verify_integration(
+    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
+) -> None:
+    from microjail.lockdown import CapabilityError, GateError
+    from microjail.microjail import PreLaunchVerifyResult
+
+    # Case 1: GateError on verification blocks the shell
+    microjail = MicroJail(
+        workshop=Workshop("mj-workshop", microjail_project),
+        lockdown=Lockdown(caps=[], gates=[]),
+    )
+    load_as(microjail, monkeypatch)
+    allow_interactive_terminal(monkeypatch)
+    popen = Mock()
+    shell_proc = Mock()
+    monkeypatch.setattr(MicroJail, "popen", popen)
+    monkeypatch.setattr(MicroJail, "shell", shell_proc)
+
+    mock_verify = Mock(side_effect=GateError(name="some-gate"))
+    monkeypatch.setattr(MicroJail, "pre_launch_verify", mock_verify)
+
+    result = CliRunner().invoke(app, ["shell"])
+    assert result.exit_code == policy.GATE_APPLICATION_FAILURE
+    assert "gate some-gate failed" in result.stderr
+    popen.assert_not_called()
+    shell_proc.assert_not_called()
+
+    # Case 2: CapabilityError on verification blocks the shell
+    mock_verify.side_effect = CapabilityError(
+        name="fatal-cap", non_fatal_failures=("warn-cap",)
+    )
+    result = CliRunner().invoke(app, ["shell"])
+    assert result.exit_code == policy.CAPABILITY_APPLICATION_FAILURE
+    assert "capability fatal-cap failed" in result.stderr
+    assert "warning: warn-cap" in result.stderr
+    popen.assert_not_called()
+    shell_proc.assert_not_called()
+
+    # Case 3: Success with non-fatal warning
+    mock_verify.side_effect = None
+    mock_verify.return_value = PreLaunchVerifyResult(
+        non_fatal_capability_failures=("warn-cap-only",)
+    )
+    mock_process = Mock()
+    shell_proc.return_value = mock_process
+    monkeypatch.setattr(Warden, "supervise", Mock(return_value=0))
+
+    result = CliRunner().invoke(app, ["shell"])
+    assert result.exit_code == 0
+    assert "warning: warn-cap-only" in result.stderr
+    shell_proc.assert_called_once()
+
+    # Case 4: Success with unsupported verification note
+    mock_verify.return_value = PreLaunchVerifyResult(
+        non_fatal_capability_failures=(),
+        unsupported_verifications=("some-gate-unsupported",),
+    )
+    result = CliRunner().invoke(app, ["shell"])
+    assert result.exit_code == 0
+    assert "Note: Verification not supported for some-gate-unsupported" in result.stdout
+    shell_proc.assert_called()
+
+
 def test_shell_propagates_workload_exit_status(
     monkeypatch: pytest.MonkeyPatch, microjail_project: Path
 ) -> None:

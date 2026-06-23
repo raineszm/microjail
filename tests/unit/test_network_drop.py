@@ -160,15 +160,20 @@ def test_enforce_fails_if_workshop_container_is_not_available() -> None:
     assert exc_info.value.project == PROJECT
 
 
-def test_network_drop_check_and_verify() -> None:
-    # Case 1: check returns True when no NICs are present
+def test_check_returns_true_when_no_nics_present() -> None:
+    # GIVEN a container with no network devices
     mock_mj = Mock(spec=MicroJail)
     mock_mj.lxc_instance.return_value = SimpleNamespace(
         devices={"root": {"type": "disk", "path": "/"}}
     )
+
+    # WHEN check is called
+    # THEN it returns True
     assert gate().check(mock_mj) is True
 
-    # Case 2: check returns False when NIC is present
+
+def test_check_returns_false_when_nic_is_present() -> None:
+    # GIVEN a container with a NIC device
     mock_mj = Mock(spec=MicroJail)
     mock_mj.lxc_instance.return_value = SimpleNamespace(
         devices={
@@ -176,17 +181,30 @@ def test_network_drop_check_and_verify() -> None:
             "eth0": {"type": "nic", "nictype": "bridged", "parent": "workshopbr0"},
         }
     )
+
+    # WHEN check is called
+    # THEN it returns False
     assert gate().check(mock_mj) is False
 
-    # Case 3: check returns False when container is not available
+
+def test_check_returns_false_when_lxd_query_fails() -> None:
+    # GIVEN the lxc query fails (container unavailable)
     mock_mj = Mock(spec=MicroJail)
     mock_mj.lxc_instance.side_effect = subprocess.CalledProcessError(
         returncode=1, cmd=["lxc", "query"], stderr="instance not found"
     )
+
+    # WHEN check is called
+    # THEN it returns False and no exception is raised
     assert gate().check(mock_mj) is False
 
-    # Case 4: verify returns UNSUPPORTED unconditionally
+
+def test_verify_returns_unsupported_unconditionally() -> None:
     from microjail.gates.base import VerificationResult
 
+    # GIVEN any microjail state
     mock_mj = Mock(spec=MicroJail)
+
+    # WHEN verify is called
+    # THEN it returns UNSUPPORTED unconditionally
     assert gate().verify(mock_mj) == VerificationResult.UNSUPPORTED
