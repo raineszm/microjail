@@ -150,6 +150,11 @@ class ValidateError:
     hint: str
 
 
+@dataclass(frozen=True)
+class PreLaunchVerifyResult:
+    non_fatal_capability_failures: tuple[str, ...]
+
+
 @dataclass
 class MicroJail:
     """Runtime microjail: a per-project binding between a workshop, a Lockdown,
@@ -513,6 +518,27 @@ class MicroJail:
             provided_capabilities=tuple(provided_capabilities),
             enforced_gates=tuple(enforced_gates),
             gates_enforced=len(self.lockdown.gates),
+        )
+
+    def pre_launch_verify(self) -> PreLaunchVerifyResult:
+        """Perform behavioral verification of all gates and capabilities."""
+        for gate in self.lockdown.gates:
+            if not gate.verify(self):
+                raise GateError(name=gate.name)
+
+        non_fatal_failures: list[str] = []
+        for cap in self.lockdown.caps:
+            if not cap.verify(self):
+                if getattr(cap, "fatal", False):
+                    raise CapabilityError(
+                        name=cap.name,
+                        non_fatal_failures=tuple(non_fatal_failures),
+                    )
+                else:
+                    non_fatal_failures.append(cap.name)
+
+        return PreLaunchVerifyResult(
+            non_fatal_capability_failures=tuple(non_fatal_failures)
         )
 
     def save(self) -> None:

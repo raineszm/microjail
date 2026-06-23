@@ -1,4 +1,3 @@
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -60,52 +59,6 @@ class FakeMicroJail:
 
 def test_network_drop_has_gate_name() -> None:
     assert gate().name == "network-egress"
-
-
-def test_check_returns_false_when_egress_probe_succeeds() -> None:
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.return_value = subprocess.CompletedProcess(args=[], returncode=0)
-
-    assert not gate().check(mock_mj)
-
-    mock_mj.exec_.assert_called_once_with(
-        ["bash", "-c", ": >/dev/tcp/1.1.1.1/443"],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-
-
-def test_check_returns_true_when_egress_probe_fails() -> None:
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.return_value = subprocess.CompletedProcess(args=[], returncode=1)
-
-    assert gate().check(mock_mj)
-
-
-def test_check_returns_false_when_workshop_not_launched() -> None:
-    """Unevaluable state must not raise: gate is not satisfied, lockdown not applied."""
-    from microjail.adapters.workshop import WorkshopNotLaunchedError
-
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.side_effect = WorkshopNotLaunchedError(
-        name=WORKSHOP_NAME, project=PROJECT
-    )
-
-    assert not gate().check(mock_mj)
-
-
-def test_check_returns_false_when_workshop_not_found() -> None:
-    """A missing workshop is also unevaluable: gate is not satisfied."""
-    from microjail.adapters.workshop import WorkshopNotFoundError
-
-    mock_mj = Mock(spec=MicroJail)
-    mock_mj.exec_.side_effect = WorkshopNotFoundError(
-        name=WORKSHOP_NAME, project=PROJECT
-    )
-
-    assert not gate().check(mock_mj)
 
 
 def test_enforce_removes_all_network_devices_from_workshop_container() -> None:
@@ -204,3 +157,31 @@ def test_enforce_fails_if_workshop_container_is_not_available() -> None:
 
     assert exc_info.value.name == WORKSHOP_NAME
     assert exc_info.value.project == PROJECT
+
+
+def test_network_drop_check_and_verify() -> None:
+    # Case 1: check returns True when no NICs are present
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance.return_value = SimpleNamespace(
+        devices={"root": {"type": "disk", "path": "/"}}
+    )
+    assert gate().check(mock_mj) is True
+
+    # Case 2: check returns False when NIC is present
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance.return_value = SimpleNamespace(
+        devices={
+            "root": {"type": "disk", "path": "/"},
+            "eth0": {"type": "nic", "nictype": "bridged", "parent": "workshopbr0"},
+        }
+    )
+    assert gate().check(mock_mj) is False
+
+    # Case 3: check returns False when container is not available
+    mock_mj = Mock(spec=MicroJail)
+    mock_mj.lxc_instance.side_effect = Exception("LXC connection failed")
+    assert gate().check(mock_mj) is False
+
+    # Case 4: verify returns True unconditionally
+    mock_mj = Mock(spec=MicroJail)
+    assert gate().verify(mock_mj) is True

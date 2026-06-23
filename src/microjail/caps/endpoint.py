@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 import re
-import subprocess
 from typing import TYPE_CHECKING
 
 import msgspec
@@ -78,6 +75,17 @@ class WorkshopEndpointCapability(
         try:
             t = microjail.workshop.tunnel
             rows = t.connections()
+            return (
+                f"{microjail.name}/microjail:{self.name}",
+                f"{microjail.name}/system:{self.name}",
+            ) in rows
+        except Exception:
+            return False
+
+    def verify(self, microjail: MicroJail) -> bool:
+        try:
+            t = microjail.workshop.tunnel
+            rows = t.connections()
             if (
                 f"{microjail.name}/microjail:{self.name}",
                 f"{microjail.name}/system:{self.name}",
@@ -85,7 +93,7 @@ class WorkshopEndpointCapability(
                 return False
             host, port = self.resolved_endpoint.rsplit(":", 1)
             return t.endpoint_reachable(host, port)
-        except subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError:
+        except Exception:
             return False
 
     def provide(self, microjail: MicroJail, batch: TunnelBatch | None = None) -> None:

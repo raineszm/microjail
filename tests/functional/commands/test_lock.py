@@ -116,3 +116,43 @@ def test_lock_gate_failure_reports_name_and_exit_code(
     assert "lock failed" in result.stderr
     assert "network-egress" in result.stderr
     assert "GateError" not in result.stderr
+
+
+def test_lock_pre_launch_verify_integration(
+    monkeypatch: pytest.MonkeyPatch, microjail_project: Path
+) -> None:
+    from microjail.lockdown import CapabilityError, GateError
+    from microjail.microjail import PreLaunchVerifyResult
+
+    # Case 1: GateError on verification
+    microjail = MicroJail(
+        workshop=Workshop("mj-workshop", microjail_project),
+        lockdown=Lockdown(caps=[], gates=[]),
+    )
+    load_as(microjail, monkeypatch)
+
+    mock_verify = Mock(side_effect=GateError(name="some-gate"))
+    monkeypatch.setattr(MicroJail, "pre_launch_verify", mock_verify)
+
+    result = CliRunner().invoke(app, ["lock"])
+    assert result.exit_code == policy.GATE_APPLICATION_FAILURE
+    assert "gate some-gate failed" in result.stderr
+
+    # Case 2: CapabilityError on verification
+    mock_verify.side_effect = CapabilityError(
+        name="fatal-cap", non_fatal_failures=("warn-cap",)
+    )
+    result = CliRunner().invoke(app, ["lock"])
+    assert result.exit_code == policy.CAPABILITY_APPLICATION_FAILURE
+    assert "capability fatal-cap failed" in result.stderr
+    assert "warning: warn-cap" in result.stderr
+
+    # Case 3: Success with warning
+    mock_verify.side_effect = None
+    mock_verify.return_value = PreLaunchVerifyResult(
+        non_fatal_capability_failures=("warn-cap-only",)
+    )
+    result = CliRunner().invoke(app, ["lock"])
+    assert result.exit_code == 0
+    assert "warning: warn-cap-only" in result.stderr
+    assert "lock applied" in result.stdout

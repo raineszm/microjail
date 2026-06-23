@@ -39,7 +39,22 @@ def report_rollback_failures(command: str, result) -> None:
 def ensure_lockdown(microjail: MicroJail) -> None:
     result = microjail.ensure(ApplicationIntent.RUN)
     if result.status is ApplicationStatus.SUCCESS:
-        return
+        from microjail.commands._output import warning
+        from microjail.lockdown import CapabilityError, GateError
+
+        try:
+            verify_res = microjail.pre_launch_verify()
+            for warning_cap in verify_res.non_fatal_capability_failures:
+                warning(warning_cap)
+            return
+        except GateError as exc:
+            error(f"exec failed: gate {exc.name} failed")
+            raise typer.Exit(policy.GATE_APPLICATION_FAILURE) from exc
+        except CapabilityError as exc:
+            for warning_cap in exc.non_fatal_failures:
+                warning(warning_cap)
+            error(f"exec failed: capability {exc.name} failed")
+            raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE) from exc
 
     if result.status is ApplicationStatus.GATE_APPLICATION_FAILURE:
         gate_failure = result.gate_failure
@@ -81,5 +96,21 @@ def lock(ctx: typer.Context) -> None:
             f"{result.gates_enforced} gates enforced"
         )
         raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE)
+
+    from microjail.commands._output import warning
+    from microjail.lockdown import CapabilityError, GateError
+
+    try:
+        verify_res = microjail.pre_launch_verify()
+        for warning_cap in verify_res.non_fatal_capability_failures:
+            warning(warning_cap)
+    except GateError as exc:
+        error(f"lock failed: gate {exc.name} failed")
+        raise typer.Exit(policy.GATE_APPLICATION_FAILURE) from exc
+    except CapabilityError as exc:
+        for warning_cap in exc.non_fatal_failures:
+            warning(warning_cap)
+        error(f"lock failed: capability {exc.name} failed")
+        raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE) from exc
 
     success(f"lock applied: {cap_count} capabilities, {result.gates_enforced} gates")

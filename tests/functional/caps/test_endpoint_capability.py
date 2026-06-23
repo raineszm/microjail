@@ -172,7 +172,7 @@ def test_check_returns_false_when_no_connection(tmp_path: Path) -> None:
     assert cap.check(microjail) is False
 
 
-def test_check_returns_false_when_endpoint_unreachable(
+def test_check_and_verify_behavior_on_reachability(
     tmp_path: Path,
 ) -> None:
     microjail = make_microjail(tmp_path)
@@ -182,4 +182,5 @@ def test_check_returns_false_when_endpoint_unreachable(
     cap.provide(microjail)
     tunnel.reachable = False
 
-    assert cap.check(microjail) is False
+    assert cap.check(microjail) is True
+    assert cap.verify(microjail) is False

@@ -57,6 +57,11 @@ class RecordingCapability:
         del microjail, batch
         self.calls.append("revoke")
 
+    def verify(self, microjail: MicroJail) -> bool:
+        del microjail
+        self.calls.append("verify")
+        return True
+
 
 class RecordingGate:
     def __init__(self, name: str, checks: list[bool] | None = None) -> None:
@@ -78,6 +83,11 @@ class RecordingGate:
     def release(self, microjail: MicroJail) -> None:
         del microjail
         self.calls.append("release")
+
+    def verify(self, microjail: MicroJail) -> bool:
+        del microjail
+        self.calls.append("verify")
+        return True
 
 
 def completed_process(returncode: int = 0) -> Any:

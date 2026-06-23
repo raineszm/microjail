@@ -1,16 +1,12 @@
-import subprocess
 from typing import TYPE_CHECKING, Any
 
 import msgspec
 
 from microjail.adapters.lxc import LxcCommandError
-from microjail.exceptions import MicrojailError
-from microjail.policy import EGRESS_PROBE_TIMEOUT
 
 if TYPE_CHECKING:
     from microjail.microjail import MicroJail
 
-EGRESS_PROBE = ["bash", "-c", ": >/dev/tcp/1.1.1.1/443"]
 DEFAULT_NETWORK = "workshopbr0"
 
 
@@ -24,28 +20,17 @@ class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
         return "network-egress"
 
     def check(self, microjail: MicroJail) -> bool:
-        """Return true when egress from inside the workshop is blocked.
-
-        Returns ``False`` when the restriction cannot be evaluated against
-        the current state (for example, the workshop has not been launched,
-        or no workshop exists in the project). This matches the contract
-        used by :class:`ReadonlyConfig` and lets callers iterate over all
-        gates to answer "is the lockdown currently applied?" without
-        special-casing each failure mode.
-        """
+        """Return true when egress from inside the workshop is blocked."""
         try:
-            result = microjail.exec_(
-                EGRESS_PROBE,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=EGRESS_PROBE_TIMEOUT,
-            )
-        except subprocess.TimeoutExpired:
-            return True
-        except MicrojailError:
+            instance = microjail.lxc_instance()
+        except Exception:
             return False
-        return result.returncode != 0
+        nics = [k for k, v in instance.devices.items() if v.get("type") == "nic"]
+        return len(nics) == 0
+
+    def verify(self, microjail: MicroJail) -> bool:  # noqa: ARG002
+        """Perform behavioral verification of network drop (no-op)."""
+        return True
 
     def enforce(self, microjail: MicroJail) -> None:
         """Remove every network device from the workshop container."""

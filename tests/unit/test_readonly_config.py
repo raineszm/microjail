@@ -96,3 +96,8 @@ def test_check_returns_false_when_container_is_not_available() -> None:
     )
 
     assert not gate().check(mock_mj)
+
+
+def test_readonly_config_verify() -> None:
+    mock_mj = Mock(spec=MicroJail)
+    assert gate().verify(mock_mj) is True

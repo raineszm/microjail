@@ -49,3 +49,7 @@ class ReadonlyConfig(msgspec.Struct, tag="readonly-config", tag_field="name"):
         if self.removed or self.check(microjail):
             microjail.remove_device(DEVICE_NAME)
         self.removed = False
+
+    def verify(self, microjail: MicroJail) -> bool:  # noqa: ARG002
+        """Perform behavioral verification of readonly config (no-op)."""
+        return True

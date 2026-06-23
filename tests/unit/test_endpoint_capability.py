@@ -1,4 +1,3 @@
-import subprocess
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, PropertyMock
 
@@ -38,100 +37,6 @@ def test_check_returns_false_when_connection_row_is_absent(
 
     mock_tunnel.connections.assert_called_once()
     mock_tunnel.endpoint_reachable.assert_not_called()
-
-
-def test_check_returns_true_when_connection_and_reachability_hold(
-    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
-) -> None:
-    cap = capability()
-    mock_tunnel = Mock()
-    mock_tunnel.connections.return_value = [
-        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
-    ]
-    mock_tunnel.endpoint_reachable.return_value = True
-    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
-
-    assert cap.check(tmp_microjail)
-
-    mock_tunnel.endpoint_reachable.assert_called_once_with("127.0.0.1", "8080")
-
-
-def test_check_returns_false_when_endpoint_is_unreachable(
-    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
-) -> None:
-    cap = capability()
-    mock_tunnel = Mock()
-    mock_tunnel.connections.return_value = [
-        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
-    ]
-    mock_tunnel.endpoint_reachable.return_value = False
-    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
-
-    assert not cap.check(tmp_microjail)
-
-    mock_tunnel.endpoint_reachable.assert_called_once_with("127.0.0.1", "8080")
-
-
-def test_check_returns_false_when_connections_fails(
-    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
-) -> None:
-    cap = capability()
-    mock_tunnel = Mock()
-    mock_tunnel.connections.side_effect = subprocess.CalledProcessError(
-        returncode=1, cmd=["workshop", "connections"]
-    )
-    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
-
-    assert not cap.check(tmp_microjail)
-
-
-def test_check_returns_false_when_reachability_times_out(
-    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
-) -> None:
-    cap = capability()
-    mock_tunnel = Mock()
-    mock_tunnel.connections.return_value = [
-        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
-    ]
-    mock_tunnel.endpoint_reachable.side_effect = subprocess.TimeoutExpired(
-        cmd=["bash"], timeout=5
-    )
-    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
-
-    assert not cap.check(tmp_microjail)
-
-
-def test_check_returns_false_on_invalid_endpoint(
-    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
-) -> None:
-    cap = WorkshopEndpointCapability(name="inference", host_endpoint="invalid-no-port")
-    mock_tunnel = Mock()
-    mock_tunnel.connections.return_value = [
-        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
-    ]
-    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
-
-    assert not cap.check(tmp_microjail)
-
-
-def test_check_probes_container_endpoint_when_set(
-    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
-) -> None:
-    cap = WorkshopEndpointCapability(
-        name="inference",
-        host_endpoint="127.0.0.1:8080",
-        container_endpoint="10.0.0.1:9090",
-    )
-    mock_tunnel = Mock()
-    mock_tunnel.connections.return_value = [
-        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
-    ]
-    mock_tunnel.endpoint_reachable.return_value = True
-    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
-
-    assert cap.check(tmp_microjail)
-
-    mock_tunnel.endpoint_reachable.assert_called_once_with("10.0.0.1", "9090")
 
 
 def test_provide_is_idempotent_when_check_already_returns_true(
@@ -227,3 +132,62 @@ def test_resolved_endpoint_returns_container_endpoint_when_set() -> None:
 def test_resolved_endpoint_returns_host_endpoint_when_container_is_none() -> None:
     cap = WorkshopEndpointCapability(name="svc", host_endpoint="localhost:8080")
     assert cap.resolved_endpoint == "localhost:8080"
+
+
+def test_endpoint_capability_check_and_verify(
+    monkeypatch: pytest.MonkeyPatch, tmp_microjail: MicroJail
+) -> None:
+    from microjail.adapters.workshop import Workshop
+
+    # Case 1: check returns True when connection holds, and endpoint_reachable is not called
+    cap = capability()
+    mock_tunnel = Mock()
+    mock_tunnel.connections.return_value = [
+        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
+    ]
+    monkeypatch.setattr(Workshop, "tunnel", PropertyMock(return_value=mock_tunnel))
+    assert cap.check(tmp_microjail) is True
+    mock_tunnel.endpoint_reachable.assert_not_called()
+
+    # Case 2: check returns False when connection is absent
+    mock_tunnel.connections.return_value = []
+    assert cap.check(tmp_microjail) is False
+
+    # Case 3: verify returns True when endpoint is reachable and tunnel is connected
+    mock_tunnel.connections.return_value = [
+        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
+    ]
+    mock_tunnel.endpoint_reachable.return_value = True
+    assert cap.verify(tmp_microjail) is True
+    mock_tunnel.endpoint_reachable.assert_called_once_with("127.0.0.1", "8080")
+
+    # Case 4: verify returns False when endpoint is unreachable
+    mock_tunnel.endpoint_reachable.reset_mock()
+    mock_tunnel.endpoint_reachable.return_value = False
+    assert cap.verify(tmp_microjail) is False
+
+    # Case 5: verify returns False when tunnel is not connected
+    mock_tunnel.connections.return_value = []
+    assert cap.verify(tmp_microjail) is False
+
+    # Case 6: verify returns False when reachability probe fails or times out
+    mock_tunnel.connections.return_value = [
+        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
+    ]
+    mock_tunnel.endpoint_reachable.side_effect = Exception("probe failed")
+    assert cap.verify(tmp_microjail) is False
+
+    # Case 7: verify probes container_endpoint when set
+    cap_remapped = WorkshopEndpointCapability(
+        name="inference",
+        host_endpoint="127.0.0.1:8080",
+        container_endpoint="10.0.0.1:9090",
+    )
+    mock_tunnel.connections.return_value = [
+        ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
+    ]
+    mock_tunnel.endpoint_reachable.reset_mock()
+    mock_tunnel.endpoint_reachable.side_effect = None
+    mock_tunnel.endpoint_reachable.return_value = True
+    assert cap_remapped.verify(tmp_microjail) is True
+    mock_tunnel.endpoint_reachable.assert_called_once_with("10.0.0.1", "9090")

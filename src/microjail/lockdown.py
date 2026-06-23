@@ -15,6 +15,7 @@ class CapabilityError(MicrojailError):
     """Raised when a capability could not be verified after provisioning."""
 
     name: str
+    non_fatal_failures: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
