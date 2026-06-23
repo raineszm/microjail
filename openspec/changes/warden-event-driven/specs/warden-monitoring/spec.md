@@ -17,7 +17,7 @@ This file modifies the existing `openspec/specs/warden-monitoring/spec.md` for t
 ## MODIFIED Requirements
 
 ### Requirement: Workload process termination on gate violation
-The Warden MUST terminate the workload process immediately if any applied Gate's `check()` method returns `False` in response to an LXD lifecycle event for the workload's container, or if the LXD event subscription is lost (signaled by `LxdEnforcementLost`). The Warden MUST escalate the event-driven violation as a `GatePolicyViolation` and the `microjail` command MUST exit with code 84 (`RUNTIME_GATE_POLICY_VIOLATION`).
+The Warden MUST terminate the workload process immediately if any applied Gate's `check()` method returns `False` or raises an exception in response to an LXD lifecycle event for the workload's container, or if the LXD event subscription is lost (signaled by `LxdEnforcementLost`). The Warden MUST escalate the event-driven violation as a `GatePolicyViolation` and the `microjail` command MUST exit with code 84 (`RUNTIME_GATE_POLICY_VIOLATION`).
 
 #### Scenario: Warden terminates workload on gate config drift
 - **GIVEN** a workload is running under Warden supervision
@@ -28,8 +28,15 @@ The Warden MUST terminate the workload process immediately if any applied Gate's
 
 #### Scenario: Warden terminates workload on LxdEnforcementLost
 - **GIVEN** a workload is running under Warden supervision
-- **AND** the LXD event subscription is lost (the `LxdEventWatcher` has exhausted its 0.8s reconnect budget)
+- **AND** the `lxc monitor` subprocess has exited (the LXD event feed is lost)
 - **WHEN** the watcher raises `LxdEnforcementLost`
+- **THEN** the Warden terminates the workload process
+- **AND** the Warden escalates as `GatePolicyViolation`
+- **AND** the `microjail exec` / `microjail shell` command exits with code 84
+
+#### Scenario: Warden terminates workload when a gate check raises an exception
+- **GIVEN** a workload is running under Warden supervision
+- **WHEN** an LXD lifecycle event causes any applied Gate's `check(microjail)` to raise an exception (for example, an LXD query failure or a destroyed container)
 - **THEN** the Warden terminates the workload process
 - **AND** the Warden escalates as `GatePolicyViolation`
 - **AND** the `microjail exec` / `microjail shell` command exits with code 84
@@ -40,7 +47,7 @@ If the workload process exits normally without any policy violation, the Warden 
 #### Scenario: Workload exits successfully
 - **GIVEN** a workload is running under Warden supervision
 - **WHEN** the workload process terminates with exit code 0
-- **THEN** the Warden stops the `LxdEventWatcher` (closes the WebSocket, joins the reader thread)
+- **THEN** the Warden stops the `LxdEventWatcher` (terminates the `lxc monitor` subprocess, joins the reader thread)
 - **AND** the `microjail exec` / `microjail shell` command exits with code 0
 - **AND** the applied Lockdown is not released
 
@@ -54,7 +61,7 @@ If the workload process exits normally without any policy violation, the Warden 
 ## ADDED Requirements
 
 ### Requirement: Warden is event-driven via LXD lifecycle subscription
-While a workload is running under Warden supervision, the Warden SHALL maintain a subscription to the LXD `/1.0/events?type=lifecycle` WebSocket stream for the workload's container and project, and SHALL re-validate every applied Gate's `check()` on every event for that container.
+While a workload is running under Warden supervision, the Warden SHALL maintain a `lxc monitor --type=lifecycle --format=json --quiet --project=<lxd_project> --force-local` subprocess for the workload's container and project, and SHALL re-validate every applied Gate's `check()` on every event for that container.
 
 #### Scenario: Gate check runs on every matching event
 - **GIVEN** a workload is running under Warden supervision
@@ -69,7 +76,7 @@ While a workload is running under Warden supervision, the Warden SHALL maintain 
 - **THEN** the Warden does not re-snapshot or re-check
 
 #### Scenario: Warden re-validates on reconnect sentinel
-- **GIVEN** the WebSocket subscription has just (re)connected
+- **GIVEN** the `LxdEventWatcher` has just been started (initial `lxc monitor` subprocess start)
 - **WHEN** the `LxdEventWatcher` enqueues the `"reconnect"` sentinel
 - **THEN** the Warden treats the sentinel identically to any other event: re-snapshot and call `check()` on every Gate
 
@@ -82,11 +89,12 @@ The Warden SHALL NOT call `check()` or `verify()` on any Capability during workl
 - **THEN** the Warden iterates `lockdown.gates` only
 - **AND** the Warden does not iterate `lockdown.caps`
 
-### Requirement: LxdEnforcementLost escalates as a gate policy violation
-If the `LxdEventWatcher` raises `LxdEnforcementLost` (LXD event subscription is lost after the 0.8s reconnect budget), the Warden SHALL terminate the workload and escalate the exception as a `GatePolicyViolation`. The escalation exit code is 84 (`RUNTIME_GATE_POLICY_VIOLATION`), matching the existing gate-violation exit code.
+### Requirement: Termination failure does not mask the gate policy violation
+The Warden's escalation path SHALL guarantee that the security-relevant `GatePolicyViolation` is surfaced to the caller even when the workload termination itself fails. A failure inside the termination path (for example, `lxc stop --force` failing because LXD is unreachable — the same condition that triggered the escalation) MUST NOT replace the `GatePolicyViolation` with a different exception. The `microjail` command MUST exit with code 84 (`RUNTIME_GATE_POLICY_VIOLATION`) whenever a gate violation or enforcement-loss condition has been detected, regardless of whether the termination succeeded.
 
-#### Scenario: LxdEnforcementLost terminates the workload
-- **GIVEN** a workload is running under Warden supervision
-- **WHEN** the `LxdEventWatcher` raises `LxdEnforcementLost` from its reconnect loop
-- **THEN** the Warden calls `terminate_workload()` (terminate the process, escalate to `lxc stop --force` if the process does not exit within 2s)
-- **AND** the Warden raises `GatePolicyViolation` so `supervise_workload` exits with code 84
+#### Scenario: Escalation exits 84 even when lxc stop --force fails
+- **GIVEN** the LXD daemon is unreachable
+- **WHEN** the Warden decides to escalate (for example, because `LxdEnforcementLost` was raised, or a gate's `check()` raised because the LXD query itself failed)
+- **AND** the worker's termination escalates to `lxc stop --force` which also fails
+- **THEN** the `microjail` command exits with code 84
+- **AND** no exception from the termination path replaces the `GatePolicyViolation`

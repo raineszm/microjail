@@ -39,7 +39,7 @@ If any Gate's `verify(microjail)` returns `False`, `pre_launch_verify()` SHALL r
 - **AND** the third gate's `verify()` is never called (no exception propagates from it)
 
 ### Requirement: Fatal capability verify failure raises CapabilityError
-If any capability marked `fatal=True` has its `verify(microjail)` return `False`, `pre_launch_verify()` SHALL raise `CapabilityError` naming the first such fatal capability, and SHALL NOT call `verify()` on the remaining capabilities after that point.
+If any capability marked `fatal=True` has its `verify(microjail)` return `False`, `pre_launch_verify()` SHALL raise `CapabilityError` naming the first such fatal capability, and SHALL include the names of any non-fatal capabilities whose `verify()` failed earlier in the same pass in the `CapabilityError.non_fatal_failures` field. The method SHALL NOT call `verify()` on the remaining capabilities after that point.
 
 #### Scenario: First fatal capability verify failure raises CapabilityError
 - **GIVEN** a Lockdown with a capability marked `fatal=True` whose `verify(microjail)` returns `False`
@@ -68,12 +68,20 @@ If a capability marked `fatal=False` has its `verify(microjail)` return `False`,
 - **THEN** the returned result's `non_fatal_capability_failures` contains all three capability names in the order they were checked
 - **AND** the method does not raise
 
-#### Scenario: Non-fatal failure does not stop a later fatal failure
-- **GIVEN** a Lockdown with a non-fatal capability whose `verify(microjail)` returns `False`
+### Requirement: CapabilityError carries the non-fatal failures collected before a fatal failure
+`CapabilityError` SHALL expose a `non_fatal_failures` field (a tuple of capability names) that lists the non-fatal capabilities whose `verify()` failed earlier in the same `pre_launch_verify()` pass. The field is empty when no non-fatal failures preceded the fatal one. This allows the CLI to surface the earlier non-fatal failures as warnings alongside the fatal one.
+
+#### Scenario: non_fatal_failures is empty when the fatal capability is the first failure
+- **GIVEN** a Lockdown with a single fatal capability whose `verify(microjail)` returns `False`
+- **AND** no other capabilities precede it
+- **WHEN** `pre_launch_verify()` is called and the `CapabilityError` is caught
+- **THEN** the exception's `non_fatal_failures` field is an empty tuple
+
+#### Scenario: non_fatal_failures contains the names of all preceding non-fatal failures
+- **GIVEN** a Lockdown with two non-fatal capabilities whose `verify(microjail)` returns `False`
 - **AND** a later fatal capability whose `verify(microjail)` returns `False`
-- **WHEN** `pre_launch_verify()` is called
-- **THEN** the method records the non-fatal capability's name in the result
-- **AND** the method raises `CapabilityError` for the fatal capability
+- **WHEN** `pre_launch_verify()` is called and the `CapabilityError` is caught
+- **THEN** the exception's `non_fatal_failures` field contains both non-fatal capability names in the order they were checked
 
 ### Requirement: PreLaunchVerifyResult carries the warnings
 `MicroJail.pre_launch_verify()` SHALL return a `PreLaunchVerifyResult` whose `non_fatal_capability_failures` field is a tuple of capability names. On full success, the tuple is empty.
@@ -82,11 +90,6 @@ If a capability marked `fatal=False` has its `verify(microjail)` return `False`,
 - **GIVEN** a Lockdown where every gate and every capability passes `verify()`
 - **WHEN** `pre_launch_verify()` is called
 - **THEN** the returned result is a `PreLaunchVerifyResult` with `non_fatal_capability_failures == ()`
-
-#### Scenario: Result is immutable
-- **GIVEN** a returned `PreLaunchVerifyResult`
-- **WHEN** the caller attempts to assign to `non_fatal_capability_failures`
-- **THEN** the assignment raises `AttributeError` or `FrozenInstanceError`
 
 ### Requirement: lock exit codes for pre_launch_verify failures
 When `pre_launch_verify()` raises during `microjail lock`, the `lock` command SHALL exit with the bitmask code corresponding to the failure: `GATE_APPLICATION_FAILURE` (68) for a `GateError`, `CAPABILITY_APPLICATION_FAILURE` (66) for a `CapabilityError`.

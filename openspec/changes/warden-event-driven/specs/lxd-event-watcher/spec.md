@@ -1,90 +1,59 @@
 ## ADDED Requirements
 
 ### Requirement: Lifecycle event subscription
-While a workload is running under Warden supervision, the LxdEventWatcher SHALL maintain a WebSocket subscription to the LXD `/1.0/events?type=lifecycle` stream, filtered to lifecycle events for the workload's container name and LXD project.
+While a workload is running under Warden supervision, the LxdEventWatcher SHALL run a `lxc monitor --type=lifecycle --format=json --quiet --project=<lxd_project> --force-local` subprocess and consume newline-delimited JSON events from its stdout. The watcher client-side filters the events to lifecycle events for the workload's container name.
 
 #### Scenario: Subscription starts on watcher start
 - **GIVEN** a workload is running under Warden supervision
 - **WHEN** the LxdEventWatcher is started
-- **THEN** the watcher opens a WebSocket connection to `/1.0/events?type=lifecycle`
-- **AND** the watcher client-side filters incoming events by `metadata.name == <container_name>` and `metadata.project == <lxd_project>`
+- **THEN** the watcher spawns a `lxc monitor` subprocess with the required flags
+- **AND** the watcher client-side filters the subprocess output by container name (matching `metadata.name` or, for events that omit it, the instance name parsed from `metadata.source`)
 
 #### Scenario: Matching event reaches the queue
-- **GIVEN** the watcher is subscribed and the WebSocket is open
-- **WHEN** an `instance-updated` event with `metadata.name == <container_name>` and `metadata.project == <lxd_project>` arrives on the WebSocket
-- **THEN** the watcher enqueues a representation of the event for the Warden to consume
+- **GIVEN** the watcher is running and the subprocess is alive
+- **WHEN** a lifecycle event for the workload's container (matched by `metadata.name` or `metadata.source` derivation) and project is read from the subprocess stdout
+- **THEN** the watcher enqueues the raw event line for the Warden to consume
 
 #### Scenario: Non-matching event is dropped
-- **GIVEN** the watcher is subscribed and the WebSocket is open
-- **WHEN** a lifecycle event whose `metadata.name` is a different container arrives
+- **GIVEN** the watcher is running and the subprocess is alive
+- **WHEN** a lifecycle event for a different container is read from the subprocess stdout
 - **THEN** the watcher does not enqueue the event
-- **AND** the WebSocket subscription remains open
+- **AND** the subprocess remains running
 
-### Requirement: Reconnect sentinel on every successful (re)connect
-When the WebSocket connection is successfully established (initial connect and any reconnect after a disconnect), the LxdEventWatcher SHALL enqueue a `"reconnect"` sentinel so the Warden re-validates the lockdown against current LXD state.
+### Requirement: Reconnect sentinel on initial start
+When the `lxc monitor` subprocess is successfully started for the first time, the LxdEventWatcher SHALL enqueue a `"reconnect"` sentinel so the Warden re-validates the lockdown against current LXD state. The sentinel is emitted exactly once per watcher instance, on initial start; because the watcher does not restart the subprocess, the sentinel is never emitted again.
 
-#### Scenario: Initial connect emits sentinel
-- **GIVEN** the watcher has not yet established a WebSocket connection
-- **WHEN** the watcher successfully completes the initial WebSocket handshake
-- **THEN** the watcher enqueues the literal string `"reconnect"` exactly once for that connection
+#### Scenario: Initial start emits sentinel
+- **GIVEN** the watcher has not yet started a `lxc monitor` subprocess
+- **WHEN** the watcher successfully spawns the initial subprocess
+- **THEN** the watcher enqueues the literal string `"reconnect"` exactly once
 
-#### Scenario: Reconnect after disconnect emits sentinel
-- **GIVEN** the WebSocket was previously disconnected
-- **WHEN** the watcher successfully completes a reconnect handshake
-- **THEN** the watcher enqueues the literal string `"reconnect"` exactly once for that connection
+### Requirement: Subprocess exit is an immediate gate violation
+If the `lxc monitor` subprocess exits (for any reason: LXD daemon stop, SIGHUP, the `lxc` binary crashing, a terminal readline error, etc.), the LxdEventWatcher SHALL raise `LxdEnforcementLost` so the Warden can terminate the workload and surface the loss of enforcement. The watcher SHALL NOT restart the subprocess; under the threat model "LXD is the only thing that can enforce," the loss of the event feed is itself a gate violation. The escalation is immediate — there is no reconnect budget, no backoff, and no retry.
 
-#### Scenario: Failed handshake does not emit sentinel
-- **GIVEN** the watcher is attempting to (re)connect
-- **WHEN** the WebSocket handshake fails
-- **THEN** the watcher does not enqueue the `"reconnect"` sentinel
-
-### Requirement: Reconnect on disconnect with bounded backoff
-If the WebSocket connection closes, the LxdEventWatcher SHALL attempt to reconnect with two backoff intervals: 0.3s before the first retry and 0.5s before the second retry. The total time from disconnect to escalation SHALL be under 1 second.
-
-#### Scenario: First reconnect attempt
-- **GIVEN** the WebSocket is disconnected
-- **WHEN** the watcher initiates the first reconnect attempt
-- **THEN** the watcher waits 0.3s before opening the new WebSocket connection
-
-#### Scenario: Second reconnect attempt
-- **GIVEN** the first reconnect attempt failed
-- **WHEN** the watcher initiates the second reconnect attempt
-- **THEN** the watcher waits 0.5s before opening the new WebSocket connection
-
-### Requirement: Escalation after three failed reconnects
-If three successive reconnect attempts fail, the LxdEventWatcher SHALL raise `LxdEnforcementLost` so the Warden can terminate the workload and surface the loss of enforcement.
-
-#### Scenario: Three failures escalate
-- **GIVEN** the WebSocket is disconnected
-- **WHEN** the initial connect plus two reconnect attempts (with 0.3s and 0.5s backoffs) all fail
+#### Scenario: Subprocess exit escalates immediately
+- **GIVEN** the watcher is running and the subprocess is alive
+- **WHEN** the `lxc monitor` subprocess exits (any reason, any exit code)
 - **THEN** the watcher raises `LxdEnforcementLost`
-- **AND** the watcher stops attempting further reconnects
-
-#### Scenario: A successful reconnect resets the failure counter
-- **GIVEN** one or more reconnect attempts have failed since the last successful connection
-- **WHEN** a subsequent reconnect attempt succeeds
-- **THEN** the failure counter resets to zero
-- **AND** a new disconnect can be tolerated for up to three more failed reconnects before another escalation
+- **AND** the watcher does not attempt to restart the subprocess
 
 ### Requirement: Clean stop
-When the LxdEventWatcher is stopped, the watcher SHALL close the WebSocket connection and terminate its reader thread within the current method call.
+When the LxdEventWatcher is stopped, the watcher SHALL terminate the `lxc monitor` subprocess and join its reader thread within the current method call. The stop path MUST be distinguished from a subprocess exit caused by an external failure: a stop-induced subprocess exit MUST NOT raise `LxdEnforcementLost`. `stop()` SHALL accept a timeout (default 5.0s) and SHALL call `terminate()` on the subprocess, escalating to `kill()` if the subprocess does not exit within the timeout.
 
-#### Scenario: Stop closes the WebSocket
-- **GIVEN** the watcher is subscribed and the WebSocket is open
+#### Scenario: Stop terminates the subprocess
+- **GIVEN** the watcher is running and the subprocess is alive
 - **WHEN** the watcher is stopped
-- **THEN** the watcher closes the WebSocket connection
+- **THEN** the watcher terminates the subprocess
+- **AND** the reader thread terminates before `stop()` returns
+- **AND** `LxdEnforcementLost` is NOT raised
+
+#### Scenario: Stop escalates to kill on timeout
+- **GIVEN** the watcher is running and the subprocess ignores SIGTERM
+- **WHEN** the watcher is stopped with a 1.0s timeout
+- **THEN** the watcher calls `kill()` on the subprocess
 - **AND** the reader thread terminates before `stop()` returns
 
 #### Scenario: Stop is idempotent
 - **GIVEN** the watcher has already been stopped
 - **WHEN** the watcher is stopped a second time
 - **THEN** the watcher does not raise
-
-### Requirement: Container name and project passed to the watcher
-The LxdEventWatcher SHALL receive the container name and LXD project as constructor parameters and SHALL use them for client-side event filtering and for the reconnect-sentinel scope.
-
-#### Scenario: Construction records container and project
-- **GIVEN** a container name and LXD project
-- **WHEN** the LxdEventWatcher is constructed with both parameters
-- **THEN** the watcher retains them for the lifetime of the instance
-- **AND** the watcher uses them when filtering incoming lifecycle events
