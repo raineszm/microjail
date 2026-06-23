@@ -8,10 +8,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Literal
 
 import msgspec
 
+from microjail.adapters.executor import CommandExecutor, LocalExecutor
 from microjail.exceptions import MicrojailError
 from microjail.policy import EGRESS_PROBE_TIMEOUT
 
@@ -63,20 +64,6 @@ _MICROJAIL_SDK_NAME = "microjail"
 _PROJECT_MICROJAIL_SDK_NAME = "project-microjail"
 _SYSTEM_SDK_NAME = "system"
 _TUNNEL_INTERFACE = "tunnel"
-
-
-class CommandExecutor(Protocol):
-    def run(self, command: list[str], **kwargs: Any) -> subprocess.CompletedProcess: ...
-
-    def popen(self, command: list[str], **kwargs: Any) -> subprocess.Popen: ...
-
-
-class LocalExecutor:
-    def run(self, command: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
-        return subprocess.run(command, **kwargs)
-
-    def popen(self, command: list[str], **kwargs: Any) -> subprocess.Popen:
-        return subprocess.Popen(command, **kwargs)
 
 
 @dataclass

@@ -1,118 +1,66 @@
 # Capability: lxd-event-monitor
 
 ## Purpose
-The LXD event monitor subscribes to LXD lifecycle events for a single container via an `lxc monitor` subprocess and delivers matching events to in-process callers on a thread-safe queue. It is the foundation for an event-driven Warden; this capability does not interpret events or react to them, it only delivers them.
+The LXD event monitor subscribes to LXD lifecycle events for a single container via an `lxc monitor` subprocess and exposes them as a blocking iterator. The caller iterates with a `for` loop and gets one `LifecycleEvent` per iteration. The monitor does not interpret events or react to them; it only delivers them. Threading and queueing are out of scope; the caller can wrap the iterator in a thread + queue if parallel consumption is needed.
 
-## ADDED Requirements
-
-### Requirement: LxdMonitor subscribes to LXD lifecycle events for a single container
-The `LxdMonitor` SHALL spawn an `lxc monitor` subprocess scoped to the configured LXD project, read its stdout line-by-line, and parse each non-empty line as a JSON object representing one LXD event.
-
-#### Scenario: Monitor parses one lifecycle event from subprocess stdout
+The subprocess is launched through the `CommandExecutor` protocol from `microjail.adapters.executor` (a standalone module, not defined inside `workshop.py`). `LxdMonitor.__init__` takes an optional `executor: CommandExecutor` parameter; the default is `LocalExecutor` from the same module. On `__iter__` the monitor calls `executor.popen(cmd, stdout=PIPE, text=True, bufsize=1)` to spawn `lxc monitor --project=<project> --type=lifecycle --format=json`. Tests substitute a fake executor that records the call and returns a fake `Popen` whose `stdout` is an iterable of preset lines.
+#### Scenario: One-shot iteration yields one matching event
 - **GIVEN** an `LxdMonitor` is constructed for container `agent` in project `workshop`
-- **AND** the injected subprocess yields the line `{"type":"lifecycle","metadata":{"project":"workshop","action":"start","source":"/1.0/instances/agent"}}`
-- **WHEN** `start()` is called
-- **AND** the caller calls `events(timeout=1.0)`
-- **THEN** the returned event equals the parsed JSON object above
+- **AND** the executor's `popen` returns a `Popen` whose `stdout` yields the line `{"type":"lifecycle","timestamp":"2026-06-23T12:48:52.066853564-05:00","location":"none","project":"workshop","metadata":{"action":"instance-started","source":"/1.0/instances/agent","name":"agent","project":"workshop"}}` and then `""` (EOF)
+- **WHEN** the caller iterates with `for event in monitor: ...` and then calls `monitor.close()`
+- **THEN** the first iteration yields a `LifecycleEvent` with `event.metadata.action == "instance-started"`
+- **AND** the loop terminates on the next call to `__next__` (subprocess EOF)
 
-### Requirement: LxdMonitor filters events to the configured container
-While the monitor is running, the `LxdMonitor` SHALL drop events whose `metadata.source` does not identify the configured container before placing them on the internal queue.
+#### Scenario: `__iter__` invokes the configured `CommandExecutor.popen` with the canonical command
+- **GIVEN** an `LxdMonitor` is constructed with a fake `CommandExecutor`
+- **WHEN** `iter(monitor)` is called
+- **THEN** the fake executor's `popen` method is invoked exactly once with the command `["lxc", "monitor", "--project=<project>", "--type=lifecycle", "--format=json"]`
+- **AND** the kwargs include `stdout=PIPE`, `text=True`, `bufsize=1` for line-buffered reading
+- **AND** `__iter__` does not call `subprocess.Popen` directly
 
-#### Scenario: Monitor drops an event for a different container
-- **GIVEN** an `LxdMonitor` is constructed for container `agent`
-- **AND** the subprocess yields two lines: one whose `metadata.source` is `/1.0/instances/agent` and one whose `metadata.source` is `/1.0/instances/other`
-- **WHEN** the caller reads events with `events(timeout=1.0)` until empty
-- **THEN** the first call returns the `agent` event
-- **AND** the second call returns `None` within the timeout
+### Requirement: LxdMonitor skips non-matching events during iteration
+While iterating, the `LxdMonitor` SHALL drop events whose top-level `type` is not `"lifecycle"`, whose `project` is not the configured LXD project, or whose `metadata.source` is not the configured container before yielding the next value.
 
-#### Scenario: Monitor drops a non-lifecycle event for the configured container
-- **GIVEN** an `LxdMonitor` is constructed for container `agent`
-- **AND** the subprocess yields a line whose top-level `type` is `logging` (not `lifecycle`) and whose `metadata.source` is `/1.0/instances/agent`
-- **WHEN** the caller calls `events(timeout=0.1)`
-- **THEN** the call returns `None`
-- **AND** the monitor does not raise
+#### Scenario: Non-matching events are skipped
+- **GIVEN** an `LxdMonitor` is constructed for container `agent` in project `workshop`
+- **AND** the executor's `popen` returns a `Popen` whose `stdout` yields four lines: a lifecycle event for `/1.0/instances/other`, a lifecycle event for project `other`, a `logging` event for `/1.0/instances/agent`, then a lifecycle event for `/1.0/instances/agent` in project `workshop`
+- **WHEN** the caller iterates until `StopIteration`
+- **THEN** exactly one `LifecycleEvent` is yielded
+- **AND** its `metadata.source` is `/1.0/instances/agent`
 
-### Requirement: LxdMonitor delivers events on a thread-safe queue
-While the monitor is running, the `LxdMonitor` SHALL make parsed events available via `events(timeout)` from any thread, without requiring the caller to hold a lock.
+### Requirement: LxdMonitor raises StopIteration on subprocess EOF
+When the `lxc monitor` subprocess closes its stdout (normal exit, crash, or termination), the next call to `__next__` SHALL raise `StopIteration` so the surrounding `for` loop exits cleanly.
 
-#### Scenario: Caller retrieves an event from a different thread
-- **GIVEN** an `LxdMonitor` is started and the subprocess has yielded one matching event
-- **WHEN** a second thread calls `events(timeout=1.0)`
-- **THEN** the call returns the matching event
-- **AND** the call does not block past the timeout if no further events arrive
+#### Scenario: StopIteration on EOF
+- **GIVEN** an `LxdMonitor` is being iterated and the subprocess closes its stdout with no further events
+- **WHEN** the caller calls `__next__`
+- **THEN** `StopIteration` is raised
 
-### Requirement: LxdMonitor exposes a timeout-bounded blocking events() method
-The `LxdMonitor` SHALL provide an `events(timeout: float)` method that blocks up to `timeout` seconds for the next event, returns the event when one is available, and returns `None` if the timeout elapses with no event.
+### Requirement: LxdMonitor terminates the subprocess on close
+When `close()` is called, the `LxdMonitor` SHALL terminate the `lxc monitor` subprocess. After `close()` returns, the subprocess is no longer running. Calling `close()` more than once SHALL be a no-op.
 
-#### Scenario: events() returns None when the queue stays empty for the full timeout
-- **GIVEN** an `LxdMonitor` is started
-- **AND** no events have been received
-- **WHEN** the caller calls `events(timeout=0.05)`
-- **THEN** the call returns `None` within `0.1` seconds
-
-#### Scenario: events() returns immediately when an event is already queued
-- **GIVEN** an `LxdMonitor` is started
-- **AND** at least one matching event is already on the queue
-- **WHEN** the caller calls `events(timeout=5.0)`
-- **THEN** the call returns the event without blocking on the timeout
-
-### Requirement: LxdMonitor.start() spawns the monitor subprocess on demand
-When `start()` is called, the `LxdMonitor` SHALL launch the configured subprocess exactly once. A second call to `start()` without an intervening `stop()` SHALL be a no-op.
-
-#### Scenario: start() launches the subprocess
-- **GIVEN** an `LxdMonitor` is constructed but not yet started
-- **WHEN** `start()` is called
-- **THEN** the injected launcher is invoked exactly once with the expected `lxc monitor` command and arguments
-
-#### Scenario: A second start() does not relaunch the subprocess
-- **GIVEN** an `LxdMonitor` has already been started
-- **WHEN** `start()` is called again
-- **THEN** the injected launcher is not invoked a second time
-
-### Requirement: LxdMonitor.stop() terminates the subprocess and joins the reader thread
-When `stop()` is called, the `LxdMonitor` SHALL terminate the subprocess and join the reader thread within the given `timeout` (default 5.0 seconds). After `stop()` returns, the monitor SHALL be in a stopped state and a subsequent `start()` SHALL relaunch the subprocess.
-
-#### Scenario: stop() returns once the subprocess is terminated and the thread has joined
-- **GIVEN** an `LxdMonitor` is started
-- **WHEN** `stop(timeout=1.0)` is called
+#### Scenario: close() terminates the subprocess
+- **GIVEN** an `LxdMonitor` is being iterated (subprocess is running)
+- **WHEN** `close()` is called
 - **THEN** the subprocess is terminated
-- **AND** the reader thread has exited
-- **AND** the call returns within `1.0` second
+- **AND** `close()` returns within the default timeout
 
-#### Scenario: start() after stop() relaunches the subprocess
-- **GIVEN** an `LxdMonitor` has been started and then stopped
-- **WHEN** `start()` is called
-- **THEN** the injected launcher is invoked a second time
+#### Scenario: close() is idempotent
+- **GIVEN** an `LxdMonitor` has been closed
+- **WHEN** `close()` is called again
 
-### Requirement: LxdMonitor reports unrecoverable subscription loss via last_exception
-If the `lxc monitor` subprocess exits with a non-zero status (or cannot be launched at all), the `LxdMonitor` SHALL populate the `last_exception` attribute with the underlying error and the reader thread SHALL exit. The monitor SHALL NOT silently retry the subscription on its own.
 
-#### Scenario: last_exception is populated when the subprocess exits non-zero
-- **GIVEN** an `LxdMonitor` is started with a fake subprocess that exits with status `1` and stderr `boom`
-- **WHEN** the caller polls `last_exception` after the subprocess has terminated
-- **THEN** `last_exception` is not `None`
-- **AND** the underlying error references the non-zero exit and the stderr text
+### Requirement: LxdMonitor is a context manager that calls close() on exit
+Where used as a context manager (`with LxdMonitor(...) as monitor: ...`), the `LxdMonitor` SHALL call `close()` from its `__exit__` method so the subprocess is terminated when the `with` block exits, including on exceptions. `__enter__` SHALL return `self`. The monitor MAY be used as either a context manager or a plain iterator — both styles are supported.
 
-#### Scenario: events() continues to return None after subscription loss rather than raising
-- **GIVEN** an `LxdMonitor` has lost its subscription and `last_exception` is set
-- **WHEN** the caller invokes `events(timeout=0.05)`
-- **THEN** the call returns `None` rather than raising
+#### Scenario: Context manager terminates the subprocess on block exit
+- **GIVEN** an `LxdMonitor` is constructed and iterated inside a `with` block
+- **WHEN** the `with` block exits normally
+- **THEN** the subprocess is terminated (the same observable effect as calling `close()` directly)
 
-### Requirement: LxdMonitor drops malformed JSON lines without crashing
-If the subprocess yields a line that is not valid JSON, the `LxdMonitor` SHALL drop the line, leave `last_exception` unchanged, and continue reading subsequent lines.
-
-#### Scenario: A malformed line is dropped and parsing continues
-- **GIVEN** an `LxdMonitor` is started
-- **AND** the subprocess yields three lines in order: `not-json`, an empty line, then a valid event for the configured container
-- **WHEN** the caller reads events with `events(timeout=0.5)` until empty
-- **THEN** the valid event is returned
-- **AND** `last_exception` remains `None`
-
-### Requirement: LxdMonitor accepts an injected subprocess launcher for testability
-Where a caller supplies a custom `MonitorLauncher` to the `LxdMonitor` constructor, the `LxdMonitor` SHALL use the supplied launcher instead of invoking `subprocess.Popen` directly.
-
-#### Scenario: The injected launcher is used instead of subprocess.Popen
-- **GIVEN** an `LxdMonitor` is constructed with a fake `MonitorLauncher`
-- **WHEN** `start()` is called
-- **THEN** the fake launcher is invoked with the expected command
-- **AND** `subprocess.Popen` is not called with that command
+#### Scenario: Context manager terminates the subprocess on exception
+- **GIVEN** an `LxdMonitor` is constructed and iterated inside a `with` block
+- **AND** an exception is raised inside the block
+- **WHEN** the `with` block exits
+- **THEN** the subprocess is terminated before the exception propagates
+- **THEN** no exception is raised

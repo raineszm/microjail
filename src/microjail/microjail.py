@@ -10,7 +10,6 @@ import msgspec
 
 from microjail.adapters import lxc
 from microjail.adapters.workshop import (
-    CommandExecutor,
     Workshop,
     WorkshopConfig,
     WorkshopInfo,
@@ -29,6 +28,9 @@ from microjail.lockdown import (
     GateReleaseError,
     Lockdown,
 )
+
+if TYPE_CHECKING:
+    from microjail.adapters.executor import CommandExecutor
 
 TaggedGate = NetworkDrop | ReadonlyConfig
 TaggedCapability = WorkshopEndpointCapability
