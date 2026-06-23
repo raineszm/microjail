@@ -24,11 +24,7 @@ After `WorkshopEndpointCapability.provide(microjail)` completes, the declared `h
 
 ### Requirement: check reflects connection and reachability state
 
-`WorkshopEndpointCapability.check(microjail)` MUST return `True` if and only if both conditions hold:
-1. The Workshop tunnel connection (`<workshop>/microjail:<name>` → `<workshop>/system:<name>`) appears in `workshop connections` output.
-2. The resolved endpoint (the `container_endpoint` field if set, otherwise `host_endpoint`) is reachable via TCP from inside the workshop container.
-
-If either condition fails, `check()` MUST return `False`. `check()` MUST NOT raise.
+`WorkshopEndpointCapability.check(microjail)` MUST return `True` if and only if the Workshop tunnel connection (`<workshop>/microjail:<name>` → `<workshop>/system:<name>`) appears in `workshop connections` output. The check MUST NOT perform a TCP reachability probe; reachability is verified separately by `verify()`. If the tunnel connection is not present, `check()` MUST return `False`. `check()` MUST NOT raise.
 
 #### Scenario: check returns False before provide
 
@@ -60,6 +56,13 @@ This is expected: outgoing tunnel connections are not durable across refreshes. 
 
 - **WHEN** `WorkshopEndpointCapability.check(microjail)` is called and the workshop container is not running
 - **THEN** the return value is `False` and no exception is raised
+
+#### Scenario: check does not perform a TCP probe
+
+- **WHEN** the tunnel connection is present in `workshop connections`
+- **AND** the host service at the resolved endpoint is unreachable (e.g. the upstream process has crashed)
+- **AND** `WorkshopEndpointCapability.check(microjail)` is called
+- **THEN** the return value is `True` (the check is config-state only; reachability is the responsibility of `verify()`)
 
 ---
 
@@ -256,3 +259,33 @@ When stale Microjail-owned endpoint cleanup succeeds and a later Capability or G
 - **AND** a later declared Capability fails before workload start during `microjail run`
 - **WHEN** Microjail rolls back state applied during that failed run attempt
 - **THEN** the stale endpoint declaration remains removed
+
+---
+
+### Requirement: verify reflects reachability state
+
+`WorkshopEndpointCapability.verify(microjail)` MUST return `VerificationResult.VERIFIED` if a TCP connection to the resolved endpoint (`container_endpoint` if set, otherwise `host_endpoint`) succeeds from inside the workshop container. If the TCP connection fails, times out, or raises any exception (including `subprocess.CalledProcessError`, `subprocess.TimeoutExpired`, `ValueError`), `verify()` MUST return `VerificationResult.FAILED` rather than propagating the exception.
+
+#### Scenario: verify returns VERIFIED when endpoint is reachable
+
+- **WHEN** the host service at the resolved endpoint is reachable
+- **AND** `WorkshopEndpointCapability.verify(microjail)` is called
+- **THEN** the return value is `VerificationResult.VERIFIED`
+
+#### Scenario: verify returns FAILED when endpoint is unreachable
+
+- **WHEN** the host service at the resolved endpoint is not reachable (e.g. the upstream process has crashed or the port is closed)
+- **AND** `WorkshopEndpointCapability.verify(microjail)` is called
+- **THEN** the return value is `VerificationResult.FAILED`
+
+#### Scenario: verify returns FAILED when tunnel is not connected
+
+- **WHEN** the tunnel connection is not present in `workshop connections`
+- **AND** `WorkshopEndpointCapability.verify(microjail)` is called
+- **THEN** the return value is `VerificationResult.FAILED`
+
+#### Scenario: verify does not propagate subprocess errors
+
+- **WHEN** the underlying reachability probe raises `subprocess.CalledProcessError` or `subprocess.TimeoutExpired`
+- **AND** `WorkshopEndpointCapability.verify(microjail)` is called
+- **THEN** the return value is `VerificationResult.FAILED` and no exception is raised

@@ -20,27 +20,27 @@ The minimum end-to-end path: construct an `LxdMonitor`, iterate over it, and obs
 - **Assert**:
   - The first `next()` returns a `LifecycleEvent` with `metadata.action == "instance-started"`.
 
-- [ ] 1.1 RED: test_lxd_monitor_iteration_yields_matching_lifecycle_event
-- [ ] 1.2 GREEN: implement `LifecycleEvent`/`LifecycleMetadata` msgspec.Structs; implement `parse_event` and `matches`; implement `LxdMonitor.__iter__`, `__next__`, and `close`; use the injected `CommandExecutor.popen` to spawn the subprocess with `stdout=PIPE, text=True, bufsize=1`
-- [ ] 1.3 REFACTOR: no leaking internal state, the `FakePopen` / `FakeExecutor` helpers are clean and named for reuse in later slices
+- [x] 1.1 RED: test_lxd_monitor_iteration_yields_matching_lifecycle_event
+- [x] 1.2 GREEN: implement `LifecycleEvent`/`LifecycleMetadata` msgspec.Structs; implement `parse_event` and `matches`; implement `LxdMonitor.__iter__`, `__next__`, and `close`; use the injected `CommandExecutor.popen` to spawn the subprocess with `stdout=PIPE, text=True, bufsize=1`
+- [x] 1.3 REFACTOR: no leaking internal state, the `FakePopen` / `FakeExecutor` helpers are clean and named for reuse in later slices
 
 ## Slice 2: [Pending] - Iterator skips non-matching events
 <!-- Test details and tasks will be planned after Slice 1 is complete -->
-- [ ] 2.1 RED: pending
-- [ ] 2.2 GREEN: pending
-- [ ] 2.3 REFACTOR: pending
+- [x] 2.1 RED: pending
+- [x] 2.2 GREEN: pending
+- [x] 2.3 REFACTOR: pending
 
 ## Slice 3: [Pending] - Iterator raises StopIteration on subprocess EOF
 <!-- Test details and tasks will be planned after Slice 2 is complete -->
-- [ ] 3.1 RED: pending
-- [ ] 3.2 GREEN: pending
-- [ ] 3.3 REFACTOR: pending
+- [x] 3.1 RED: pending
+- [x] 3.2 GREEN: pending
+- [x] 3.3 REFACTOR: pending
 
 ## Slice 4: [Pending] - close() terminates the subprocess and is idempotent
 <!-- Test details and tasks will be planned after Slice 3 is complete -->
-- [ ] 4.1 RED: pending
-- [ ] 4.2 GREEN: pending
-- [ ] 4.3 REFACTOR: pending
+- [x] 4.1 RED: pending
+- [x] 4.2 GREEN: pending
+- [x] 4.3 REFACTOR: pending
 
 ## Slice 5: LxdMonitor uses the injected CommandExecutor with the canonical command and kwargs
 
@@ -54,14 +54,14 @@ Slice 1's tracer bullet proves the iterator yields matching events when given a 
   - Its command equals `["lxc", "monitor", "--project=workshop", "--type=lifecycle", "--format=json"]`.
   - Its kwargs include `stdout=PIPE`, `text=True`, `bufsize=1`.
 
-- [ ] 5.1 RED: test_lxd_monitor_uses_injected_command_executor_with_expected_command
-- [ ] 5.2 GREEN: confirm Slice 1's GREEN implementation already satisfies the assertions; if a kwargs name is wrong, fix the call site in `__iter__`.
-- [ ] 5.3 REFACTOR: no further changes; this slice is a contract check, not new code.
+- [x] 5.1 RED: test_lxd_monitor_uses_injected_command_executor_with_expected_command
+- [x] 5.2 GREEN: confirm Slice 1's GREEN implementation already satisfies the assertions; if a kwargs name is wrong, fix the call site in `__iter__`.
+- [x] 5.3 REFACTOR: no further changes; this slice is a contract check, not new code.
 
 
 ## Slice 6: [Pending] - LxdMonitor is a context manager that calls close() on exit
 Component-level (small): `__enter__` returns `self`; `__exit__` calls `self.close()`. Slice end-to-end: `with LxdMonitor(...) as monitor: for event in monitor: ...` terminates the subprocess when the block exits (normally or via exception).
 <!-- Test details and tasks will be planned after Slice 5 is complete -->
-- [ ] 6.1 RED: pending
-- [ ] 6.2 GREEN: pending
-- [ ] 6.3 REFACTOR: pending
+- [x] 6.1 RED: pending
+- [x] 6.2 GREEN: pending
+- [x] 6.3 REFACTOR: pending
