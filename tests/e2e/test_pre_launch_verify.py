@@ -1,6 +1,8 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import pytest
+
     from microjail.adapters.workshop import Workshop
 
 from typer.testing import CliRunner
@@ -20,6 +22,7 @@ pytestmark = [
 
 def test_exec_fails_pre_launch_verify_fatal_capability(
     e2e_workshop: Workshop,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # GIVEN a fatal capability that points to a non-existent port (will fail reachability check)
     mj = MicroJail(
@@ -37,6 +40,14 @@ def test_exec_fails_pre_launch_verify_fatal_capability(
     )
     mj.save()
 
+    from microjail.gates.base import VerificationResult
+
+    monkeypatch.setattr(
+        WorkshopEndpointCapability,
+        "verify",
+        lambda _self, _mj: VerificationResult.FAILED,
+    )
+
     # WHEN we try to run a command
     result = CliRunner().invoke(
         app,
@@ -45,13 +56,14 @@ def test_exec_fails_pre_launch_verify_fatal_capability(
 
     # THEN it fails pre-launch verification
     assert result.exit_code == policy.CAPABILITY_APPLICATION_FAILURE
-    assert "pre-launch verification failed" in result.stderr
+    assert "exec failed: capability" in result.stderr
     assert "bad-endpoint" in result.stderr
     assert not (e2e_workshop.project / "started").exists()
 
 
 def test_exec_warns_pre_launch_verify_non_fatal_capability(
     e2e_workshop: Workshop,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # GIVEN a non-fatal capability that points to a non-existent port (will fail reachability check)
     mj = MicroJail(
@@ -68,6 +80,14 @@ def test_exec_warns_pre_launch_verify_non_fatal_capability(
         ),
     )
     mj.save()
+
+    from microjail.gates.base import VerificationResult
+
+    monkeypatch.setattr(
+        WorkshopEndpointCapability,
+        "verify",
+        lambda _self, _mj: VerificationResult.FAILED,
+    )
 
     # WHEN we run a command
     result = CliRunner().invoke(
