@@ -153,6 +153,7 @@ class ValidateError:
 @dataclass(frozen=True)
 class PreLaunchVerifyResult:
     non_fatal_capability_failures: tuple[str, ...]
+    unsupported_verifications: tuple[str, ...] = ()
 
 
 @dataclass
@@ -522,23 +523,47 @@ class MicroJail:
 
     def pre_launch_verify(self) -> PreLaunchVerifyResult:
         """Perform behavioral verification of all gates and capabilities."""
+        from microjail.gates.base import VerificationResult
+
+        def _to_result(res: object) -> VerificationResult:
+            from typing import cast
+
+            if res is True:
+                return VerificationResult.VERIFIED
+            if res is False:
+                return VerificationResult.FAILED
+            return cast("VerificationResult", res)
+
+        unsupported_verifications: list[str] = []
+
         for gate in self.lockdown.gates:
-            if not gate.verify(self):
-                raise GateError(name=gate.name)
+            res = _to_result(gate.verify(self))
+            if res == VerificationResult.FAILED:
+                raise GateError(
+                    name=gate.name,
+                    unsupported_verifications=tuple(unsupported_verifications),
+                )
+            elif res == VerificationResult.UNSUPPORTED:
+                unsupported_verifications.append(gate.name)
 
         non_fatal_failures: list[str] = []
         for cap in self.lockdown.caps:
-            if not cap.verify(self):
+            res = _to_result(cap.verify(self))
+            if res == VerificationResult.FAILED:
                 if getattr(cap, "fatal", False):
                     raise CapabilityError(
                         name=cap.name,
                         non_fatal_failures=tuple(non_fatal_failures),
+                        unsupported_verifications=tuple(unsupported_verifications),
                     )
                 else:
                     non_fatal_failures.append(cap.name)
+            elif res == VerificationResult.UNSUPPORTED:
+                unsupported_verifications.append(cap.name)
 
         return PreLaunchVerifyResult(
-            non_fatal_capability_failures=tuple(non_fatal_failures)
+            non_fatal_capability_failures=tuple(non_fatal_failures),
+            unsupported_verifications=tuple(unsupported_verifications),
         )
 
     def save(self) -> None:

@@ -99,5 +99,7 @@ def test_check_returns_false_when_container_is_not_available() -> None:
 
 
 def test_readonly_config_verify() -> None:
+    from microjail.gates.base import VerificationResult
+
     mock_mj = Mock(spec=MicroJail)
-    assert gate().verify(mock_mj) is True
+    assert gate().verify(mock_mj) == VerificationResult.UNSUPPORTED

@@ -182,6 +182,8 @@ def test_network_drop_check_and_verify() -> None:
     mock_mj.lxc_instance.side_effect = Exception("LXC connection failed")
     assert gate().check(mock_mj) is False
 
-    # Case 4: verify returns True unconditionally
+    # Case 4: verify returns UNSUPPORTED unconditionally
+    from microjail.gates.base import VerificationResult
+
     mock_mj = Mock(spec=MicroJail)
-    assert gate().verify(mock_mj) is True
+    assert gate().verify(mock_mj) == VerificationResult.UNSUPPORTED

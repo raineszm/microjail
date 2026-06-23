@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from microjail.adapters.workshop import Workshop
 from microjail.cli import app
+from microjail.gates.base import VerificationResult
 from microjail.lockdown import Lockdown
 from microjail.microjail import MicroJail
 
@@ -57,10 +58,10 @@ class RecordingCapability:
         del microjail, batch
         self.calls.append("revoke")
 
-    def verify(self, microjail: MicroJail) -> bool:
+    def verify(self, microjail: MicroJail) -> VerificationResult:
         del microjail
         self.calls.append("verify")
-        return True
+        return VerificationResult.VERIFIED
 
 
 class RecordingGate:
@@ -84,10 +85,10 @@ class RecordingGate:
         del microjail
         self.calls.append("release")
 
-    def verify(self, microjail: MicroJail) -> bool:
+    def verify(self, microjail: MicroJail) -> VerificationResult:
         del microjail
         self.calls.append("verify")
-        return True
+        return VerificationResult.VERIFIED
 
 
 def completed_process(returncode: int = 0) -> Any:

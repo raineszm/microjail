@@ -153,29 +153,31 @@ def test_endpoint_capability_check_and_verify(
     mock_tunnel.connections.return_value = []
     assert cap.check(tmp_microjail) is False
 
-    # Case 3: verify returns True when endpoint is reachable and tunnel is connected
+    # Case 3: verify returns VERIFIED when endpoint is reachable and tunnel is connected
+    from microjail.gates.base import VerificationResult
+
     mock_tunnel.connections.return_value = [
         ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
     ]
     mock_tunnel.endpoint_reachable.return_value = True
-    assert cap.verify(tmp_microjail) is True
+    assert cap.verify(tmp_microjail) == VerificationResult.VERIFIED
     mock_tunnel.endpoint_reachable.assert_called_once_with("127.0.0.1", "8080")
 
-    # Case 4: verify returns False when endpoint is unreachable
+    # Case 4: verify returns FAILED when endpoint is unreachable
     mock_tunnel.endpoint_reachable.reset_mock()
     mock_tunnel.endpoint_reachable.return_value = False
-    assert cap.verify(tmp_microjail) is False
+    assert cap.verify(tmp_microjail) == VerificationResult.FAILED
 
-    # Case 5: verify returns False when tunnel is not connected
+    # Case 5: verify returns FAILED when tunnel is not connected
     mock_tunnel.connections.return_value = []
-    assert cap.verify(tmp_microjail) is False
+    assert cap.verify(tmp_microjail) == VerificationResult.FAILED
 
-    # Case 6: verify returns False when reachability probe fails or times out
+    # Case 6: verify returns FAILED when reachability probe fails or times out
     mock_tunnel.connections.return_value = [
         ("mj-workshop/microjail:inference", "mj-workshop/system:inference"),
     ]
     mock_tunnel.endpoint_reachable.side_effect = Exception("probe failed")
-    assert cap.verify(tmp_microjail) is False
+    assert cap.verify(tmp_microjail) == VerificationResult.FAILED
 
     # Case 7: verify probes container_endpoint when set
     cap_remapped = WorkshopEndpointCapability(
@@ -189,5 +191,5 @@ def test_endpoint_capability_check_and_verify(
     mock_tunnel.endpoint_reachable.reset_mock()
     mock_tunnel.endpoint_reachable.side_effect = None
     mock_tunnel.endpoint_reachable.return_value = True
-    assert cap_remapped.verify(tmp_microjail) is True
+    assert cap_remapped.verify(tmp_microjail) == VerificationResult.VERIFIED
     mock_tunnel.endpoint_reachable.assert_called_once_with("10.0.0.1", "9090")

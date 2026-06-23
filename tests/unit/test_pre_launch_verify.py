@@ -104,3 +104,56 @@ def test_pre_launch_verify_fatal_retains_preceding_non_fatal_failures() -> None:
         MicroJail.pre_launch_verify(mj)
     assert exc_info.value.name == "cap-fatal"
     assert exc_info.value.non_fatal_failures == ("cap-warn",)
+
+
+def test_pre_launch_verify_ternary_results() -> None:
+    from microjail.gates.base import VerificationResult
+
+    # GIVEN a lockdown with unsupported verification gates/caps and verified ones
+    gate1 = Mock(spec=Gate)
+    gate1.name = "gate-unsupported"
+    gate1.verify.return_value = VerificationResult.UNSUPPORTED
+
+    cap1 = Mock(spec=Capability)
+    cap1.name = "cap-unsupported"
+    cap1.verify.return_value = VerificationResult.UNSUPPORTED
+    cap1.fatal = False
+
+    cap2 = Mock(spec=Capability)
+    cap2.name = "cap-verified"
+    cap2.verify.return_value = VerificationResult.VERIFIED
+    cap2.fatal = False
+
+    mj = Mock(spec=MicroJail)
+    mj.lockdown = Lockdown(caps=[cap1, cap2], gates=[gate1])
+
+    # WHEN pre_launch_verify is called
+    result = MicroJail.pre_launch_verify(mj)
+
+    # THEN it succeeds and records the unsupported ones in unsupported_verifications
+    assert result.non_fatal_capability_failures == ()
+    assert result.unsupported_verifications == ("gate-unsupported", "cap-unsupported")
+
+
+def test_pre_launch_verify_fatal_retains_preceding_unsupported_verifications() -> None:
+    from microjail.gates.base import VerificationResult
+
+    # GIVEN an unsupported verification preceding a fatal capability failure
+    gate1 = Mock(spec=Gate)
+    gate1.name = "gate-unsupported"
+    gate1.verify.return_value = VerificationResult.UNSUPPORTED
+
+    cap1 = Mock(spec=Capability)
+    cap1.name = "cap-fatal"
+    cap1.verify.return_value = VerificationResult.FAILED
+    cap1.fatal = True
+
+    mj = Mock(spec=MicroJail)
+    mj.lockdown = Lockdown(caps=[cap1], gates=[gate1])
+
+    # WHEN pre_launch_verify is called
+    # THEN the raised CapabilityError carries the preceding unsupported verifications
+    with pytest.raises(CapabilityError) as exc_info:
+        MicroJail.pre_launch_verify(mj)
+    assert exc_info.value.name == "cap-fatal"
+    assert exc_info.value.unsupported_verifications == ("gate-unsupported",)

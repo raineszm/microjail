@@ -175,6 +175,8 @@ def test_check_returns_false_when_no_connection(tmp_path: Path) -> None:
 def test_check_and_verify_behavior_on_reachability(
     tmp_path: Path,
 ) -> None:
+    from microjail.gates.base import VerificationResult
+
     microjail = make_microjail(tmp_path)
     tunnel = tunnel_of(microjail)
     tunnel.reachable = True
@@ -183,4 +185,4 @@ def test_check_and_verify_behavior_on_reachability(
     tunnel.reachable = False
 
     assert cap.check(microjail) is True
-    assert cap.verify(microjail) is False
+    assert cap.verify(microjail) == VerificationResult.FAILED

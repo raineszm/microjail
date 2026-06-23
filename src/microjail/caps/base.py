@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from microjail.gates.base import VerificationResult  # noqa: TC001
+
 if TYPE_CHECKING:
     from microjail.adapters.workshop import TunnelBatch
     from microjail.microjail import MicroJail
@@ -32,4 +34,4 @@ class Capability(Protocol):
         self, microjail: MicroJail, batch: TunnelBatch | None = None
     ) -> None: ...
 
-    def verify(self, microjail: MicroJail) -> bool: ...
+    def verify(self, microjail: MicroJail) -> VerificationResult: ...

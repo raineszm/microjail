@@ -156,3 +156,13 @@ def test_lock_pre_launch_verify_integration(
     assert result.exit_code == 0
     assert "warning: warn-cap-only" in result.stderr
     assert "lock applied" in result.stdout
+
+    # Case 4: Success with unsupported verification note
+    mock_verify.return_value = PreLaunchVerifyResult(
+        non_fatal_capability_failures=(),
+        unsupported_verifications=("some-gate-unsupported",),
+    )
+    result = CliRunner().invoke(app, ["lock"])
+    assert result.exit_code == 0
+    assert "Note: Verification not supported for some-gate-unsupported" in result.stdout
+    assert "lock applied" in result.stdout

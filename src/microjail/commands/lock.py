@@ -39,18 +39,24 @@ def report_rollback_failures(command: str, result) -> None:
 def ensure_lockdown(microjail: MicroJail) -> None:
     result = microjail.ensure(ApplicationIntent.RUN)
     if result.status is ApplicationStatus.SUCCESS:
-        from microjail.commands._output import warning
+        from microjail.commands._output import info, warning
         from microjail.lockdown import CapabilityError, GateError
 
         try:
             verify_res = microjail.pre_launch_verify()
+            for unsupported in verify_res.unsupported_verifications:
+                info(f"Note: Verification not supported for {unsupported}")
             for warning_cap in verify_res.non_fatal_capability_failures:
                 warning(warning_cap)
             return
         except GateError as exc:
+            for unsupported in exc.unsupported_verifications:
+                info(f"Note: Verification not supported for {unsupported}")
             error(f"exec failed: gate {exc.name} failed")
             raise typer.Exit(policy.GATE_APPLICATION_FAILURE) from exc
         except CapabilityError as exc:
+            for unsupported in exc.unsupported_verifications:
+                info(f"Note: Verification not supported for {unsupported}")
             for warning_cap in exc.non_fatal_failures:
                 warning(warning_cap)
             error(f"exec failed: capability {exc.name} failed")
@@ -97,17 +103,23 @@ def lock(ctx: typer.Context) -> None:
         )
         raise typer.Exit(policy.CAPABILITY_APPLICATION_FAILURE)
 
-    from microjail.commands._output import warning
+    from microjail.commands._output import info, warning
     from microjail.lockdown import CapabilityError, GateError
 
     try:
         verify_res = microjail.pre_launch_verify()
+        for unsupported in verify_res.unsupported_verifications:
+            info(f"Note: Verification not supported for {unsupported}")
         for warning_cap in verify_res.non_fatal_capability_failures:
             warning(warning_cap)
     except GateError as exc:
+        for unsupported in exc.unsupported_verifications:
+            info(f"Note: Verification not supported for {unsupported}")
         error(f"lock failed: gate {exc.name} failed")
         raise typer.Exit(policy.GATE_APPLICATION_FAILURE) from exc
     except CapabilityError as exc:
+        for unsupported in exc.unsupported_verifications:
+            info(f"Note: Verification not supported for {unsupported}")
         for warning_cap in exc.non_fatal_failures:
             warning(warning_cap)
         error(f"lock failed: capability {exc.name} failed")

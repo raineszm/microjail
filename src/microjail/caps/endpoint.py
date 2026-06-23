@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING
 
 import msgspec
 
+from microjail.gates.base import VerificationResult
+
 if TYPE_CHECKING:
     from microjail.adapters.workshop import TunnelBatch
     from microjail.microjail import MicroJail
@@ -82,7 +84,7 @@ class WorkshopEndpointCapability(
         except Exception:
             return False
 
-    def verify(self, microjail: MicroJail) -> bool:
+    def verify(self, microjail: MicroJail) -> VerificationResult:
         try:
             t = microjail.workshop.tunnel
             rows = t.connections()
@@ -90,11 +92,14 @@ class WorkshopEndpointCapability(
                 f"{microjail.name}/microjail:{self.name}",
                 f"{microjail.name}/system:{self.name}",
             ) not in rows:
-                return False
+                return VerificationResult.FAILED
             host, port = self.resolved_endpoint.rsplit(":", 1)
-            return t.endpoint_reachable(host, port)
+            if t.endpoint_reachable(host, port):
+                return VerificationResult.VERIFIED
+            else:
+                return VerificationResult.FAILED
         except Exception:
-            return False
+            return VerificationResult.FAILED
 
     def provide(self, microjail: MicroJail, batch: TunnelBatch | None = None) -> None:
         if self.check(microjail):

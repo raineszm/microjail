@@ -1,7 +1,14 @@
+from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from microjail.microjail import MicroJail
+
+
+class VerificationResult(StrEnum):
+    VERIFIED = "verified"
+    FAILED = "failed"
+    UNSUPPORTED = "unsupported"
 
 
 @runtime_checkable
@@ -28,4 +35,4 @@ class Gate(Protocol):
 
     def release(self, microjail: MicroJail) -> None: ...
 
-    def verify(self, microjail: MicroJail) -> bool: ...
+    def verify(self, microjail: MicroJail) -> VerificationResult: ...

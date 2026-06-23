@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any
 import msgspec
 
 from microjail.adapters.lxc import LxcCommandError
+from microjail.gates.base import VerificationResult
 
 if TYPE_CHECKING:
     from microjail.microjail import MicroJail
@@ -28,9 +29,9 @@ class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
         nics = [k for k, v in instance.devices.items() if v.get("type") == "nic"]
         return len(nics) == 0
 
-    def verify(self, microjail: MicroJail) -> bool:  # noqa: ARG002
+    def verify(self, microjail: MicroJail) -> VerificationResult:  # noqa: ARG002
         """Perform behavioral verification of network drop (no-op)."""
-        return True
+        return VerificationResult.UNSUPPORTED
 
     def enforce(self, microjail: MicroJail) -> None:
         """Remove every network device from the workshop container."""

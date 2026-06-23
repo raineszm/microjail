@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 import msgspec
 
 from microjail.adapters.workshop import WorkshopNotLaunchedError
+from microjail.gates.base import VerificationResult
 
 if TYPE_CHECKING:
     from microjail.microjail import MicroJail
@@ -50,6 +51,6 @@ class ReadonlyConfig(msgspec.Struct, tag="readonly-config", tag_field="name"):
             microjail.remove_device(DEVICE_NAME)
         self.removed = False
 
-    def verify(self, microjail: MicroJail) -> bool:  # noqa: ARG002
+    def verify(self, microjail: MicroJail) -> VerificationResult:  # noqa: ARG002
         """Perform behavioral verification of readonly config (no-op)."""
-        return True
+        return VerificationResult.UNSUPPORTED

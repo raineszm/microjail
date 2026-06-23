@@ -16,6 +16,7 @@ class CapabilityError(MicrojailError):
 
     name: str
     non_fatal_failures: tuple[str, ...] = ()
+    unsupported_verifications: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class GateError(MicrojailError):
     """Raised when a gate could not be verified after enforcement."""
 
     name: str
+    unsupported_verifications: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
