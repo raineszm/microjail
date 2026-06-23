@@ -1,14 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: pre_launch_verify is invoked before any workload starts
-When a workload-bearing command (`lock`, `exec`, or `shell`) has applied the Lockdown via `ensure_lockdown`, the system SHALL invoke `MicroJail.pre_launch_verify()` before any workload process is created, and SHALL display any returned warnings to stderr via the CLI `warning()` helper.
+When a workload-bearing command (`lock`, `exec`, or `shell`) has applied the Lockdown via `ensure_lockdown`, the system SHALL invoke `MicroJail.pre_launch_verify()` before any workload process is created, SHALL display any returned warnings to stderr via the CLI `warning()` helper, and SHALL display any unsupported verifications to stdout via the CLI `info()` helper as `Note: Verification not supported for {name}`.
 
 #### Scenario: lock calls pre_launch_verify after ensure
 - **GIVEN** a `microjail lock` invocation on a project with an applied Lockdown
 - **WHEN** the lockdown application completes via `ensure_lockdown`
 - **THEN** `microjail.pre_launch_verify()` is called
-- **AND** the returned `PreLaunchVerifyResult.non_fatal_capability_failures` is iterated
-- **AND** each name is displayed to stderr via the CLI `warning()` helper
+- **AND** the returned `PreLaunchVerifyResult.non_fatal_capability_failures` is iterated and each name is displayed to stderr via the CLI `warning()` helper
+- **AND** the returned `PreLaunchVerifyResult.unsupported_verifications` is iterated and each name is displayed to stdout via the CLI `info()` helper
 
 #### Scenario: exec calls pre_launch_verify before popen
 - **GIVEN** a `microjail exec -- <command>` invocation
@@ -25,69 +25,68 @@ When a workload-bearing command (`lock`, `exec`, or `shell`) has applied the Loc
 - **AND** the interactive shell `subprocess.Popen` is created only after `pre_launch_verify()` returns without raising
 
 ### Requirement: Gate verify failure raises GateError
-If any Gate's `verify(microjail)` returns `False`, `pre_launch_verify()` SHALL raise `GateError` naming the failing gate, and SHALL NOT call `verify()` on the remaining gates.
+If any Gate's `verify(microjail)` returns `VerificationResult.FAILED` (or `False`), `pre_launch_verify()` SHALL raise `GateError` naming the failing gate, SHALL include the names of any preceding unsupported verifications in the `GateError.unsupported_verifications` field, and SHALL NOT call `verify()` on the remaining gates.
 
 #### Scenario: First gate verify failure raises GateError
-- **GIVEN** a Lockdown with at least one Gate whose `verify(microjail)` returns `False`
+- **GIVEN** a Lockdown with at least one Gate whose `verify(microjail)` returns `VerificationResult.FAILED`
 - **WHEN** `pre_launch_verify()` is called
 - **THEN** the method raises `GateError` with the failing gate's `name` attribute
 
 #### Scenario: Subsequent gates are not checked after first failure
-- **GIVEN** a Lockdown with three Gates, where the first gate's `verify(microjail)` returns `False` and the third gate's `verify(microjail)` would raise an exception if called
+- **GIVEN** a Lockdown with three Gates, where the first gate's `verify(microjail)` returns `VerificationResult.FAILED` and the third gate's `verify(microjail)` would raise an exception if called
 - **WHEN** `pre_launch_verify()` is called
 - **THEN** the method raises `GateError` for the first gate
 - **AND** the third gate's `verify()` is never called (no exception propagates from it)
 
 ### Requirement: Fatal capability verify failure raises CapabilityError
-If any capability marked `fatal=True` has its `verify(microjail)` return `False`, `pre_launch_verify()` SHALL raise `CapabilityError` naming the first such fatal capability, and SHALL include the names of any non-fatal capabilities whose `verify()` failed earlier in the same pass in the `CapabilityError.non_fatal_failures` field. The method SHALL NOT call `verify()` on the remaining capabilities after that point.
+If any capability marked `fatal=True` has its `verify(microjail)` return `VerificationResult.FAILED` (or `False`), `pre_launch_verify()` SHALL raise `CapabilityError` naming the first such fatal capability, SHALL include the names of any non-fatal capabilities whose `verify()` failed earlier in the same pass in the `CapabilityError.non_fatal_failures` field, and SHALL include the names of any preceding unsupported verifications in the `CapabilityError.unsupported_verifications` field. The method SHALL NOT call `verify()` on the remaining capabilities after that point.
 
 #### Scenario: First fatal capability verify failure raises CapabilityError
-- **GIVEN** a Lockdown with a capability marked `fatal=True` whose `verify(microjail)` returns `False`
+- **GIVEN** a Lockdown with a capability marked `fatal=True` whose `verify(microjail)` returns `VerificationResult.FAILED`
 - **WHEN** `pre_launch_verify()` is called
 - **THEN** the method raises `CapabilityError` with the failing capability's `name` attribute
 
 #### Scenario: Subsequent capabilities are not checked after first fatal failure
-- **GIVEN** a Lockdown with three capabilities, where the first is marked `fatal=True` and its `verify(microjail)` returns `False`, and the third is also marked `fatal=True`
+- **GIVEN** a Lockdown with three capabilities, where the first is marked `fatal=True` and its `verify(microjail)` returns `VerificationResult.FAILED`, and the third is also marked `fatal=True`
 - **WHEN** `pre_launch_verify()` is called
 - **THEN** the method raises `CapabilityError` for the first capability
 - **AND** the third capability's `verify()` is never called
 
 ### Requirement: Non-fatal capability verify failures are collected
-If a capability marked `fatal=False` has its `verify(microjail)` return `False`, `pre_launch_verify()` SHALL record the capability's `name` in the result and SHALL continue checking remaining capabilities.
+If a capability marked `fatal=False` has its `verify(microjail)` return `VerificationResult.FAILED` (or `False`), `pre_launch_verify()` SHALL record the capability's `name` in the result and SHALL continue checking remaining capabilities.
 
 #### Scenario: Single non-fatal failure is recorded
-- **GIVEN** a Lockdown with one non-fatal capability whose `verify(microjail)` returns `False`
+- **GIVEN** a Lockdown with one non-fatal capability whose `verify(microjail)` returns `VerificationResult.FAILED`
 - **AND** all other gates and capabilities pass `verify()`
 - **WHEN** `pre_launch_verify()` is called
 - **THEN** the returned result's `non_fatal_capability_failures` contains exactly the failing capability's name
 - **AND** the method does not raise
 
 #### Scenario: Multiple non-fatal failures are all collected
-- **GIVEN** a Lockdown with three non-fatal capabilities whose `verify(microjail)` all return `False`
+- **GIVEN** a Lockdown with three non-fatal capabilities whose `verify(microjail)` all return `VerificationResult.FAILED`
 - **WHEN** `pre_launch_verify()` is called
 - **THEN** the returned result's `non_fatal_capability_failures` contains all three capability names in the order they were checked
 - **AND** the method does not raise
 
 ### Requirement: CapabilityError carries the non-fatal failures collected before a fatal failure
-`CapabilityError` SHALL expose a `non_fatal_failures` field (a tuple of capability names) that lists the non-fatal capabilities whose `verify()` failed earlier in the same `pre_launch_verify()` pass. The field is empty when no non-fatal failures preceded the fatal one. This allows the CLI to surface the earlier non-fatal failures as warnings alongside the fatal one.
+`CapabilityError` SHALL expose a `non_fatal_failures` field (a tuple of capability names) and an `unsupported_verifications` field (a tuple of capability names) that list the preceding failures and unsupported checks. This allows the CLI to surface them alongside the fatal one.
 
 #### Scenario: non_fatal_failures is empty when the fatal capability is the first failure
-- **GIVEN** a Lockdown with a single fatal capability whose `verify(microjail)` returns `False`
-- **AND** no other capabilities precede it
+- **GIVEN** a Lockdown with a single fatal capability whose `verify(microjail)` returns `VerificationResult.FAILED`
 - **WHEN** `pre_launch_verify()` is called and the `CapabilityError` is caught
 - **THEN** the exception's `non_fatal_failures` field is an empty tuple
 
 #### Scenario: non_fatal_failures contains the names of all preceding non-fatal failures
-- **GIVEN** a Lockdown with two non-fatal capabilities whose `verify(microjail)` returns `False`
-- **AND** a later fatal capability whose `verify(microjail)` returns `False`
+- **GIVEN** a Lockdown with two non-fatal capabilities whose `verify(microjail)` returns `VerificationResult.FAILED`
+- **AND** a later fatal capability whose `verify(microjail)` returns `VerificationResult.FAILED`
 - **WHEN** `pre_launch_verify()` is called and the `CapabilityError` is caught
 - **THEN** the exception's `non_fatal_failures` field contains both non-fatal capability names in the order they were checked
 
-### Requirement: PreLaunchVerifyResult carries the warnings
-`MicroJail.pre_launch_verify()` SHALL return a `PreLaunchVerifyResult` whose `non_fatal_capability_failures` field is a tuple of capability names. On full success, the tuple is empty.
+### Requirement: PreLaunchVerifyResult carries the warnings and unsupported notes
+`MicroJail.pre_launch_verify()` SHALL return a `PreLaunchVerifyResult` whose `non_fatal_capability_failures` field is a tuple of capability names, and whose `unsupported_verifications` field is a tuple of gate and capability names. On full success, both tuples are empty.
 
 #### Scenario: Result has empty tuple on full success
-- **GIVEN** a Lockdown where every gate and every capability passes `verify()`
+- **GIVEN** a Lockdown where every gate and every capability passes `verify()` (returns `VerificationResult.VERIFIED`)
 - **WHEN** `pre_launch_verify()` is called
 - **THEN** the returned result is a `PreLaunchVerifyResult` with `non_fatal_capability_failures == ()`
 

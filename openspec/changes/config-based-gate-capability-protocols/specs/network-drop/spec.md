@@ -18,9 +18,9 @@
 - **WHEN** `NetworkDrop.check(microjail)` is called
 - **THEN** the return value is `False` and no exception is raised
 
-### Requirement: verify returns True since the gate has no behavioral probe
-`NetworkDrop.verify(microjail)` MUST return `True` unconditionally. The gate's enforcement (NIC removal) is verified at the config level by `check()` and is not subject to a behavioral probe. The method is required by the `Gate` protocol so that `pre_launch_verify` can iterate all gates uniformly; for this gate, the probe is a no-op.
+### Requirement: verify returns UNSUPPORTED since the gate has no behavioral probe
+`NetworkDrop.verify(microjail)` MUST return `VerificationResult.UNSUPPORTED` unconditionally. The gate's enforcement (NIC removal) is verified at the config level by `check()` and is not subject to a behavioral probe. The method is required by the `Gate` protocol so that `pre_launch_verify` can iterate all gates uniformly; for this gate, the probe is a no-op.
 
-#### Scenario: verify returns True unconditionally
+#### Scenario: verify returns UNSUPPORTED unconditionally
 - **WHEN** `NetworkDrop.verify(microjail)` is called
-- **THEN** the return value is `True` and no exception is raised
+- **THEN** the return value is `VerificationResult.UNSUPPORTED` and no exception is raised

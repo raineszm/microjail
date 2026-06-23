@@ -38,24 +38,24 @@ This is expected: outgoing tunnel connections are not durable across refreshes. 
 ## ADDED Requirements
 
 ### Requirement: verify reflects reachability state
-`WorkshopEndpointCapability.verify(microjail)` MUST return `True` if and only if a TCP connection to the resolved endpoint (`container_endpoint` if set, otherwise `host_endpoint`) succeeds from inside the workshop container. If the TCP connection fails, times out, or raises any exception (including `subprocess.CalledProcessError`, `subprocess.TimeoutExpired`, `ValueError`), `verify()` MUST return `False` rather than propagating the exception.
+`WorkshopEndpointCapability.verify(microjail)` MUST return `VerificationResult.VERIFIED` if a TCP connection to the resolved endpoint (`container_endpoint` if set, otherwise `host_endpoint`) succeeds from inside the workshop container. If the TCP connection fails, times out, or raises any exception (including `subprocess.CalledProcessError`, `subprocess.TimeoutExpired`, `ValueError`), `verify()` MUST return `VerificationResult.FAILED` rather than propagating the exception.
 
-#### Scenario: verify returns True when endpoint is reachable
+#### Scenario: verify returns VERIFIED when endpoint is reachable
 - **WHEN** the host service at the resolved endpoint is reachable
 - **AND** `WorkshopEndpointCapability.verify(microjail)` is called
-- **THEN** the return value is `True`
+- **THEN** the return value is `VerificationResult.VERIFIED`
 
-#### Scenario: verify returns False when endpoint is unreachable
+#### Scenario: verify returns FAILED when endpoint is unreachable
 - **WHEN** the host service at the resolved endpoint is not reachable (e.g. the upstream process has crashed or the port is closed)
 - **AND** `WorkshopEndpointCapability.verify(microjail)` is called
-- **THEN** the return value is `False`
+- **THEN** the return value is `VerificationResult.FAILED`
 
-#### Scenario: verify returns False when tunnel is not connected
+#### Scenario: verify returns FAILED when tunnel is not connected
 - **WHEN** the tunnel connection is not present in `workshop connections`
 - **AND** `WorkshopEndpointCapability.verify(microjail)` is called
-- **THEN** the return value is `False`
+- **THEN** the return value is `VerificationResult.FAILED`
 
 #### Scenario: verify does not propagate subprocess errors
 - **WHEN** the underlying reachability probe raises `subprocess.CalledProcessError` or `subprocess.TimeoutExpired`
 - **AND** `WorkshopEndpointCapability.verify(microjail)` is called
-- **THEN** the return value is `False` and no exception is raised
+- **THEN** the return value is `VerificationResult.FAILED` and no exception is raised
