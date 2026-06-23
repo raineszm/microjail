@@ -1,8 +1,10 @@
+import subprocess
 from typing import TYPE_CHECKING, Any
 
 import msgspec
 
 from microjail.adapters.lxc import LxcCommandError
+from microjail.adapters.workshop import WorkshopNotLaunchedError
 from microjail.gates.base import VerificationResult
 
 if TYPE_CHECKING:
@@ -24,7 +26,8 @@ class NetworkDrop(msgspec.Struct, tag="network-egress", tag_field="name"):
         """Return true when egress from inside the workshop is blocked."""
         try:
             instance = microjail.lxc_instance()
-        except Exception:
+        except WorkshopNotLaunchedError, subprocess.CalledProcessError, OSError:
+            # Workshop not launched, container unavailable, lxc binary missing, or LXD query failed
             return False
         nics = [k for k, v in instance.devices.items() if v.get("type") == "nic"]
         return len(nics) == 0

@@ -157,3 +157,28 @@ def test_pre_launch_verify_fatal_retains_preceding_unsupported_verifications() -
         MicroJail.pre_launch_verify(mj)
     assert exc_info.value.name == "cap-fatal"
     assert exc_info.value.unsupported_verifications == ("gate-unsupported",)
+
+
+def test_pre_launch_verify_gate_failure_carries_preceding_unsupported_verifications() -> (
+    None
+):
+    from microjail.gates.base import VerificationResult
+
+    # GIVEN a gate returning UNSUPPORTED, followed by a different gate returning FAILED
+    gate1 = Mock(spec=Gate)
+    gate1.name = "gate-unsupported"
+    gate1.verify.return_value = VerificationResult.UNSUPPORTED
+
+    gate2 = Mock(spec=Gate)
+    gate2.name = "gate-failed"
+    gate2.verify.return_value = VerificationResult.FAILED
+
+    mj = Mock(spec=MicroJail)
+    mj.lockdown = Lockdown(caps=[], gates=[gate1, gate2])
+
+    # WHEN pre_launch_verify is called
+    # THEN the raised GateError carries the preceding unsupported verifications
+    with pytest.raises(GateError) as exc_info:
+        MicroJail.pre_launch_verify(mj)
+    assert exc_info.value.name == "gate-failed"
+    assert exc_info.value.unsupported_verifications == ("gate-unsupported",)

@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -179,7 +180,9 @@ def test_network_drop_check_and_verify() -> None:
 
     # Case 3: check returns False when container is not available
     mock_mj = Mock(spec=MicroJail)
-    mock_mj.lxc_instance.side_effect = Exception("LXC connection failed")
+    mock_mj.lxc_instance.side_effect = subprocess.CalledProcessError(
+        returncode=1, cmd=["lxc", "query"], stderr="instance not found"
+    )
     assert gate().check(mock_mj) is False
 
     # Case 4: verify returns UNSUPPORTED unconditionally

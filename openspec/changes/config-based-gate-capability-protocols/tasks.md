@@ -4,7 +4,7 @@
 - **Test**: test_readonly_config_verify in tests/unit/test_readonly_config.py
 - **Arrange**: Instantiate a `ReadonlyConfig` gate and create a mock `MicroJail` instance.
 - **Act**: Call `gate.verify(microjail)`.
-- **Assert**: Assert that the return value is `True` and no exception is raised.
+- **Assert**: Assert that the return value is `VerificationResult.UNSUPPORTED` and no exception is raised.
 
 - [ ] 1.1 RED: test_readonly_config_verify
 - [ ] 1.2 GREEN: Add verify method to Gate and Capability protocols, and implement verify in ReadonlyConfig
@@ -14,7 +14,7 @@
 - **Test**: test_network_drop_check_and_verify in tests/unit/test_network_drop.py
 - **Arrange**: Instantiate a `NetworkDrop` gate and mock `MicroJail`.
 - **Act**: Call `gate.check(microjail)` and `gate.verify(microjail)` under various mock `lxc_instance()` responses.
-- **Assert**: Assert that `check()` returns `True` when no NICs are present, `False` when NICs are present, `False` when container is missing, and `verify()` returns `True` unconditionally.
+- **Assert**: Assert that `check()` returns `True` when no NICs are present, `False` when NICs are present, `False` when container is missing, and `verify()` returns `VerificationResult.UNSUPPORTED` unconditionally.
 
 - [ ] 2.1 RED: test_network_drop_check_and_verify
 - [ ] 2.2 GREEN: Implement config-only check() and verify() on NetworkDrop

@@ -26,9 +26,9 @@ To address this, we need to split configuration checks from behavioral verificat
 - **Rationale**: To verify network isolation without executing probes inside the container, we query the container's devices. Calling `microjail.lxc_instance().devices` uses the `lxc query` subprocess under the hood, adhering to the constraint of using the `lxc` client.
 - **Alternatives Considered**: Direct WebSocket or REST API connection to LXD daemon. This was rejected to avoid adding raw socket or cert management dependencies, and to leverage existing helper methods.
 
-### Decision 2: Return `True` unconditionally for gates/capabilities that do not have behavioral verification
-- **Rationale**: Gates like `ReadonlyConfig` and `NetworkDrop` have their primary enforcement checked by `check()`. To allow uniform iteration in `pre_launch_verify()`, they implement `verify()` returning `True`.
-- **Alternatives Considered**: Optional `verify()` method or checking attributes. Rejected because protocol consistency simplifies iteration logic and avoids `hasattr` checks.
+### Decision 2: Return `VerificationResult.UNSUPPORTED` for gates/capabilities that have no behavioral probe
+- **Rationale**: Gates like `ReadonlyConfig` and `NetworkDrop` have their primary enforcement checked by `check()`. To allow uniform iteration in `pre_launch_verify()`, they implement `verify()` returning `VerificationResult.UNSUPPORTED`. This distinguishes them from gates that did perform a behavioral probe and reported `VERIFIED` or `FAILED`, and lets the CLI surface them as a "Note: Verification not supported for {name}" line on stdout.
+- **Alternatives Considered**: Returning `True` (would be indistinguishable from a real pass) or omitting the method (would force `hasattr` checks in iteration logic). Rejected: protocol consistency plus the three-valued `VerificationResult` enum (`VERIFIED` / `FAILED` / `UNSUPPORTED`) gives both uniform iteration and honest reporting.
 
 ### Decision 3: Run `pre_launch_verify` at launch-time only
 - **Rationale**: Behavioral probes (such as TCP connection checks) are relatively slow and resource-intensive. Running them on a periodic loop wastes CPU. Running them at launch-time guarantees that everything is fully functional when the workload starts.

@@ -1,15 +1,15 @@
 ## ADDED Requirements
 
-### Requirement: check reflects NIC presence in expanded devices
-`NetworkDrop.check(microjail)` MUST return `True` if and only if the workshop container's `expanded_devices` contains no entries of `type: nic`. The check is a config-state check only; it does not perform a behavioral probe. `check()` MUST return `False` (not raise) when the container is unavailable or the LXD query fails.
+### Requirement: check reflects NIC presence in the workshop container's devices
+`NetworkDrop.check(microjail)` MUST return `True` if and only if the `InstanceInfo.devices` returned by `microjail.lxc_instance()` contains no entries of `type: nic`. (`InstanceInfo.devices` is populated from the LXD `expanded_devices` key; the requirement is stated in terms of the Python attribute the implementation actually consults.) The check is a config-state check only; it does not perform a behavioral probe. `check()` MUST return `False` (not raise) when the container is unavailable or the LXD query fails.
 
 #### Scenario: check returns True when no NICs are present
-- **GIVEN** the workshop container is running with no network devices in its `expanded_devices`
+- **GIVEN** the workshop container is running with no network devices in its `devices`
 - **WHEN** `NetworkDrop.check(microjail)` is called
 - **THEN** the return value is `True`
 
 #### Scenario: check returns False when a NIC is present
-- **GIVEN** the workshop container has a device of `type: nic` in its `expanded_devices`
+- **GIVEN** the workshop container has a device of `type: nic` in its `devices`
 - **WHEN** `NetworkDrop.check(microjail)` is called
 - **THEN** the return value is `False`
 
