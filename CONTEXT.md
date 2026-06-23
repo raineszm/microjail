@@ -57,11 +57,11 @@ A failure to establish or verify a restriction that a Lockdown declared must hol
 _Avoid_: capability failure, runtime violation
 
 **Capability policy violation**:
-Runtime loss of functionality or access that a Lockdown declared should remain available to the workload, including failure to verify that the functionality or access still exists. Capability policy violations are fatal because the workload is operating outside its declared capability bounds.
-_Avoid_: gate violation, setup failure
+A launch-time failure to verify that a declared Capability's behavioral probe succeeds. Under the event-driven Warden, capabilities are checked once at launch via `pre_launch_verify()` — they are not monitored at runtime. Fatal capability verify failures block workload launch; non-fatal failures are collected as warnings and displayed to the user.
+_Avoid_: gate violation, setup failure, runtime capability failure
 
 **Gate policy violation**:
-Runtime loss of a restriction that a Lockdown declared must hold for the workload, including failure to verify that the restriction still holds. Gate policy violations are fatal because they can expose access that should be denied.
+Runtime loss of a restriction that a Lockdown declared must hold for the workload, including failure to verify that the restriction still holds, and including loss of the LXD event subscription (the `lxc monitor` subprocess exiting, which signals that the workload can no longer be supervised). Gate policy violations are fatal because they can expose access that should be denied.
 _Avoid_: capability violation, setup failure
 
 **Workload**:
@@ -73,7 +73,7 @@ The host-side control handle (specifically a `subprocess.Popen` instance) repres
 _Avoid_: Popen object, container process, background process
 
 **Warden**:
-The runtime supervisor for a workload running under an applied Lockdown. It monitors policy invariants and terminates the workload on violation, but never releases policy.
+The runtime supervisor for a workload running under an applied Lockdown. It subscribes to LXD lifecycle events via `lxc monitor`, re-validates gate configuration on each event, and terminates the workload on violation. The Warden never releases policy. Capabilities are not monitored at runtime; they are verified once at launch via `pre_launch_verify()`.
 _Avoid_: unlocker, policy applier, cleanup manager
 
 **Release**:

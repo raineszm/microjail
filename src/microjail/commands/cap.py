@@ -121,7 +121,7 @@ def add_endpoint(
     fatal: bool = typer.Option(
         False,
         "--fatal",
-        help="Terminate workload on runtime Capability violation",
+        help="Block workload launch if capability verification fails",
     ),
     replace: bool = typer.Option(
         False,

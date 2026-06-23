@@ -29,6 +29,7 @@ The Warden currently polls each gate and capability every second, including beha
 - `warden-monitoring`: The Warden is now event-driven. Gates are checked on every LXD lifecycle event (and on the initial `"reconnect"` sentinel), not on a polling interval. Capabilities are not monitored at runtime. The Warden's escalation path adds `LxdEnforcementLost` (the `lxc monitor` subprocess exited) as a `GatePolicyViolation` with the `RUNTIME_GATE_POLICY_VIOLATION` exit code. The runtime capability violation path is removed entirely (capabilities are launch-time only).
 - `endpoint-capability`: The `check()` method's semantic narrows to "tunnel connections present in the Workshop SDK." A new `verify()` method does the TCP reachability probe. The end-to-end behavior (the capability works) is unchanged; the split is at the protocol level.
 - `readonly-config`: A new `verify()` method is added that returns `True` (no behavioral probe). No semantic change to the gate.
+- `network-drop`: The `check()` method becomes a config-state check (no devices of `type: nic` in `expanded_devices`) instead of a bash egress probe. **BREAKING**: the old `check()` was the bash probe; the new one is a config check. A new `verify()` method returns `True` (no behavioral probe). The `enforce()` and `release()` behavior is unchanged.
 
 ## Impact
 
