@@ -18,8 +18,17 @@ The subprocess is launched through the `CommandExecutor` protocol from `microjai
 - **AND** the kwargs include `stdout=PIPE`, `text=True`, `bufsize=1` for line-buffered reading
 - **AND** `__iter__` does not call `subprocess.Popen` directly
 
+### Requirement: LxdMonitor implements the Python iterator protocol
+The `LxdMonitor` SHALL implement the Python iterator protocol: `__iter__` SHALL return `self` and SHALL spawn the `lxc monitor` subprocess on first invocation; `__next__` SHALL block until the next matching `LifecycleEvent` is available and return it, or raise `StopIteration` on subprocess stdout EOF. The monitor is single-use: if `__iter__` is called when a subprocess is already running, it SHALL raise `RuntimeError` rather than spawn a second subprocess.
+
+#### Scenario: `__iter__` is single-use
+- **GIVEN** an `LxdMonitor` is constructed and `iter(monitor)` has been called (subprocess is running)
+- **WHEN** `iter(monitor)` is called again
+- **THEN** `RuntimeError` is raised
+- **AND** the existing subprocess is not replaced
+
 ### Requirement: LxdMonitor skips non-matching events during iteration
-While iterating, the `LxdMonitor` SHALL drop events whose top-level `type` is not `"lifecycle"`, whose `project` is not the configured LXD project, or whose `metadata.source` is not the configured container before yielding the next value.
+While iterating, the `LxdMonitor` SHALL drop events whose top-level `type` is not `"lifecycle"`, whose top-level `project` is not the configured LXD project, or whose `metadata.source` does not end with `/1.0/instances/<container_name>`. The container match SHALL be a full path-segment match: a source of `/1.0/instances/agent` matches container `agent`, but `/1.0/instances/evil-agent` SHALL NOT match container `agent`. The `LxdMonitor` SHALL yield at most one event per matching line.
 
 #### Scenario: Non-matching events are skipped
 - **GIVEN** an `LxdMonitor` is constructed for container `agent` in project `workshop`
@@ -63,4 +72,4 @@ Where used as a context manager (`with LxdMonitor(...) as monitor: ...`), the `L
 - **AND** an exception is raised inside the block
 - **WHEN** the `with` block exits
 - **THEN** the subprocess is terminated before the exception propagates
-- **THEN** no exception is raised
+- **THEN** the original exception is re-raised to the caller (not suppressed)

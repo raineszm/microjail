@@ -123,8 +123,11 @@ The filter inside `__next__` is a pure function on `LifecycleEvent`:
 ```python
 INSTANCE_PREFIX = "/1.0/instances/"
 
-### Decision 4: Inject the subprocess via the `CommandExecutor` protocol from a standalone `executor` module
-- **Rationale**: The `CommandExecutor` protocol and `LocalExecutor` default live in their own module, `src/microjail/adapters/executor.py`, alongside `workshop.py` and `lxc.py` in the adapters package. They are not workshop-specific: `MicroJail.load` and `MicroJail.from_config` take an `executor: CommandExecutor`, the workshop adapter uses them, and the new `LxdMonitor` will too. Re-using one protocol across adapters keeps the test-injection pattern consistent. `LxdMonitor.__init__` takes an optional `executor: CommandExecutor` parameter that defaults to `LocalExecutor()`. On `__iter__` the monitor calls `executor.popen(cmd, stdout=PIPE, text=True, bufsize=1)`; the executor passes those kwargs through to `subprocess.Popen`. Tests substitute a fake executor that records the call and returns a fake `Popen` whose `stdout` is an iterable of preset lines, and whose `terminate()`/`wait()` are no-ops or controlled by the test.
+
+def matches(event, container_name, lxd_project):
+    if event.type != "lifecycle":
+        return False
+    if event.project != lxd_project:
         return False
     if not event.metadata.source.startswith(INSTANCE_PREFIX):
         return False
@@ -134,6 +137,12 @@ INSTANCE_PREFIX = "/1.0/instances/"
 ```
 
 (`split("/")[3]` is intentional: index 0 is empty for a leading-slash path, index 1 is `1.0`, index 2 is `instances`, index 3 is the name. A naive `endswith(container_name)` would let `evil-name-foo` match container `name`.)
+
+### Decision 4: Inject the subprocess via the `CommandExecutor` protocol from a standalone `executor` module
+- **Rationale**: The `CommandExecutor` protocol and `LocalExecutor` default live in their own module, `src/microjail/adapters/executor.py`, alongside `workshop.py` and `lxc.py` in the adapters package. They are not workshop-specific: `MicroJail.load` and `MicroJail.from_config` take an `executor: CommandExecutor`, the workshop adapter uses them, and the new `LxdMonitor` does too. Re-using one protocol across adapters keeps the test-injection pattern consistent. `LxdMonitor.__init__` takes an optional `executor: CommandExecutor` parameter that defaults to `LocalExecutor()`. On `__iter__` the monitor calls `executor.popen(cmd, stdout=PIPE, text=True, bufsize=1)`; the executor passes those kwargs through to `subprocess.Popen`. Tests substitute a fake executor that records the call and returns a fake `Popen` whose `stdout` is an iterable of preset lines.
+- **Alternatives Considered**:
+  - **Define `CommandExecutor` and `LocalExecutor` inside `workshop.py`**: rejected — `workshop.py` would have to re-export them, and the new monitor would have to import from the wrong module to reuse the same type. A standalone module makes the shared dependency explicit and keeps the adapters package flat.
+  - **Let `LxdMonitor` call `subprocess.Popen` directly and have tests monkey-patch**: rejected — monkey-patching hides the dependency and breaks for any non-mock test environment. The explicit injection point makes the seam visible in the constructor.
 
 ## Risks / Trade-offs
 - **[Risk] Subprocess leaks if the consumer forgets to call `close()`.** → *Mitigation*: the monitor also implements the context manager protocol (see Decision 5), so callers can write `with LxdMonitor(...) as monitor:` and have `close()` invoked automatically. Callers who don't use `with` are documented as responsible for calling `close()` in a `finally` block.

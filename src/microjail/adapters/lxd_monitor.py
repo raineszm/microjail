@@ -21,8 +21,8 @@ class LifecycleMetadata(msgspec.Struct, frozen=True):
     source: str
     name: str | None = None
     project: str | None = None
-    context: dict | None = None
-    requestor: dict | None = None
+    context: dict[str, object] | None = None
+    requestor: dict[str, object] | None = None
 
 
 class LifecycleEvent(msgspec.Struct, frozen=True):
@@ -76,7 +76,17 @@ class LxdMonitor:
         self._process: subprocess.Popen | None = None
 
     def __iter__(self) -> LxdMonitor:
-        """Start the ``lxc monitor`` subprocess and return self for iteration."""
+        """Start the ``lxc monitor`` subprocess and return self for iteration.
+
+        The monitor is single-use: if a subprocess is already running, this
+        raises :class:`RuntimeError` rather than spawning a second one (which
+        would orphan the first).
+        """
+        if self._process is not None:
+            raise RuntimeError(
+                "LxdMonitor is single-use: __iter__ cannot be called while a "
+                "subprocess is already running"
+            )
         cmd = [
             "lxc",
             "monitor",
@@ -112,17 +122,20 @@ class LxdMonitor:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
-        """Terminate the subprocess when the ``with`` block exits."""
+        """Terminate the subprocess when the ``with`` block exits. Does not suppress exceptions."""
         self.close()
 
     def close(self) -> None:
         """Terminate the subprocess. Idempotent."""
         if self._process is None:
             return
-        self._process.terminate()
-        try:
-            self._process.wait(timeout=5.0)
-        except subprocess.TimeoutExpired:
-            self._process.kill()
-            self._process.wait()
+        process = self._process
         self._process = None
+        process.terminate()
+        try:
+            process.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+        if process.stdout is not None:
+            process.stdout.close()

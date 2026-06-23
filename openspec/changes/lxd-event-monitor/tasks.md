@@ -10,10 +10,9 @@ The minimum end-to-end path: construct an `LxdMonitor`, iterate over it, and obs
 
 - **Test**: `test_lxd_monitor_iteration_yields_matching_lifecycle_event` in `tests/unit/adapters/test_lxd_monitor.py`
 - **Arrange**:
-  - `LifecycleEvent` and `LifecycleMetadata` msgspec.Structs exist in `src/microjail/adapters/lxd_monitor.py` (already in place).
-  - `parse_event(line)` and `matches(event, container_name, lxd_project)` exist (already in place).
-  - `LxdMonitor` accepts `(container_name, lxd_project, executor)`. Default `executor` is `LocalExecutor` from `microjail.adapters.workshop`.
-  - In the test, define a `FakePopen` whose `stdout` is an iterable yielding one lifecycle line then `""` (EOF). `terminate()` / `wait()` are no-ops. Define a `FakeExecutor` that records the call and returns the `FakePopen`.
+  - `parse_event(line)` and `matches(event, container_name, lxd_project)` will be created in this slice (pure helpers in `src/microjail/adapters/lxd_monitor.py`).
+  - `LifecycleEvent` and `LifecycleMetadata` msgspec.Structs will be created in this slice in `src/microjail/adapters/lxd_monitor.py` to back the helpers.
+  - `LxdMonitor` accepts `(container_name, lxd_project, executor)`. Default `executor` is `LocalExecutor` from `microjail.adapters.executor`.
   - Construct `monitor = LxdMonitor(container_name="agent", lxd_project="workshop", executor=FakeExecutor())`.
 - **Act**:
   - Call `iter(monitor)` to start the subprocess.
@@ -22,7 +21,7 @@ The minimum end-to-end path: construct an `LxdMonitor`, iterate over it, and obs
   - The first `next()` returns a `LifecycleEvent` with `metadata.action == "instance-started"`.
 
 - [ ] 1.1 RED: test_lxd_monitor_iteration_yields_matching_lifecycle_event
-- [ ] 1.2 GREEN: implement `LxdMonitor.__iter__`, `__next__`, and `close`; use the injected `CommandExecutor.popen` to spawn the subprocess with `stdout=PIPE, text=True, bufsize=1`
+- [ ] 1.2 GREEN: implement `LifecycleEvent`/`LifecycleMetadata` msgspec.Structs; implement `parse_event` and `matches`; implement `LxdMonitor.__iter__`, `__next__`, and `close`; use the injected `CommandExecutor.popen` to spawn the subprocess with `stdout=PIPE, text=True, bufsize=1`
 - [ ] 1.3 REFACTOR: no leaking internal state, the `FakePopen` / `FakeExecutor` helpers are clean and named for reuse in later slices
 
 ## Slice 2: [Pending] - Iterator skips non-matching events
@@ -43,11 +42,22 @@ The minimum end-to-end path: construct an `LxdMonitor`, iterate over it, and obs
 - [ ] 4.2 GREEN: pending
 - [ ] 4.3 REFACTOR: pending
 
-## Slice 5: [Pending] - LxdMonitor uses the injected CommandExecutor (no subprocess.Popen in __iter__ path)
-<!-- Test details and tasks will be planned after Slice 4 is complete -->
-- [ ] 5.1 RED: pending
-- [ ] 5.2 GREEN: pending
-- [ ] 5.3 REFACTOR: pending
+## Slice 5: LxdMonitor uses the injected CommandExecutor with the canonical command and kwargs
+
+Slice 1's tracer bullet proves the iterator yields matching events when given a `FakeExecutor`. This slice pins down the contract: the production code must call the injected `executor.popen` with the exact canonical `lxc monitor` command and the kwargs the iterator needs for line-buffered reading (`stdout=PIPE`, `text=True`, `bufsize=1`). It does not call `subprocess.Popen` directly. This guarantees that a different `CommandExecutor` (e.g. a remote executor) would be able to observe the same call shape.
+
+- **Test**: `test_lxd_monitor_uses_injected_command_executor_with_expected_command` in `tests/unit/adapters/test_lxd_monitor.py`
+- **Arrange**: same as Slice 1.
+- **Act**: call `iter(monitor)`.
+- **Assert**:
+  - `executor.popen_calls` has exactly one entry.
+  - Its command equals `["lxc", "monitor", "--project=workshop", "--type=lifecycle", "--format=json"]`.
+  - Its kwargs include `stdout=PIPE`, `text=True`, `bufsize=1`.
+
+- [ ] 5.1 RED: test_lxd_monitor_uses_injected_command_executor_with_expected_command
+- [ ] 5.2 GREEN: confirm Slice 1's GREEN implementation already satisfies the assertions; if a kwargs name is wrong, fix the call site in `__iter__`.
+- [ ] 5.3 REFACTOR: no further changes; this slice is a contract check, not new code.
+
 
 ## Slice 6: [Pending] - LxdMonitor is a context manager that calls close() on exit
 Component-level (small): `__enter__` returns `self`; `__exit__` calls `self.close()`. Slice end-to-end: `with LxdMonitor(...) as monitor: for event in monitor: ...` terminates the subprocess when the block exits (normally or via exception).

@@ -12,6 +12,7 @@ monitor to read lines, terminate, and end the iterator cleanly.
 """
 
 import json
+import subprocess
 from typing import Any, cast
 
 import pytest
@@ -49,6 +50,8 @@ class _FakePopen:
         self,
         cmd: list[str],
         stdout: _LineStream | None = None,
+        *,
+        wait_raises_timeout: bool = False,
         **_: Any,
     ) -> None:
         self.cmd = cmd
@@ -57,6 +60,8 @@ class _FakePopen:
         self.terminated = False
         self.killed = False
         self.waited: list[float | None] = []
+        self.wait_raises_timeout = wait_raises_timeout
+        self.wait_calls = 0
 
     def terminate(self) -> None:
         self.terminated = True
@@ -70,6 +75,9 @@ class _FakePopen:
 
     def wait(self, timeout: float | None = None) -> int:
         self.waited.append(timeout)
+        self.wait_calls += 1
+        if self.wait_raises_timeout and self.wait_calls == 1:
+            raise subprocess.TimeoutExpired(cmd=self.cmd, timeout=timeout or 0.0)
         return self.returncode if self.returncode is not None else 0
 
 
@@ -218,9 +226,7 @@ def test_lxd_monitor_skips_non_matching_events() -> None:
     monitor = LxdMonitor(
         container_name="agent", lxd_project="workshop", executor=executor
     )
-
     # Act — iterate until StopIteration
-    iter(monitor)
     try:
         events = list(monitor)
     finally:
@@ -356,3 +362,97 @@ def test_lxd_monitor_context_manager_terminates_subprocess_on_exception() -> Non
         iter(monitor)
         raise RuntimeError("boom")
     assert popen.terminated is True
+
+
+# --- Slice 1 addition: single-use guard ------------------------------------
+
+
+def test_lxd_monitor_raises_runtime_error_on_double_iter() -> None:
+    # Arrange
+    stream = _LineStream([])
+    popen = _FakePopen(cmd=[], stdout=stream)
+    executor = _FakeExecutor(popen)
+    monitor = LxdMonitor(
+        container_name="agent", lxd_project="workshop", executor=executor
+    )
+    iter(monitor)
+
+    # Act / Assert — second call to iter() while the subprocess is running
+    # must raise RuntimeError, not spawn a second subprocess.
+    with pytest.raises(RuntimeError, match="single-use"):
+        iter(monitor)
+    assert len(executor.popen_calls) == 1
+    monitor.close()
+
+
+# --- Slice 1 addition: blank lines are silently skipped --------------------
+
+
+def test_lxd_monitor_skips_blank_lines_in_stdout() -> None:
+    # Arrange — blank lines (single newline / whitespace) interleaved with a
+    # matching event. The fake returns these as the lines themselves, and
+    # readline() returns "" only on EOF, not for blank lines.
+    lines = [
+        "\n",
+        "   \n",
+        _lifecycle_line(),
+    ]
+    stream = _LineStream(lines)
+    popen = _FakePopen(cmd=[], stdout=stream)
+    executor = _FakeExecutor(popen)
+    monitor = LxdMonitor(
+        container_name="agent", lxd_project="workshop", executor=executor
+    )
+
+    # Act
+    iter(monitor)
+    try:
+        event = next(monitor)
+    finally:
+        monitor.close()
+
+    # Assert — the matching event was delivered; the blank lines were
+    # silently consumed without affecting event delivery.
+    assert event.metadata.action == "instance-started"
+
+
+# --- Slice 4 addition: kill() fallback when wait() times out ---------------
+
+
+def test_lxd_monitor_close_kills_subprocess_when_terminate_times_out() -> None:
+    # Arrange — wait() raises TimeoutExpired on the first call (terminate
+    # path), forcing close() to escalate to kill().
+    stream = _LineStream([])
+    popen = _FakePopen(cmd=[], stdout=stream, wait_raises_timeout=True)
+    executor = _FakeExecutor(popen)
+    monitor = LxdMonitor(
+        container_name="agent", lxd_project="workshop", executor=executor
+    )
+    iter(monitor)
+
+    # Act
+    monitor.close()
+
+    # Assert
+    assert popen.terminated is True
+    assert popen.killed is True
+    assert popen.wait_calls == 2
+
+
+# --- Slice 3 addition: StopIteration after close() -------------------------
+
+
+def test_lxd_monitor_raises_stop_iteration_after_close() -> None:
+    # Arrange
+    stream = _LineStream([_lifecycle_line()])
+    popen = _FakePopen(cmd=[], stdout=stream)
+    executor = _FakeExecutor(popen)
+    monitor = LxdMonitor(
+        container_name="agent", lxd_project="workshop", executor=executor
+    )
+    iter(monitor)
+
+    # Act — close, then call next() again
+    monitor.close()
+    with pytest.raises(StopIteration):
+        next(monitor)
