@@ -203,7 +203,7 @@ A **Lockdown** is declarative policy: a list of **Capabilities** (what to allow)
 
 No runtime state is persisted. Every `lock` or `unlock` reads live system state directly — crash-safe and safe after manual intervention.
 
-See [`DESIGN.md`](DESIGN.md) for the full lifecycle specification.
+See [`openspec/specs/`](openspec/specs/) for the full lifecycle specification.
 
 ### Implemented gates
 
