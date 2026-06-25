@@ -6,7 +6,7 @@
 
 Built for running AI coding agents in a controlled environment. Let an agent loose on a codebase; with network egress removed and policy continuously enforced, it cannot phone home, exfiltrate code, or reach services you have not explicitly authorised. But any workload you would rather run without a route off the box fits the same model.
 
-[demo.webm](https://github.com/user-attachments/assets/c6e361ff-9e28-43c0-9f7b-0b1489edd941)
+[demo.webm](https://github.com/user-attachments/assets/5fe21b83-bb80-400b-9a27-0d84beaef612)
 
 ______________________________________________________________________
 
@@ -29,11 +29,14 @@ ______________________________________________________________________
 ## Prerequisites
 
 - Ubuntu with [Workshop](https://ubuntu.com/workshop/docs/) and LXD 6 installed:
+
   ```bash
   sudo snap refresh lxd --channel=6/stable || sudo snap install lxd --channel=6/stable
   sudo snap install workshop --classic
   ```
+
 - Python 3.14+ (required by microjail itself)
+
 - [`uv`](https://docs.astral.sh/uv/) for installation
 
 ______________________________________________________________________
