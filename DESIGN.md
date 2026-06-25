@@ -270,11 +270,18 @@ No automatic release occurs after workload execution.
 
 # Runtime Enforcement
 
-The Warden validates policy at a configured polling interval while workloads execute.
+The Warden supervises workloads by streaming LXD lifecycle events from an
+`LxdMonitor` opened against the workload's container. A baseline
+`check_policies()` runs once before the monitor opens so any pre-existing
+violation is caught before the first event rather than being missed by the
+delta-only semantics of `lxc monitor`.
 
-Default interval: 1 second.
+Default interval: 1 second. The interval caps the latency between a state
+change and a Warden-observed check, and the supervision loop falls back to
+it when the monitor is quiet. Loss of the monitor stream (subprocess EOF)
+is treated as a gate policy violation, since the Warden can no longer prove
+the Lockdown still holds.
 
-Polling is the correctness baseline. Event-driven monitoring may be added later as an optimization.
 
 Each monitoring pass validates:
 

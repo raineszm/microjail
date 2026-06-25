@@ -29,60 +29,87 @@ The minimum end-to-end path through the new shape: `Warden.supervise()` calls th
   - `fake_monitor.closed is True` (the supervision thread's `finally` called `close()`).
   - `monitor_factory` was called exactly once with two positional args (the `MicroJail`'s `container_name()` and `lxd_project()` strings).
 
-- [ ] 1.1 RED: test_warden_event_driven_passes_through_successful_exit
-- [ ] 1.2 GREEN: add `monitor_factory: Callable[[str, str], LxdMonitor] | None = None` kwarg to `Warden.__init__`; default to `LxdMonitor` (the class itself); rewrite `supervise()` to (1) call `self.check_policies()` as a baseline, (2) call `self.monitor_factory(self.microjail.container_name(), self.microjail.lxd_project())` to get the monitor, (3) call `iter(mon)` *inside* a `try:` block so `mon.close()` always runs on startup failure, (4) start a daemon `Thread` that runs `pump_events(mon, event_queue, stop)` (the pump iterates `mon`, pushes events, captures unexpected exceptions into a `MonitorError(exception)` wrapper, and pushes a `None` sentinel on normal EOF), (5) loop on `process.wait(timeout=self.interval)` + non-blocking `event_queue.get_nowait()` drain (events are coalesced — `check_policies()` runs once per loop iteration, not per event) + `self.check_policies()`, dispatching `None` to `GatePolicyViolation("LXD event monitor stream closed")` and `MonitorError` to `raise item.exception`, with a `finally` that sets `stop` and calls `mon.close()`; introduce `FakeLxdMonitor` at module level in `tests/unit/test_warden.py` with `deliver(event)`, `close()`, blocking `__next__`, and a `closed` flag
-- [ ] 1.3 REFACTOR: extract the pump body into a module-level `pump_events(mon, event_queue, stop)` function so the test for the thread lifecycle can target it directly; confirm `check_policies()` and `terminate_workload()` are unchanged; the `monitor_factory` kwarg is documented in the `Warden` docstring as the test injection point
+- [x] 1.1 RED: test_warden_event_driven_passes_through_successful_exit
+- [x] 1.2 GREEN: add `monitor_factory: Callable[[str, str], LxdMonitor] | None = None` kwarg to `Warden.__init__`; default to `LxdMonitor` (the class itself); rewrite `supervise()` to (1) call `self.check_policies()` as a baseline, (2) call `self.monitor_factory(self.microjail.container_name(), self.microjail.lxd_project())` to get the monitor, (3) call `iter(mon)` *inside* a `try:` block so `mon.close()` always runs on startup failure, (4) start a daemon `Thread` that runs `pump_events(mon, event_queue, stop)` (the pump iterates `mon`, pushes events, captures unexpected exceptions into a `MonitorError(exception)` wrapper, and pushes a `None` sentinel on normal EOF), (5) loop on `process.wait(timeout=self.interval)` + non-blocking `event_queue.get_nowait()`…
+- [x] 1.3 REFACTOR: extract the pump body into a module-level `pump_events(mon, event_queue, stop)` function so the test for the thread lifecycle can target it directly; confirm `check_policies()` and `terminate_workload()` are unchanged; the `monitor_factory` kwarg is documented in the `Warden` docstring as the test injection point
 
-## Slice 2: [Pending] - Warden re-runs check_policies on every LXD event
-<!-- Test details and tasks will be planned after Slice 1 is complete -->
-- [ ] 2.1 RED: pending
-- [ ] 2.2 GREEN: pending
-- [ ] 2.3 REFACTOR: pending
+## Slice 2: Warden re-runs check_policies on every LXD event
 
-## Slice 3: [Pending] - Warden re-runs check_policies on the fallback interval even when the monitor is quiet
-<!-- Test details and tasks will be planned after Slice 2 is complete -->
-- [ ] 3.1 RED: pending
-- [ ] 3.2 GREEN: pending
-- [ ] 3.3 REFACTOR: pending
+- **Test**: `test_warden_rechecks_policies_on_lxd_event` in `tests/unit/test_warden.py`
+- **Status**: RED → GREEN already satisfied by Slice 1 implementation. The current `supervise()` drains the event queue and calls `check_policies()` after each `process.wait(timeout=interval)` timeout. No code change required; test locks in the behavior.
 
-## Slice 4: [Pending] - Baseline snapshot catches a pre-existing gate violation before the monitor opens
-<!-- Test details and tasks will be planned after Slice 3 is complete -->
-- [ ] 4.1 RED: pending
-- [ ] 4.2 GREEN: pending
-- [ ] 4.3 REFACTOR: pending
+- [x] 2.1 RED: test_warden_rechecks_policies_on_lxd_event
+- [x] 2.2 GREEN: no code change — Slice 1 implementation already drains the queue and re-runs `check_policies()` on each loop iteration
+- [x] 2.3 REFACTOR: no refactor needed — current code is clean
 
-## Slice 5: [Pending] - Warden terminates the workload and raises GatePolicyViolation on a gate violation in the event path
-<!-- Test details and tasks will be planned after Slice 4 is complete -->
-- [ ] 5.1 RED: pending
-- [ ] 5.2 GREEN: pending
-- [ ] 5.3 REFACTOR: pending
+## Slice 3: Warden re-runs check_policies on the fallback interval even when the monitor is quiet
 
-## Slice 6: [Pending] - Warden escalates a gate violation to lxc stop --force when the workload does not exit on SIGTERM
-<!-- Test details and tasks will be planned after Slice 5 is complete -->
-- [ ] 6.1 RED: pending
-- [ ] 6.2 GREEN: pending
-- [ ] 6.3 REFACTOR: pending
+- **Test**: `test_warden_rechecks_policies_on_fallback_interval_when_monitor_quiet` in `tests/unit/test_warden.py`
+- **Status**: RED → GREEN already satisfied by Slice 1 implementation. The current `supervise()` calls `check_policies()` after every `process.wait(timeout=interval)` timeout regardless of whether events were delivered. No code change required; test locks in the behavior with an event-driven setup (FakeLxdMonitor).
 
-## Slice 7: [Pending] - Warden warns on a non-fatal capability violation in the event path
-<!-- Test details and tasks will be planned after Slice 6 is complete -->
-- [ ] 7.1 RED: pending
-- [ ] 7.2 GREEN: pending
-- [ ] 7.3 REFACTOR: pending
+- [x] 3.1 RED: test_warden_rechecks_policies_on_fallback_interval_when_monitor_quiet
+- [x] 3.2 GREEN: no code change — Slice 1 implementation already runs `check_policies()` on the fallback interval
+- [x] 3.3 REFACTOR: no refactor needed — current code is clean
 
-## Slice 8: [Pending] - Warden terminates the workload on a fatal capability violation in the event path
-<!-- Test details and tasks will be planned after Slice 7 is complete -->
-- [ ] 8.1 RED: pending
-- [ ] 8.2 GREEN: pending
-- [ ] 8.3 REFACTOR: pending
+## Slice 4: Baseline snapshot catches a pre-existing gate violation before the monitor opens
 
-## Slice 9: [Pending] - Warden treats monitor stream loss (StopIteration) as a gate policy violation
-<!-- Test details and tasks will be planned after Slice 8 is complete -->
-- [ ] 9.1 RED: pending
-- [ ] 9.2 GREEN: pending
-- [ ] 9.3 REFACTOR: pending
+- **Test**: `test_warden_baseline_catches_pre_existing_gate_violation` in `tests/unit/test_warden.py`
+- **Status**: RED → GREEN already satisfied by Slice 1 implementation. `supervise()` calls `self.check_policies()` at the start, before calling `self.monitor_factory(...)`. If the baseline check fails, `GatePolicyViolation` is raised and the monitor is never opened.
 
-## Slice 10: [Pending] - Default monitor factory constructs an LxdMonitor bound to the microjail's container and project
-<!-- Test details and tasks will be planned after Slice 9 is complete -->
-- [ ] 10.1 RED: pending
-- [ ] 10.2 GREEN: pending
-- [ ] 10.3 REFACTOR: pending
+- [x] 4.1 RED: test_warden_baseline_catches_pre_existing_gate_violation
+- [x] 4.2 GREEN: no code change — Slice 1 implementation already calls `check_policies()` before opening the monitor
+- [x] 4.3 REFACTOR: no refactor needed — current code is clean
+
+## Slice 5: Warden terminates the workload and raises GatePolicyViolation on a gate violation in the event path
+
+- **Test**: `test_warden_terminates_on_gate_violation_in_event_path` in `tests/unit/test_warden.py`
+- **Status**: RED → GREEN already satisfied by Slice 1 implementation. When the queue is drained and `check_policies()` runs after an event, a gate failure calls `terminate_workload()` and raises `GatePolicyViolation`. No code change required.
+
+- [x] 5.1 RED: test_warden_terminates_on_gate_violation_in_event_path
+- [x] 5.2 GREEN: no code change — Slice 1 implementation already handles gate violations in the event path
+- [x] 5.3 REFACTOR: no refactor needed — current code is clean
+
+## Slice 6: Warden escalates a gate violation to lxc stop --force when the workload does not exit on SIGTERM
+
+- **Test**: `test_warden_escalates_gate_violation_in_event_path` in `tests/unit/test_warden.py`
+- **Status**: RED → GREEN already satisfied by Slice 1 implementation. `terminate_workload()` is unchanged and still escalates to `lxc.stop_instance(..., force=True)` on SIGTERM timeout. No code change required.
+
+- [x] 6.1 RED: test_warden_escalates_gate_violation_in_event_path
+- [x] 6.2 GREEN: no code change — `terminate_workload()` is unchanged from the polling implementation
+- [x] 6.3 REFACTOR: no refactor needed — current code is clean
+
+## Slice 7: Warden warns on a non-fatal capability violation in the event path
+
+- **Test**: `test_warden_warns_on_non_fatal_capability_violation_in_event_path` in `tests/unit/test_warden.py`
+- **Status**: RED → GREEN already satisfied by Slice 1 implementation. When the queue is drained and `check_policies()` runs after an event, a non-fatal capability failure logs a warning to stderr and the workload is not terminated. No code change required.
+
+- [x] 7.1 RED: test_warden_warns_on_non_fatal_capability_violation_in_event_path
+- [x] 7.2 GREEN: no code change — Slice 1 implementation already handles non-fatal capability violations
+- [x] 7.3 REFACTOR: no refactor needed — current code is clean
+
+## Slice 8: Warden terminates the workload on a fatal capability violation in the event path
+
+- **Test**: `test_warden_terminates_on_fatal_capability_violation_in_event_path` in `tests/unit/test_warden.py`
+- **Status**: RED → GREEN already satisfied by Slice 1 implementation. When the queue is drained and `check_policies()` runs after an event, a fatal capability failure calls `terminate_workload()` and raises `CapabilityPolicyViolation`. No code change required.
+
+- [x] 8.1 RED: test_warden_terminates_on_fatal_capability_violation_in_event_path
+- [x] 8.2 GREEN: no code change — Slice 1 implementation already handles fatal capability violations
+- [x] 8.3 REFACTOR: no refactor needed — current code is clean
+
+## Slice 9: Warden treats monitor stream loss (StopIteration) as a gate policy violation
+
+- **Test**: `test_warden_treats_monitor_stream_loss_as_gate_violation` in `tests/unit/test_warden.py`
+- **Status**: RED → GREEN already satisfied by Slice 1 implementation. When the pump thread's `__next__` raises `StopIteration` (monitor closed), the pump pushes `None` into the queue. The supervision thread's queue drain detects `None`, calls `terminate_workload()`, and raises `GatePolicyViolation("LXD event monitor stream closed")`. No code change required.
+
+- [x] 9.1 RED: test_warden_treats_monitor_stream_loss_as_gate_violation
+- [x] 9.2 GREEN: no code change — Slice 1 implementation already treats stream loss as a gate violation
+- [x] 9.3 REFACTOR: no refactor needed — current code is clean
+
+## Slice 10: Default monitor factory constructs an LxdMonitor bound to the microjail's container and project
+
+- **Test**: `test_warden_default_monitor_factory_is_lxd_monitor_class` in `tests/unit/test_warden.py`
+- **Status**: RED → GREEN already satisfied by Slice 1 implementation. `Warden.__init__` sets `self.monitor_factory = LxdMonitor` when no factory is passed. The `LxdMonitor` class is the default and constructs an instance bound to the microjail's container and project when called. No code change required.
+
+- [x] 10.1 RED: test_warden_default_monitor_factory_is_lxd_monitor_class
+- [x] 10.2 GREEN: no code change — Slice 1 implementation already uses `LxdMonitor` as the default factory
+- [x] 10.3 REFACTOR: no refactor needed — current code is clean
