@@ -31,5 +31,5 @@ Users currently must edit `.microjail/config.yaml` by hand to add common Endpoin
 - `src/microjail/microjail.py`: Add explicit Lockdown validation and endpoint declaration reconciliation during application.
 - `src/microjail/caps/endpoint.py` and `src/microjail/adapters/workshop.py`: Expose reusable endpoint validation/reconciliation helpers as needed.
 - `README.md`: Document the CLI-first Endpoint capability workflow and fix the manual YAML example.
-- `docs/adr/0005-endpoint-capability-cli-declaration-application.md`: Records the declaration/application split and state matrix.
+- `docs/adr/0006-endpoint-capability-cli-declaration-application.md`: Records the declaration/application split and state matrix.
 - Tests: Add unit/functional coverage for CLI behavior, validation, and reconciliation; add user-facing coverage where practical.

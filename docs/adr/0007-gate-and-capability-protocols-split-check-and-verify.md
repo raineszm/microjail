@@ -1,10 +1,10 @@
-# 0006 Gate and Capability protocols split config-state check from behavioral verify
+# 0007 Gate and Capability protocols split config-state check from behavioral verify
 
 The `Gate` and `Capability` protocols previously conflated config-state inspection with behavioral reachability probing inside a single `check(microjail) -> bool` method. `check()` is now a config-only check (LXD device state, `workshop connections` membership, etc.) and a new `verify(microjail) -> VerificationResult` method on the same protocols performs behavioral probing and returns one of three values: `VERIFIED`, `FAILED`, or `UNSUPPORTED`. Verification runs once at launch time via `MicroJail.pre_launch_verify()`; the runtime polling loop in `Warden` continues to call `check()` and is unaffected by this change. The `lxc`-based bash egress probe that used to live in `NetworkDrop.check()` is removed; `NetworkDrop` and `ReadonlyConfig` return `UNSUPPORTED` from `verify()` because their enforcement is purely config-state and has no meaningful behavioral probe.
 
 ## Status
 
-Accepted. Note: a separate, larger refactor on `refactor/event-warden-retry` (its own ADR 0006, "Warden is event-driven via LXD lifecycle events") replaces the runtime polling loop with event-driven LXD lifecycle monitoring. The protocol split introduced here is a prerequisite for that work; this ADR does not change the runtime polling loop. When the event-warden branch is rebased or merged, the numbering may need to be reconciled.
+Accepted. Note: a separate, larger refactor on `refactor/event-warden-retry` (its own future ADR, "Warden is event-driven via LXD lifecycle events") replaces the runtime polling loop with event-driven LXD lifecycle monitoring. The protocol split introduced here is a prerequisite for that work; this ADR does not change the runtime polling loop.
 
 ## Considered Options
 

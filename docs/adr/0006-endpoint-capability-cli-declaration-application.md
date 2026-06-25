@@ -1,4 +1,4 @@
-# 0005 Endpoint capability CLI separates declarations from runtime application
+# 0006 Endpoint capability CLI separates declarations from runtime application
 
 Users need a safe CLI path for common Endpoint capability setup without editing YAML by hand, but Capability declarations are not the same as runtime provisioning. We chose `microjail cap add endpoint ...` and `microjail cap remove endpoint ...` as declaration-editing commands, with `--apply` as an explicit request to reconcile the Workshop declarations and apply the resulting Lockdown when the Workshop state makes that safe.
 

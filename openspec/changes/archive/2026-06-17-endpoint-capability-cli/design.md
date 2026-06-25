@@ -2,7 +2,7 @@
 
 Endpoint capabilities are currently configured by editing `.microjail/config.yaml` directly. The persisted Lockdown is a declaration, while runtime provisioning is performed later by Lockdown application: Endpoint capabilities write Workshop plug/slot declarations, refresh Workshop, connect the tunnel, and verify reachability.
 
-The change must preserve Microjail's stateless safety model: Lockdown is not a runtime flag, and commands must inspect live Workshop/Gate state rather than trusting persisted lock state. The design follows ADR 0005: the CLI edits Capability declarations by default, and `--apply` explicitly requests state-sensitive reconciliation/application.
+The design follows ADR 0006: the CLI edits Capability declarations by default, and `--apply` explicitly requests state-sensitive reconciliation/application.
 
 ## Goals / Non-Goals
 
