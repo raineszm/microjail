@@ -91,7 +91,6 @@ class Warden:
         event_queue: queue.Queue[object] = queue.Queue()
         stop = threading.Event()
         try:
-            iter(mon)
             pump = threading.Thread(
                 target=pump_events,
                 args=(mon, event_queue, stop),

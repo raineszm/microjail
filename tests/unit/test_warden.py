@@ -268,8 +268,16 @@ def test_warden_terminates_on_fatal_capability_violation(
 class FakeLxdMonitor:
     """Test double for LxdMonitor: real blocking iterator (not a Mock).
 
-    __next__ blocks on a threading.Event until deliver() is called or close()
-    is called (in which case it raises StopIteration).
+    Mirrors the real LxdMonitor's single-use contract: ``__iter__`` may only
+    be called once per instance. Re-iterating after the monitor has been
+    opened raises RuntimeError, matching ``LxdMonitor.__iter__`` in
+    ``src/microjail/adapters/lxd_monitor.py``. This is a regression guard
+    for the event-driven Warden: the supervision thread must never call
+    ``iter(mon)`` itself — only the pump thread iterates the monitor via
+    its ``for event in mon:`` loop.
+
+    ``__next__`` blocks on a threading.Event until deliver() is called or
+    close() is called (in which case it raises StopIteration).
     """
 
     def __init__(self) -> None:
@@ -277,8 +285,15 @@ class FakeLxdMonitor:
         self._wake = threading.Event()
         self._closed = False
         self.close_calls = 0
+        self._iterated = False
 
     def __iter__(self) -> FakeLxdMonitor:
+        if self._iterated:
+            raise RuntimeError(
+                "FakeLxdMonitor is single-use: __iter__ cannot be called while "
+                "a subprocess is already running"
+            )
+        self._iterated = True
         return self
 
     def __next__(self) -> LifecycleEvent:
@@ -885,4 +900,40 @@ def test_warden_event_driven_clean_exit_no_hang(
 
     assert result.returncode == 0, (
         f"clean workload exited {result.returncode}: {result.stderr}"
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.lxd
+@pytest.mark.workshop
+def test_warden_event_driven_long_running_workload_does_not_reiterate_monitor(
+    e2e_warden_workshop: Workshop,
+) -> None:
+    """A workload that outlives the monitor warmup must not crash the Warden.
+
+    Regression test: the supervision thread must iterate the LxdMonitor
+    *exactly once*. The real LxdMonitor's ``__iter__`` raises
+    ``RuntimeError("LxdMonitor is single-use")`` if called while a
+    subprocess is already running. Earlier the supervision thread called
+    ``iter(mon)`` explicitly and the pump thread also iterated the same
+    monitor via its ``for event in mon:`` loop, causing a crash roughly
+    one second into any workload that lived past the first interval.
+
+    ``sleep 2`` is long enough for the pump thread to have started, called
+    ``iter(mon)``, and been blocked in ``readline()`` for a full interval
+    tick. Under the bug the Warden would crash with exit code 1 (the
+    RuntimeError propagating out of supervise_workload). With the fix
+    the workload completes cleanly with exit code 0.
+    """
+    result = subprocess.run(
+        ["microjail", "exec", "--", "sleep", "2"],
+        capture_output=True,
+        text=True,
+        timeout=30.0,
+    )
+
+    assert result.returncode == 0, (
+        f"long-running workload exited {result.returncode}; "
+        f"this often indicates the Warden double-iterated the LxdMonitor. "
+        f"stderr={result.stderr!r}"
     )
